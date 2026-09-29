@@ -1,0 +1,256 @@
+import type { TextureHandle, TextureManager } from './textures';
+
+/**
+ * Runtime material model. Materials are JSON documents (public/materials/*.json)
+ * with optional inheritance, so variants and per-object overrides stay small,
+ * structured and editable (by people or tools) instead of being opaque images.
+ */
+export type Color = [number, number, number] | [number, number, number, number] | string;
+
+export interface MaterialDef {
+  name?: string;
+  inherits?: string;
+  shader?: 'standard' | 'foliage' | 'unlit';
+  alphaMode?: 'opaque' | 'mask';
+  alphaCutoff?: number;
+  doubleSided?: boolean;
+  /** Metres covered by one repeat of the base textures (UV0 is in metres). */
+  physicalSize?: number | [number, number];
+  mapping?: 'uv' | 'triplanar';
+  triplanarSharpness?: number;
+  baseColor?: string;
+  baseColorFactor?: Color;
+  normal?: string;
+  normalStrength?: number;
+  orm?: string;
+  roughness?: number;
+  roughnessRange?: [number, number];
+  metallic?: number;
+  aoStrength?: number;
+  /** Dielectric specular level; 0.5 = 4% F0. */
+  specular?: number;
+  detail?: {
+    albedo?: string;
+    normal?: string;
+    physicalSize: number;
+    albedoStrength?: number;
+    normalStrength?: number;
+    fadeDistance?: number;
+  };
+  macro?: {
+    texture: string;
+    physicalSize: number;
+    albedoStrength?: number;
+    roughnessStrength?: number;
+    stainStrength?: number;
+  };
+  emissive?: Color;
+  emissiveIntensity?: number;
+  /** How strongly the surface darkens / smooths when wet (0 = sealed, 1 = porous). */
+  porosity?: number;
+  translucency?: number;
+  /** Offline bake hints (average albedo for bounce light). */
+  bake?: { albedo?: Color; exclude?: boolean };
+  /** Free-form notes for authors / tools. */
+  notes?: string;
+}
+
+export const MF = {
+  BASE_TEX: 1,
+  NORMAL_TEX: 2,
+  ORM_TEX: 4,
+  DETAIL_ALBEDO: 8,
+  DETAIL_NORMAL: 16,
+  MACRO: 32,
+  TRIPLANAR: 64,
+  MASK: 128,
+  FOLIAGE: 256,
+  UNLIT: 1024,
+  DOUBLE_SIDED: 2048,
+} as const;
+
+export const MATERIAL_PARAM_BYTES = 144;
+
+export function parseColor(c: Color | undefined, fallback: [number, number, number, number]): [number, number, number, number] {
+  if (c === undefined) return fallback;
+  if (typeof c === 'string') {
+    const hex = c.replace('#', '');
+    const v = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const lin = v.map((x) => (x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)));
+    return [lin[0], lin[1], lin[2], 1];
+  }
+  return [c[0], c[1], c[2], c.length > 3 ? (c as number[])[3] : 1];
+}
+
+export class Material {
+  readonly params: GPUBuffer;
+  bindGroup!: GPUBindGroup;
+  textures: {
+    baseColor: TextureHandle;
+    normal: TextureHandle;
+    orm: TextureHandle;
+    detailAlbedo: TextureHandle;
+    detailNormal: TextureHandle;
+    macro: TextureHandle;
+  };
+
+  constructor(
+    readonly id: number,
+    readonly name: string,
+    public def: MaterialDef,
+    private device: GPUDevice,
+    private layout: GPUBindGroupLayout,
+    textures: Material['textures'],
+  ) {
+    this.textures = textures;
+    this.params = device.createBuffer({
+      label: `material:${name}`,
+      size: MATERIAL_PARAM_BYTES,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    this.writeParams();
+    this.rebuildBindGroup();
+  }
+
+  get masked() {
+    return this.def.alphaMode === 'mask';
+  }
+  get doubleSided() {
+    return !!this.def.doubleSided || this.def.shader === 'foliage';
+  }
+
+  rebuildBindGroup() {
+    const t = this.textures;
+    this.bindGroup = this.device.createBindGroup({
+      label: `material:${this.name}`,
+      layout: this.layout,
+      entries: [
+        { binding: 0, resource: { buffer: this.params } },
+        { binding: 1, resource: t.baseColor.view },
+        { binding: 2, resource: t.normal.view },
+        { binding: 3, resource: t.orm.view },
+        { binding: 4, resource: t.detailAlbedo.view },
+        { binding: 5, resource: t.detailNormal.view },
+        { binding: 6, resource: t.macro.view },
+      ],
+    });
+  }
+
+  writeParams() {
+    const d = this.def;
+    const f = new Float32Array(MATERIAL_PARAM_BYTES / 4);
+    const u = new Uint32Array(f.buffer);
+    const bc = parseColor(d.baseColorFactor, [1, 1, 1, 1]);
+    f.set(bc, 0);
+    const ps = Array.isArray(d.physicalSize) ? d.physicalSize : [d.physicalSize ?? 1, d.physicalSize ?? 1];
+    // glTF-style UVs are V-down; world-metre UVs from our tools already are.
+    f.set([1 / ps[0], 1 / ps[1], 0, 0], 4);
+    const det = d.detail;
+    if (det) f.set([1 / det.physicalSize, 1 / det.physicalSize, det.albedoStrength ?? 0.5, det.normalStrength ?? 0.5], 8);
+    const mac = d.macro;
+    if (mac) f.set([1 / mac.physicalSize, 1 / mac.physicalSize, mac.albedoStrength ?? 0.15, mac.roughnessStrength ?? 0.1], 12);
+    f.set([d.roughness ?? 1, d.metallic ?? 0, d.normalStrength ?? 1, d.aoStrength ?? 1], 16);
+    f.set([d.specular ?? 0.5, d.alphaCutoff ?? 0.5, d.porosity ?? 0.5, d.translucency ?? 0], 20);
+    const em = parseColor(d.emissive, [0, 0, 0, 1]);
+    const ei = d.emissiveIntensity ?? (d.emissive ? 1 : 0);
+    f.set([em[0] * ei, em[1] * ei, em[2] * ei, det?.fadeDistance ?? 40], 24);
+    let flags = 0;
+    if (d.baseColor) flags |= MF.BASE_TEX;
+    if (d.normal) flags |= MF.NORMAL_TEX;
+    if (d.orm) flags |= MF.ORM_TEX;
+    if (det?.albedo) flags |= MF.DETAIL_ALBEDO;
+    if (det?.normal) flags |= MF.DETAIL_NORMAL;
+    if (mac) flags |= MF.MACRO;
+    if (d.mapping === 'triplanar') flags |= MF.TRIPLANAR;
+    if (d.alphaMode === 'mask') flags |= MF.MASK;
+    if (d.shader === 'foliage') flags |= MF.FOLIAGE;
+    if (d.shader === 'unlit') flags |= MF.UNLIT;
+    if (this.doubleSided) flags |= MF.DOUBLE_SIDED;
+    u[28] = flags;
+    const rr = d.roughnessRange ?? [0, 1];
+    f.set([rr[0], rr[1], d.triplanarSharpness ?? 4, mac?.stainStrength ?? 0], 32);
+    this.device.queue.writeBuffer(this.params, 0, f);
+  }
+
+  /** Live parameter edit (debug UI / future editor tools). Texture changes need a reload. */
+  update(patch: Partial<MaterialDef>) {
+    this.def = { ...this.def, ...patch };
+    this.writeParams();
+  }
+}
+
+export class MaterialLibrary {
+  private defs = new Map<string, Promise<MaterialDef>>();
+  private materials = new Map<string, Promise<Material>>();
+  readonly all: Material[] = [];
+  private nextId = 0;
+
+  constructor(
+    private device: GPUDevice,
+    private textures: TextureManager,
+    readonly layout: GPUBindGroupLayout,
+    private baseUrl = '/materials/',
+    private textureBase = '/textures/',
+  ) {}
+
+  private fetchDef(name: string): Promise<MaterialDef> {
+    let p = this.defs.get(name);
+    if (!p) {
+      p = (async () => {
+        const res = await fetch(`${this.baseUrl}${name}.json`);
+        if (!res.ok) {
+          console.warn(`[materials] missing material '${name}', using fallback`);
+          return { name, baseColorFactor: [0.8, 0.1, 0.8], roughness: 0.6 } as MaterialDef;
+        }
+        return (await res.json()) as MaterialDef;
+      })();
+      this.defs.set(name, p);
+    }
+    return p;
+  }
+
+  /** Resolves `inherits` chains; child fields override parent fields (shallow per key, deep for detail/macro). */
+  async resolve(def: MaterialDef, depth = 0): Promise<MaterialDef> {
+    if (!def.inherits || depth > 8) return def;
+    const parent = await this.resolve(await this.fetchDef(def.inherits), depth + 1);
+    const merged: MaterialDef = { ...parent, ...def };
+    if (parent.detail && def.detail) merged.detail = { ...parent.detail, ...def.detail };
+    if (parent.macro && def.macro) merged.macro = { ...parent.macro, ...def.macro };
+    delete merged.inherits;
+    return merged;
+  }
+
+  get(name: string): Promise<Material> {
+    let p = this.materials.get(name);
+    if (!p) {
+      p = this.fetchDef(name).then((d) => this.create(name, d));
+      this.materials.set(name, p);
+    }
+    return p;
+  }
+
+  /** Creates a material from an inline definition (e.g. a per-object override). */
+  async create(name: string, rawDef: MaterialDef): Promise<Material> {
+    const def = await this.resolve(rawDef);
+    const T = this.textures;
+    const tex = (path: string | undefined, kind: 'color' | 'linear' | 'normal', fallback: TextureHandle) =>
+      path ? T.load(this.textureBase + path, kind).catch((e) => (console.warn(e), fallback)) : Promise.resolve(fallback);
+    const [baseColor, normal, orm, detailAlbedo, detailNormal, macro] = await Promise.all([
+      tex(def.baseColor, 'color', T.white),
+      tex(def.normal, 'normal', T.flatNormal),
+      tex(def.orm, 'linear', T.defaultOrm),
+      tex(def.detail?.albedo, 'linear', T.gray),
+      tex(def.detail?.normal, 'normal', T.flatNormal),
+      tex(def.macro?.texture, 'linear', T.gray),
+    ]);
+    const m = new Material(this.nextId++, name, def, this.device, this.layout, {
+      baseColor, normal, orm, detailAlbedo, detailNormal, macro,
+    });
+    this.all.push(m);
+    return m;
+  }
+
+  byName(name: string): Material | undefined {
+    return this.all.find((m) => m.name === name);
+  }
+}

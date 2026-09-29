@@ -1,0 +1,16 @@
+{
+  "format": "rill.map",
+  "version": 1,
+  "name": "sandbox",
+  "description": "Minimal builtin-primitive scene for renderer bring-up.",
+  "environment": { "preset": "clear" },
+  "spawn": { "position": [0, 0, 12], "yaw": 0, "pitch": -5 },
+  "objects": [
+    { "id": "ground", "type": "mesh", "asset": "builtin:plane?x=200&z=200&seg=8", "transform": { "position": [0, 0, 0] } },
+    { "id": "box1", "type": "mesh", "asset": "builtin:box?x=4&y=3&z=4", "transform": { "position": [-6, 0, 0] } },
+    { "id": "box2", "type": "mesh", "asset": "builtin:box?x=10&y=12&z=6", "transform": { "position": [8, 0, -10] } },
+    { "id": "wall", "type": "mesh", "asset": "builtin:box?x=60&y=3&z=0.3", "transform": { "position": [0, 0, -30] } },
+    { "id": "sph1", "type": "mesh", "asset": "builtin:sphere?r=1", "transform": { "position": [0, 0, 0] } },
+    { "id": "pole1", "type": "mesh", "asset": "builtin:cylinder?r=0.08&h=6", "transform": { "position": [3, 0, 3] } }
+  ]
+}

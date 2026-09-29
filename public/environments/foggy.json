@@ -1,0 +1,17 @@
+{
+  "name": "foggy",
+  "sun": { "azimuth": 160, "elevation": 22, "intensity": 1.0, "angularDiameter": 0.53 },
+  "sky": {
+    "intensity": 1.0, "turbidity": 3.0, "cloudCover": 1.0, "cloudAltitude": 600, "cloudSharpness": 0.5,
+    "cloudDensity": 1.0, "overcastLuminance": 3200, "overcastTint": [0.96, 0.98, 1.02], "wind": [0, 0]
+  },
+  "fog": {
+    "enabled": true, "density": 0.028, "height": 2, "falloff": 0.012, "hazeVisibilityKm": 3,
+    "anisotropy": 0.5, "albedo": [0.92, 0.95, 1.0], "sunScatter": 0.6, "startDistance": 0, "maxOpacity": 1.0
+  },
+  "exposure": { "ev100": 11.8, "compensation": 0 },
+  "ambient": { "groundAlbedo": [0.1, 0.1, 0.1], "lightmapSky": 1.0, "lightmapSun": 1.0, "indirect": 1.0, "envSpecular": 1.0 },
+  "lights": { "intensity": 0.2 },
+  "weather": { "wetness": 0.4, "puddles": 0.25 },
+  "post": { "tonemapper": "agx", "contrast": 1.0, "saturation": 0.95, "temperature": -0.15 }
+}

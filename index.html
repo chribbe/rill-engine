@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rill — renderer test map</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0c0d0f; overflow: hidden; color: #dfe3e8; font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      #view { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+      #stats { position: fixed; left: 8px; top: 8px; pointer-events: none; text-shadow: 0 1px 1px #000; }
+      #stats pre { margin: 4px 0 0; padding: 6px 8px; background: rgba(8, 10, 12, 0.55); border-radius: 4px; white-space: pre; }
+      #stats canvas { display: block; border-radius: 4px; }
+      #hint { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); padding: 6px 12px; background: rgba(8, 10, 12, 0.6); border-radius: 4px; pointer-events: none; transition: opacity 0.4s; }
+      #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; background: #0c0d0f; }
+      #fatal { display: none; position: fixed; inset: 0; padding: 40px; background: #1a0c0c; color: #ffb4b4; white-space: pre-wrap; font-size: 14px; }
+      #crosshair { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 2px; background: rgba(255,255,255,0.55); pointer-events: none; }
+      .lil-gui { --font-size: 11px; --widget-height: 18px; }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="crosshair"></div>
+    <div id="hint">Click to look · WASD move · Shift run · Space jump · F fly (Q/E) · 1–4 weather · V view · Tab stats · H UI · P screenshot</div>
+    <div id="loading">Loading…</div>
+    <div id="fatal"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
