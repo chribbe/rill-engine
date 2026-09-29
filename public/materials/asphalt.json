@@ -1,0 +1,7 @@
+{
+  "baseColor": "asphalt_albedo.png", "normal": "asphalt_normal.png", "orm": "asphalt_orm.png",
+  "physicalSize": 2, "roughness": 1, "porosity": 0.85,
+  "detail": { "albedo": "detail_aggregate_albedo.png", "normal": "detail_aggregate_normal.png", "physicalSize": 0.2, "albedoStrength": 0.25, "normalStrength": 0.6, "fadeDistance": 25 },
+  "macro": { "texture": "macro_variation.png", "physicalSize": 29, "albedoStrength": 0.25, "roughnessStrength": 0.12, "stainStrength": 0.2 },
+  "notes": "Worn road asphalt; macro layer gives patching / wheel-track variation."
+}

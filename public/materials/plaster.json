@@ -1,0 +1,7 @@
+{
+  "baseColor": "plaster_albedo.png", "normal": "plaster_normal.png", "orm": "plaster_orm.png",
+  "physicalSize": 2, "roughness": 1, "porosity": 0.5,
+  "detail": { "albedo": "detail_plaster_albedo.png", "normal": "detail_plaster_normal.png", "physicalSize": 0.3, "albedoStrength": 0.3, "normalStrength": 0.6, "fadeDistance": 25 },
+  "macro": { "texture": "macro_variation.png", "physicalSize": 21, "albedoStrength": 0.1, "roughnessStrength": 0.05, "stainStrength": 0.1 },
+  "notes": "Painted render. Tint via baseColorFactor in variants."
+}

@@ -1,0 +1,2 @@
+{ "baseColor": "debug_grid_albedo.png", "orm": "debug_grid_orm.png", "physicalSize": 4, "roughness": 1, "porosity": 0,
+  "notes": "World-scale grid: 10 cm minor, 50 cm, 1 m major lines, per-metre labels; red arrow = +U, blue arrow = +V (down)." }

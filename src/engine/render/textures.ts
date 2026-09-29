@@ -105,6 +105,7 @@ export class TextureManager {
         GPUTextureUsage.TEXTURE_BINDING |
         GPUTextureUsage.STORAGE_BINDING |
         GPUTextureUsage.COPY_DST |
+        GPUTextureUsage.COPY_SRC |
         GPUTextureUsage.RENDER_ATTACHMENT,
     });
     this.device.queue.copyExternalImageToTexture(
@@ -114,7 +115,10 @@ export class TextureManager {
     );
     bitmap.close();
     this.generateMips(texture, kind, wrap);
-    const view = texture.createView(kind === 'color' ? { format: 'rgba8unorm-srgb' } : {});
+    // The sRGB view must not inherit STORAGE usage (not valid for sRGB formats).
+    const view = texture.createView(
+      kind === 'color' ? { format: 'rgba8unorm-srgb', usage: GPUTextureUsage.TEXTURE_BINDING } : { usage: GPUTextureUsage.TEXTURE_BINDING },
+    );
     let bytes = 0;
     for (let i = 0; i < mips; i++) bytes += Math.max(1, width >> i) * Math.max(1, height >> i) * 4;
     const h: TextureHandle = { texture, view, width, height, kind, bytes, url };

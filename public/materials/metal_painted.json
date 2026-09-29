@@ -1,0 +1,2 @@
+{ "baseColor": "metal_painted_albedo.png", "normal": "metal_painted_normal.png", "orm": "metal_painted_orm.png", "physicalSize": 1, "roughness": 1, "porosity": 0,
+  "baseColorFactor": "#5b6b62", "notes": "Painted steel; tint via baseColorFactor." }

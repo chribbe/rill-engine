@@ -1,0 +1,2 @@
+{ "baseColorFactor": [0.8, 0.8, 0.78], "roughness": 0.2, "emissive": [1.0, 0.82, 0.62], "emissiveIntensity": 60000, "porosity": 0,
+  "notes": "Lamp lens. Emission is scaled by the environment's local-light intensity (off in daylight presets)." }

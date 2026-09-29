@@ -1,0 +1,2 @@
+{ "inherits": "concrete_cast", "baseColorFactor": [0.93, 0.93, 0.92], "macro": { "texture": "macro_variation.png", "physicalSize": 17, "albedoStrength": 0.22, "stainStrength": 0.22 },
+  "notes": "Retaining walls / tunnel: more weathering and staining." }

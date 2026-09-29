@@ -1,0 +1,242 @@
+{
+ "debug_grid": {
+  "averageAlbedo": [
+   0.2922,
+   0.2909,
+   0.2922
+  ],
+  "size": 2048,
+  "physicalSize": [
+   4,
+   4
+  ]
+ },
+ "debug_checker": {
+  "averageAlbedo": [
+   0.2544,
+   0.2544,
+   0.2544
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2,
+   2
+  ]
+ },
+ "concrete_cast": {
+  "averageAlbedo": [
+   0.273,
+   0.2593,
+   0.2345
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2,
+   2
+  ]
+ },
+ "concrete_aggregate": {
+  "averageAlbedo": [
+   0.3205,
+   0.2812,
+   0.2426
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "asphalt": {
+  "averageAlbedo": [
+   0.0485,
+   0.0485,
+   0.046
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2,
+   2
+  ]
+ },
+ "plaster": {
+  "averageAlbedo": [
+   0.7695,
+   0.7657,
+   0.758
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2,
+   2
+  ]
+ },
+ "brick_red": {
+  "averageAlbedo": [
+   0.2705,
+   0.0944,
+   0.0673
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1.04,
+   1.008
+  ]
+ },
+ "paving_slabs": {
+  "averageAlbedo": [
+   0.2505,
+   0.2386,
+   0.2174
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1.4,
+   1.4
+  ]
+ },
+ "tiles_white": {
+  "averageAlbedo": [
+   0.6692,
+   0.6659,
+   0.6555
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1.2,
+   1.2
+  ]
+ },
+ "ground_grass": {
+  "averageAlbedo": [
+   0.1222,
+   0.1521,
+   0.044
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2,
+   2
+  ]
+ },
+ "ground_forest": {
+  "averageAlbedo": [
+   0.1199,
+   0.0808,
+   0.0344
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2,
+   2
+  ]
+ },
+ "gravel": {
+  "averageAlbedo": [
+   0.1695,
+   0.1528,
+   0.1317
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "rock_granite": {
+  "averageAlbedo": [
+   0.197,
+   0.1769,
+   0.1601
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2,
+   2
+  ]
+ },
+ "metal_painted": {
+  "averageAlbedo": [
+   0.7992,
+   0.7992,
+   0.7992
+  ],
+  "size": 512,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "metal_galvanized": {
+  "averageAlbedo": [
+   0.6068,
+   0.6128,
+   0.6189
+  ],
+  "size": 512,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "bark_pine": {
+  "averageAlbedo": [
+   0.1511,
+   0.0711,
+   0.0378
+  ],
+  "size": 512,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "bark_birch": {
+  "averageAlbedo": [
+   0.6061,
+   0.5808,
+   0.5206
+  ],
+  "size": 512,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "foliage_pine": {
+  "averageAlbedo": [
+   0.0481,
+   0.0765,
+   0.0218
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "foliage_birch": {
+  "averageAlbedo": [
+   0.1504,
+   0.2346,
+   0.0384
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "fence_chainlink": {
+  "averageAlbedo": [
+   0.5496,
+   0.5496,
+   0.5606
+  ],
+  "size": 256,
+  "physicalSize": [
+   0.1,
+   0.1
+  ]
+ }
+}

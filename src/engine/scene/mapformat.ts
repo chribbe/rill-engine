@@ -86,7 +86,14 @@ export interface DecalObject extends MapObjectBase {
   };
 }
 
-export type MapObject = MeshObject | InstancesObject | LightObject | DecalObject;
+/** Non-rendered marker (viewpoints, spawn candidates, probe placement later). */
+export interface MarkerObject extends MapObjectBase {
+  type: 'marker';
+  yaw?: number;
+  pitch?: number;
+}
+
+export type MapObject = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject;
 
 export interface LightmapSetDocument {
   format: 'rill.lightmapset';

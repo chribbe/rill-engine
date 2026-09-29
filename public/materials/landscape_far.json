@@ -1,0 +1,3 @@
+{ "baseColor": "ground_forest_albedo.png", "normal": "ground_forest_normal.png", "physicalSize": 8, "baseColorFactor": [0.62, 1.05, 0.72], "roughness": 0.95,
+  "macro": { "texture": "macro_variation.png", "physicalSize": 420, "albedoStrength": 0.45, "roughnessStrength": 0.0 },
+  "notes": "Distant forested hills beyond the playable area (placeholder until forest impostors exist)." }

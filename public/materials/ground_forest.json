@@ -1,0 +1,2 @@
+{ "baseColor": "ground_forest_albedo.png", "normal": "ground_forest_normal.png", "orm": "ground_forest_orm.png", "physicalSize": 2, "roughness": 1, "porosity": 0.4,
+  "macro": { "texture": "macro_variation.png", "physicalSize": 27, "albedoStrength": 0.3, "roughnessStrength": 0.02, "stainStrength": 0.25 } }

@@ -173,6 +173,7 @@ export class World {
         break;
       }
       case 'decal':
+      case 'marker':
         break;
     }
   }

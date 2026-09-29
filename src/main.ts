@@ -38,10 +38,11 @@ async function main() {
   // Exact device-pixel sizing: no CSS scaling blur.
   let cssW = window.innerWidth, cssH = window.innerHeight, dpr = window.devicePixelRatio || 1;
   let devW = Math.round(cssW * dpr), devH = Math.round(cssH * dpr);
+  let sizeOverride: [number, number] | null = null;
   const applySize = () => {
     const s = renderer.settings.renderScale;
-    const w = Math.max(1, Math.round(devW * s));
-    const h = Math.max(1, Math.round(devH * s));
+    const w = sizeOverride ? sizeOverride[0] : Math.max(1, Math.round(devW * s));
+    const h = sizeOverride ? sizeOverride[1] : Math.max(1, Math.round(devH * s));
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
@@ -90,9 +91,12 @@ async function main() {
   };
   const bookmarks: Record<string, () => void> = { Spawn: () => player.teleport(sp.position, sp.yaw, sp.pitch) };
   for (const o of world.doc.objects) {
-    if (o.semantic === 'viewpoint') {
+    if (o.type === 'marker' && o.semantic === 'viewpoint') {
       const q = o.transform;
-      bookmarks[o.name ?? o.id] = () => player.teleport(q.position, (o as unknown as { yaw: number }).yaw ?? 0, (o as unknown as { pitch: number }).pitch ?? 0);
+      bookmarks[o.name ?? o.id] = () => {
+        player.fly = true;
+        player.teleport([q.position[0], q.position[1], q.position[2]], o.yaw ?? 0, o.pitch ?? 0);
+      };
     }
   }
   const gui = createPlayground(renderer, env, player, {
@@ -163,6 +167,40 @@ async function main() {
       });
     },
     getScene: () => world.toJSON(),
+    /** Renders one frame now (independent of rAF) and saves it to ./screenshots/<name>.png (dev server). */
+    shot: async (name: string, width?: number, height?: number) => {
+      if (width && height) sizeOverride = [width, height];
+      // Warm-up frame at the capture size (targets, shadows), then the captured one.
+      frame(performance.now(), true);
+      const p = renderer.capture();
+      frame(performance.now(), true);
+      const blob = await p;
+      sizeOverride = null;
+      const r = await fetch(`/__capture?name=${encodeURIComponent(name)}`, { method: 'POST', body: blob });
+      return (await r.json()).file as string;
+    },
+    /** Renders `frames` frames back-to-back (MessageChannel, unthrottled) and reports timings. */
+    setSize: (w: number, h: number) => { sizeOverride = w > 0 ? [w, h] : null; },
+    bench: async (frames = 120) => {
+      const ch = new MessageChannel();
+      const tick = () => new Promise<void>((res) => { ch.port1.onmessage = () => res(); ch.port2.postMessage(0); });
+      const cpu: number[] = [];
+      const t0 = performance.now();
+      for (let i = 0; i < frames; i++) {
+        const c0 = performance.now();
+        frame(c0, true);
+        cpu.push(performance.now() - c0);
+        await renderer.device.queue.onSubmittedWorkDone();
+        await tick();
+      }
+      const wall = (performance.now() - t0) / frames;
+      cpu.sort((a, b) => a - b);
+      return {
+        frames, wallMsPerFrame: +wall.toFixed(3), cpuMedianMs: +cpu[frames >> 1].toFixed(3), cpuP95Ms: +cpu[Math.floor(frames * 0.95)].toFixed(3),
+        gpuMs: +renderer.timer.total.toFixed(3), gpuPasses: Object.fromEntries([...renderer.timer.results].map(([k, v]) => [k, +v.toFixed(3)])),
+        stats: { ...renderer.stats },
+      };
+    },
     stress: (kind: string, count: number) => runStress(renderer, world, stressList, kind, count),
     clearStress: () => clearStress(renderer, stressList),
   };
@@ -171,8 +209,8 @@ async function main() {
   loading.remove();
   let last = performance.now();
   let lastFrameMs = 16;
-  const frame = (now: number) => {
-    const dt = Math.min(0.1, (now - last) / 1000);
+  function frame(now: number, manual = false) {
+    const dt = manual ? 1 / 60 : Math.min(0.1, (now - last) / 1000);
     lastFrameMs = now - last;
     last = now;
     const c0 = performance.now();
@@ -185,9 +223,12 @@ async function main() {
     const p = camera.position;
     stats.update(now, lastFrameMs, cpu, renderer, world,
       `Pos    ${p[0].toFixed(1)} ${p[1].toFixed(1)} ${p[2].toFixed(1)}  yaw ${((camera.yaw * 180) / Math.PI % 360).toFixed(0)}°  ${player.fly ? 'FLY' : player.onGround ? 'walk' : 'air'}  env ${env.state.name}`);
-    requestAnimationFrame(frame);
+  }
+  const loop = (now: number) => {
+    frame(now);
+    requestAnimationFrame(loop);
   };
-  requestAnimationFrame(frame);
+  requestAnimationFrame(loop);
 }
 
 main().catch((e) => {

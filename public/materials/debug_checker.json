@@ -1,0 +1,2 @@
+{ "baseColor": "debug_checker_albedo.png", "orm": "debug_checker_orm.png", "physicalSize": 2, "roughness": 1, "porosity": 0,
+  "notes": "1 m checker with 10 cm sub-checks." }
