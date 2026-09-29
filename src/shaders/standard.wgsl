@@ -26,6 +26,23 @@ const M_UNLIT: u32 = 1024u;
 const M_DOUBLE_SIDED: u32 = 2048u;
 const M_NO_LIGHTMAP_SH_RATIO: u32 = 4096u;
 
+// Pipeline specialisation. The renderer compiles one variant per (material
+// features x active global features); disabled blocks are removed by the
+// compiler. A single runtime uber-shader carried the register footprint of
+// every feature and cost ~3-4x with MSAA on Apple GPUs (see docs/ENGINE.md).
+override DEBUG_VIEWS: bool = true;
+override USE_TRIPLANAR: bool = true;
+override USE_DETAIL: bool = true;
+override USE_MACRO: bool = true;
+override USE_DECALS: bool = true;
+override USE_WETNESS: bool = true;
+override USE_SHADOWS: bool = true;
+override USE_LIGHTMAP: bool = true;
+override USE_LOCAL_LIGHTS: bool = true;
+override USE_FOG: bool = true;
+override USE_FOLIAGE: bool = true;
+override USE_SPEC_AA: bool = true;
+
 @group(1) @binding(0) var<uniform> material: MaterialParams;
 @group(1) @binding(1) var baseColorTex: texture_2d<f32>;
 @group(1) @binding(2) var normalTex: texture_2d<f32>;
@@ -46,7 +63,9 @@ struct VSIn {
 };
 
 struct VSOut {
-  @builtin(position) pos: vec4f,
+  // Invariant: the masked depth prepass and the colour pass (depth == equal)
+  // must produce bit-identical depths.
+  @invariant @builtin(position) pos: vec4f,
   @location(0) worldPos: vec3f,
   @location(1) normal: vec3f,
   @location(2) tangent: vec4f,
@@ -205,7 +224,7 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   var bc: vec4f;
   var nt: vec4f;
   var orm: vec4f;
-  if (matFlag(M_TRIPLANAR)) {
+  if (USE_TRIPLANAR && matFlag(M_TRIPLANAR)) {
     // World-space triplanar projection for organic surfaces (rock, soil).
     let sharp = material.extra.z;
     var w = pow(abs(Ng), vec3f(sharp));
@@ -240,13 +259,14 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   s.roughness = mix(material.extra.x, material.extra.y, orm.g) * material.pbr.x;
   s.metallic = orm.b * material.pbr.y;
   s.ao = mix(1.0, orm.r, material.pbr.w);
-  s.emissive = material.emissive.rgb;
+  // Emission (lamp lenses) follows the environment's local-light switch.
+  s.emissive = material.emissive.rgb * frame.ground.w;
   s.Ng = Ng;
 
   // --- tangent-space normal with detail layer
   var tn = scaleNormal(nt.xyz, material.pbr.z * frame.mat0.w);
   let detailFade = saturate(1.0 - dist / max(material.emissive.w, 0.01));
-  if (hasFlag(F_DETAIL) && detailFade > 0.0) {
+  if (USE_DETAIL && hasFlag(F_DETAIL) && detailFade > 0.0) {
     let duv = in.uv0 * material.detailTransform.xy;
     let dDx = uv0Dx * material.detailTransform.xy;
     let dDy = uv0Dy * material.detailTransform.xy;
@@ -256,14 +276,14 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
       // Detail albedo is an overlay around 0.5 grey (x2 multiply).
       s.albedo *= mix(1.0, da * 2.0, material.detailTransform.z * strength);
     }
-    if (matFlag(M_DETAIL_NORMAL) && !matFlag(M_TRIPLANAR)) {
+    if (matFlag(M_DETAIL_NORMAL) && !(USE_TRIPLANAR && matFlag(M_TRIPLANAR))) {
       let dn = decodeNormal(texGrad(detailNormalTex, duv, dDx, dDy));
       tn = blendRNM(tn, scaleNormal(dn.xyz, material.detailTransform.w * strength));
       s.normalVariance += dn.w * material.detailTransform.w * strength;
     }
   }
   // --- macro variation (large-scale, breaks tiling on big surfaces)
-  if (matFlag(M_MACRO) && frame.mat0.y > 0.0) {
+  if (USE_MACRO && matFlag(M_MACRO) && frame.mat0.y > 0.0) {
     let muv = in.uv0 * material.macroTransform.xy;
     let mdx = uv0Dx * material.macroTransform.xy;
     let mdy = uv0Dy * material.macroTransform.xy;
@@ -274,13 +294,13 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
     s.albedo *= 1.0 - m2.g * material.extra.w * k;
     s.roughness = saturate(s.roughness + (m.b - 0.5) * material.macroTransform.w * k);
   }
-  if (!matFlag(M_TRIPLANAR)) {
+  if (!(USE_TRIPLANAR && matFlag(M_TRIPLANAR))) {
     s.N = normalize(T * tn.x + B * tn.y + Ng * tn.z);
   }
 
   // --- global wetness: porous darkening + smoother, flatter surfaces
   let wet = frame.mat1.y * material.pbr2.z * saturate(Ng.y * 0.8 + 0.4);
-  if (wet > 0.0) {
+  if (USE_WETNESS && wet > 0.0) {
     s.albedo *= mix(1.0, 0.5, wet);
     s.roughness = mix(s.roughness, 0.12, wet * 0.8);
     s.N = normalize(mix(s.N, Ng, wet * 0.5));
@@ -294,13 +314,14 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
     }
   }
 
-  if ((inst.info.y & I_NO_DECALS) == 0u) { applyDecals(wp, dpx, dpy, &s); }
+  if (USE_DECALS && (inst.info.y & I_NO_DECALS) == 0u) { applyDecals(wp, dpx, dpy, &s); }
 
   // ---------------------------------------------------------------- debug (raw)
-  let mode = frame.debug.x;
+  let mode = select(0u, frame.debug.x, DEBUG_VIEWS);
   var out: ShadeOut;
   out.raw = false;
   out.color = vec4f(0.0, 0.0, 0.0, s.alpha);
+  if (DEBUG_VIEWS) {
   if (mode == 1u) { out.raw = true; out.color = vec4f(s.albedo, s.alpha); return out; }
   if (mode == 2u) { out.raw = true; out.color = vec4f(s.N * 0.5 + 0.5, s.alpha); return out; }
   if (mode == 3u) { out.raw = true; out.color = vec4f(Ng * 0.5 + 0.5, s.alpha); return out; }
@@ -351,6 +372,7 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
     s.roughness = 0.7; s.metallic = 0.0; s.N = Ng; s.ao = 1.0;
   }
   if (mode == 12u || mode == 6u || mode == 13u || mode == 14u) { s.albedo = vec3f(0.5); s.metallic = 0.0; }
+  }
 
   // ---------------------------------------------------------------- lighting
   let N = s.N;
@@ -361,8 +383,8 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   var a = max(s.roughness * s.roughness, 0.002);
   // Normal-map variance (Toksvig/vMF, stored per mip) + geometric specular AA.
   a = sqrt(a * a + s.normalVariance);
-  if (hasFlag(F_SPEC_AA)) { a = specularAA(N, a, frame.mat1.x); }
-  let foliage = matFlag(M_FOLIAGE);
+  if (USE_SPEC_AA && hasFlag(F_SPEC_AA)) { a = specularAA(N, a, frame.mat1.x); }
+  let foliage = USE_FOLIAGE && matFlag(M_FOLIAGE);
 
   // Sun
   var direct = vec3f(0.0);
@@ -371,9 +393,11 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   if (hasFlag(F_SUN)) {
     let L = frame.sunDir.xyz;
     let NoLg = dot(Ng, L);
-    let sh = sunShadow(wp, Ng, NoLg, in.viewDepth);
-    shadowTerm = sh.x;
-    cascade = sh.y;
+    if (USE_SHADOWS) {
+      let sh = sunShadow(wp, Ng, NoLg, in.viewDepth);
+      shadowTerm = sh.x;
+      cascade = sh.y;
+    }
     let NoL = saturate(dot(N, L));
     // Terminator softening: normal maps must not light faces turned away from the sun.
     let geoMask = saturate(NoLg * 6.0 + 0.2);
@@ -397,7 +421,7 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   var irr = vec3f(0.0);         // radiance of a white Lambertian (irradiance / PI)
   let shN = shEval(N);
   let lmLayer = i32(inst.info.x) - 1;
-  let useLm = lmLayer >= 0 && hasFlag(F_LIGHTMAPS);
+  let useLm = USE_LIGHTMAP && lmLayer >= 0 && hasFlag(F_LIGHTMAPS);
   if (useLm) {
     let lmSky = sampleLightmap(in.lmUv, lmLayer) * frame.lmParams.z;
     let lmSun = sampleLightmap(in.lmUv, lmLayer + 1) * frame.lmParams.w;
@@ -407,7 +431,9 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
       // the directional distribution of the current sky.
       ratio = clamp(shN / max(shEval(Ng), vec3f(1e-4)), vec3f(0.4), vec3f(1.8));
     }
-    irr = (lmSky * skyUpRadiance() + lmSun * frame.sunColor.rgb * INV_PI) * ratio;
+    // Both layers store irradiance/PI (Cycles "light" pass): sky per unit sky
+    // radiance, sun bounce per unit sun illuminance (calibrated, see docs).
+    irr = (lmSky * skyUpRadiance() + lmSun * frame.sunColor.rgb) * ratio;
   } else if (hasFlag(F_SKY_AMBIENT)) {
     irr = shN;
     if (foliage) {
@@ -448,7 +474,7 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
 
   // Local lights (small list, brute force for now; clustered later if needed).
   var local = vec3f(0.0);
-  if (hasFlag(F_LOCAL_LIGHTS)) {
+  if (USE_LOCAL_LIGHTS && hasFlag(F_LOCAL_LIGHTS)) {
     for (var i = 0u; i < frame.debug.z; i++) {
       let l = lights[i];
       let toL = l.posRange.xyz - wp;
@@ -479,6 +505,7 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   if (matFlag(M_UNLIT)) { color = s.emissive + s.albedo * irr; }
 
   // ---------------------------------------------------------------- debug (lit)
+  if (DEBUG_VIEWS) {
   if (mode == 11u) {
     let cc = array<vec3f, 5>(vec3f(1.0, 0.25, 0.25), vec3f(0.25, 1.0, 0.25), vec3f(0.3, 0.45, 1.0), vec3f(1.0, 1.0, 0.25), vec3f(0.6));
     let ci = u32(clamp(cascade, 0.0, 4.0));
@@ -488,11 +515,15 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   if (mode == 13u) { color = direct; }
   if (mode == 15u) { color = indirectSpec + direct * select(0.0, 1.0, s.metallic > 0.5); }
   if (mode == 18u) { out.raw = true; out.color = vec4f(vec3f(shadowTerm), s.alpha); return out; }
+  }
 
   // ---------------------------------------------------------------- fog
-  let fog = computeFog(camPos, -V, dist, false);
-  if (mode == 19u) { out.raw = true; out.color = vec4f(vec3f(fog.transmittance), s.alpha); return out; }
-  color = color * fog.transmittance + fog.inscatter + fogLightScatter(camPos, -V, dist);
+  if (USE_FOG) {
+    let fog = computeFog(camPos, -V, dist, false);
+    if (DEBUG_VIEWS && mode == 19u) { out.raw = true; out.color = vec4f(vec3f(fog.transmittance), s.alpha); return out; }
+    color = color * fog.transmittance + fog.inscatter;
+    if (USE_LOCAL_LIGHTS) { color += fogLightScatter(camPos, -V, dist); }
+  }
 
   out.color = vec4f(color * frame.exposure.x, s.alpha);
   return out;
@@ -547,4 +578,59 @@ fn fsMasked(in: VSOut, @builtin(front_facing) front: bool) -> MaskedOut {
     out.mask = 0xFFFFFFFFu;
   }
   return out;
+}
+
+// ---------------------------------------------------------------- masked depth prepass
+// Alpha-tested geometry (foliage, fences) writes depth + MSAA coverage here with
+// a minimal shader; the lit colour pass then runs with depth == equal and no
+// discard, so each visible sample is shaded once and tile HSR stays effective.
+struct DepthOut {
+  @builtin(sample_mask) mask: u32,
+};
+
+@fragment
+fn fsDepthMasked(in: VSOut) -> DepthOut {
+  let uv = in.uv0 * material.uvTransform.xy + material.uvTransform.zw;
+  let texSize = vec2f(textureDimensions(baseColorTex));
+  let dUv = max(length(dpdx(uv) * texSize), length(dpdy(uv) * texSize));
+  let mip = max(log2(dUv), 0.0);
+  var alpha = texGrad(baseColorTex, uv, dpdx(uv), dpdy(uv)).a * material.baseColor.a;
+  alpha *= 1.0 + mip * 0.25;
+  let cutoff = material.pbr2.y;
+  var out: DepthOut;
+  if (hasFlag(F_A2C)) {
+    let sharpened = (alpha - cutoff) / max(fwidth(alpha), 1e-4) + 0.5;
+    let cov = saturate(sharpened);
+    let dither = ign(in.pos.xy) - 0.5;
+    let n = u32(clamp(round(cov * 4.0 + dither * 0.9), 0.0, 4.0));
+    if (n == 0u) { discard; }
+    let rot = u32(in.pos.x + in.pos.y * 2.0) & 3u;
+    let m = (0xFu >> (4u - n));
+    out.mask = ((m << rot) | (m >> (4u - rot))) & 0xFu;
+  } else {
+    if (alpha < cutoff) { discard; }
+    out.mask = 0xFFFFFFFFu;
+  }
+  return out;
+}
+
+// Hardware alpha-to-coverage variant of the prepass: no discard, no sample
+// mask builtin (both force slow paths with MSAA on tile-based GPUs). Colour
+// writes are masked off, so alpha only drives coverage.
+@fragment
+fn fsDepthA2C(in: VSOut) -> @location(0) vec4f {
+  let uv = in.uv0 * material.uvTransform.xy + material.uvTransform.zw;
+  let texSize = vec2f(textureDimensions(baseColorTex));
+  let dUv = max(length(dpdx(uv) * texSize), length(dpdy(uv) * texSize));
+  let mip = max(log2(dUv), 0.0);
+  var alpha = texGrad(baseColorTex, uv, dpdx(uv), dpdy(uv)).a * material.baseColor.a;
+  alpha *= 1.0 + mip * 0.25;
+  let sharpened = (alpha - material.pbr2.y) / max(fwidth(alpha), 1e-4) + 0.5;
+  return vec4f(0.0, 0.0, 0.0, saturate(sharpened));
+}
+
+// Lit colour pass for masked geometry after the prepass (no discard).
+@fragment
+fn fsMaskedColor(in: VSOut, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+  return finalize(shade(in, front));
 }

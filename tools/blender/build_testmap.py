@@ -95,8 +95,9 @@ def H(x, y):
     d = math.hypot(x - 62, y - 72)
     north = smoothstep(WALL_Y1, 34, y)
     h += 15.0 * smoothstep(80, 8, d) * north
-    # Rolling ground away from the flat urban core.
+    # Rolling ground away from the flat urban core and the road corridor.
     core = max(smoothstep(58, 72, abs(x - 5)), smoothstep(36, 48, y), smoothstep(-34, -46, y))
+    core *= smoothstep(9, 22, abs(y))
     h += core * (2.5 * noise.noise(Vector((x / 38.0, y / 38.0, 0.3))) + 1.0 * noise.noise(Vector((x / 13.0, y / 13.0, 1.7))))
     # Beyond the map edge: distant hills.
     r = max(abs(x), abs(y))
@@ -271,7 +272,8 @@ def wall_with_openings(b, o, u, length, height, openings, depth, wall_mat, plint
         if kind == 'window' and w > 1.0:
             mid = u0 + w / 2
             b.quad(P(mid - 0.03, z0 + f, fd), P(mid + 0.03, z0 + f, fd), P(mid + 0.03, z0 + h - f, fd), P(mid - 0.03, z0 + h - f, fd), frame_mat)
-        b.quad(P(u0 + f, z0 + f, d), P(u0 + w - f, z0 + f, d), P(u0 + w - f, z0 + h - f, d), P(u0 + f, z0 + h - f, d), pane)
+        # Pane spans the full opening so no void is visible behind the frame ring.
+        b.quad(P(u0, z0, d), P(u0 + w, z0, d), P(u0 + w, z0 + h, d), P(u0, z0 + h, d), pane)
 
 
 def flat_roof(b, x0, x1, y0, y1, z, parapet, t=0.25, roof_mat='gravel', cap_mat='metal_dark', wall_mat='plaster'):

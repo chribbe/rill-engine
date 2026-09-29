@@ -31,8 +31,11 @@ export class GpuTimer {
   }
 
   /** Returns timestampWrites for a pass descriptor (or undefined when disabled/full). */
+  /** Timestamp writes can perturb tile-based GPUs; allow turning them off at runtime. */
+  paused = false;
+
   pass(name: string): GPURenderPassTimestampWrites | undefined {
-    if (!this.enabled || this.names.length >= this.maxPasses) return undefined;
+    if (!this.enabled || this.paused || this.names.length >= this.maxPasses) return undefined;
     const i = this.names.length;
     this.names.push(name);
     return { querySet: this.querySet!, beginningOfPassWriteIndex: i * 2, endOfPassWriteIndex: i * 2 + 1 };

@@ -468,9 +468,66 @@ export class Renderer {
 
   // ------------------------------------------------------------------ pipelines
 
-  private stdPipeline(masked: boolean, doubleSided: boolean): GPURenderPipeline {
+  /** Global shader features active this frame (feed the `override` constants). */
+  private features = { debug: false, decals: true, wetness: false, shadows: true, lightmap: true, localLights: false, fog: true, specAA: true, detail: true, macro: true };
+  /** Set false to compile the full runtime uber-shader (for comparisons). */
+  specialize = true;
+
+  private variant(m: Material): { key: string; constants: Record<string, number> } {
+    const g = this.features;
+    const d = m.def;
+    const foliage = d.shader === 'foliage';
+    const on = (b: boolean) => (this.specialize ? (b ? 1 : 0) : 1);
+    const constants: Record<string, number> = {
+      DEBUG_VIEWS: on(g.debug),
+      USE_TRIPLANAR: on(d.mapping === 'triplanar'),
+      USE_DETAIL: on(g.detail && !!(d.detail?.albedo || d.detail?.normal)),
+      USE_MACRO: on(g.macro && !!d.macro),
+      USE_DECALS: on(g.decals && !foliage),
+      USE_WETNESS: on(g.wetness && !foliage),
+      USE_SHADOWS: on(g.shadows),
+      USE_LIGHTMAP: on(g.lightmap && !foliage),
+      USE_LOCAL_LIGHTS: on(g.localLights),
+      USE_FOG: on(g.fog),
+      USE_FOLIAGE: on(foliage),
+      USE_SPEC_AA: on(g.specAA),
+    };
+    let bits = 0;
+    Object.values(constants).forEach((v, i) => (bits |= v << i));
+    return { key: bits.toString(16), constants };
+  }
+
+  /** Diagnostic: replaces the opaque fragment entry point (e.g. 'fsDiagTrivial'). */
+  diagFragment: string | null = null;
+
+  private stdPipeline(masked: boolean, doubleSided: boolean, mat: Material): GPURenderPipeline {
     const msaa = this.settings.msaa;
-    const key = `std:${masked}:${doubleSided}:${msaa}`;
+    const v = this.variant(mat);
+    const key = `std:${masked}:${doubleSided}:${msaa}:${this.diagFragment}:${v.key}`;
+    let p = this.pipelines.get(key);
+    if (!p) {
+      const mod = shaderModule(this.device, this.diagFragment ? 'standard_diag' : 'standard');
+      p = this.device.createRenderPipeline({
+        label: key,
+        layout: this.stdPipelineLayout,
+        vertex: { module: mod, entryPoint: 'vsMain', buffers: VERTEX_LAYOUT_FULL },
+        fragment: { module: mod, entryPoint: this.diagFragment ?? (masked ? 'fsMasked' : 'fsOpaque'), targets: [{ format: this.hdrFormat }], constants: v.constants },
+        primitive: { topology: 'triangle-list', cullMode: doubleSided ? 'none' : 'back', frontFace: 'ccw' },
+        depthStencil: { format: this.depthFormat, depthWriteEnabled: true, depthCompare: 'greater' },
+        multisample: { count: msaa ? 4 : 1 },
+      });
+      this.pipelines.set(key, p);
+    }
+    return p;
+  }
+
+  /** Masked geometry: depth/coverage prepass (colour writes off) or the equal-depth lit pass. */
+  private maskedPipeline(prepass: boolean, doubleSided: boolean, mat: Material): GPURenderPipeline {
+    const msaa = this.settings.msaa;
+    // Hardware A2C when multisampled (fast path); discard-based test otherwise.
+    const hwA2C = prepass && msaa && this.settings.alphaToCoverage && this.hwA2C;
+    const v = this.variant(mat);
+    const key = `masked:${prepass}:${doubleSided}:${msaa}:${hwA2C}:${prepass ? '' : v.key}`;
     let p = this.pipelines.get(key);
     if (!p) {
       const mod = shaderModule(this.device, 'standard');
@@ -478,15 +535,40 @@ export class Renderer {
         label: key,
         layout: this.stdPipelineLayout,
         vertex: { module: mod, entryPoint: 'vsMain', buffers: VERTEX_LAYOUT_FULL },
-        fragment: { module: mod, entryPoint: masked ? 'fsMasked' : 'fsOpaque', targets: [{ format: 'rgba16float' }] },
+        fragment: {
+          module: mod,
+          entryPoint: prepass ? (hwA2C ? 'fsDepthA2C' : 'fsDepthMasked') : 'fsMaskedColor',
+          targets: [{ format: this.hdrFormat, writeMask: prepass ? 0 : GPUColorWrite.ALL }],
+          constants: v.constants,
+        },
         primitive: { topology: 'triangle-list', cullMode: doubleSided ? 'none' : 'back', frontFace: 'ccw' },
-        depthStencil: { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'greater' },
-        multisample: { count: msaa ? 4 : 1 },
+        depthStencil: prepass
+          ? { format: this.depthFormat, depthWriteEnabled: true, depthCompare: 'greater' }
+          : { format: this.depthFormat, depthWriteEnabled: false, depthCompare: 'equal' },
+        multisample: { count: msaa ? 4 : 1, alphaToCoverageEnabled: hwA2C },
       });
       this.pipelines.set(key, p);
     }
     return p;
   }
+  hwA2C = true;
+  hdrFormat: GPUTextureFormat = 'rgba16float';
+  depthFormat: GPUTextureFormat = 'depth32float';
+  /** Diagnostic: switch render-target formats (clears pipeline cache + targets). */
+  setTargetFormats(hdr: GPUTextureFormat, depth: GPUTextureFormat) {
+    this.hdrFormat = hdr;
+    this.depthFormat = depth;
+    for (const k of [...this.pipelines.keys()]) if (!k.startsWith('shadow') && k !== 'post') this.pipelines.delete(k);
+    this.width = 0;
+  }
+  useTransient = true;
+  /** Forces target re-creation (after toggling target options). */
+  invalidateTargets() {
+    this.width = 0;
+  }
+
+  /** Experiment/diagnostic switch: 'prepass' (default), 'direct' (single pass with discard). */
+  maskedMode: 'prepass' | 'direct' | 'prepassOnly' = 'prepass';
 
   private overdrawPipeline(doubleSided: boolean): GPURenderPipeline {
     const msaa = this.settings.msaa;
@@ -501,10 +583,10 @@ export class Renderer {
         vertex: { module: vs, entryPoint: 'vsMain', buffers: VERTEX_LAYOUT_FULL },
         fragment: {
           module: fs, entryPoint: 'fsOverdraw',
-          targets: [{ format: 'rgba16float', blend: { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'zero', dstFactor: 'one' } } }],
+          targets: [{ format: this.hdrFormat, blend: { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'zero', dstFactor: 'one' } } }],
         },
         primitive: { topology: 'triangle-list', cullMode: doubleSided ? 'none' : 'back' },
-        depthStencil: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'always' },
+        depthStencil: { format: this.depthFormat, depthWriteEnabled: false, depthCompare: 'always' },
         multisample: { count: msaa ? 4 : 1 },
       });
       this.pipelines.set(key, p);
@@ -550,9 +632,9 @@ export class Renderer {
         label: key,
         layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.frameLayout] }),
         vertex: { module: mod, entryPoint: 'vsMain' },
-        fragment: { module: mod, entryPoint: 'fsMain', targets: [{ format: 'rgba16float' }] },
+        fragment: { module: mod, entryPoint: 'fsMain', targets: [{ format: this.hdrFormat }] },
         primitive: { topology: 'triangle-list' },
-        depthStencil: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'greater-equal' },
+        depthStencil: { format: this.depthFormat, depthWriteEnabled: false, depthCompare: 'greater-equal' },
         multisample: { count: msaa ? 4 : 1 },
       });
       this.pipelines.set(key, p);
@@ -575,9 +657,9 @@ export class Renderer {
               module: mod, entryPoint: 'vsLines',
               buffers: [{ arrayStride: 28, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x4' }] }],
             },
-        fragment: { module: mod, entryPoint: 'fsMain', targets: [{ format: 'rgba16float' }] },
+        fragment: { module: mod, entryPoint: 'fsMain', targets: [{ format: this.hdrFormat }] },
         primitive: { topology: 'line-list' },
-        depthStencil: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'greater-equal' },
+        depthStencil: { format: this.depthFormat, depthWriteEnabled: false, depthCompare: 'greater-equal' },
         multisample: { count: msaa ? 4 : 1 },
       });
       this.pipelines.set(key, p);
@@ -613,15 +695,15 @@ export class Renderer {
     this.depth?.destroy();
     this.resolved?.destroy();
     const d = this.device;
-    const transient = transientUsage(this.gpu.caps);
+    const transient = this.useTransient ? transientUsage(this.gpu.caps) : 0;
     const samples = this.settings.msaa ? 4 : 1;
     if (this.settings.msaa) {
-      this.msaaColor = d.createTexture({ label: 'msaaColor', size: [width, height], format: 'rgba16float', sampleCount: 4, usage: TU.RENDER_ATTACHMENT | transient });
+      this.msaaColor = d.createTexture({ label: 'msaaColor', size: [width, height], format: this.hdrFormat, sampleCount: 4, usage: TU.RENDER_ATTACHMENT | transient });
     } else {
       this.msaaColor = undefined;
     }
-    this.depth = d.createTexture({ label: 'depth', size: [width, height], format: 'depth32float', sampleCount: samples, usage: TU.RENDER_ATTACHMENT | transient });
-    this.resolved = d.createTexture({ label: 'hdr', size: [width, height], format: 'rgba16float', usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING });
+    this.depth = d.createTexture({ label: 'depth', size: [width, height], format: this.depthFormat, sampleCount: samples, usage: TU.RENDER_ATTACHMENT | transient });
+    this.resolved = d.createTexture({ label: 'hdr', size: [width, height], format: this.hdrFormat, usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING });
     this.postBG = d.createBindGroup({
       layout: this.postLayout,
       entries: [
@@ -770,6 +852,17 @@ export class Renderer {
     if (S.alphaToCoverage && S.msaa) flags |= RF.A2C;
     if (S.shadows.pcf7) flags |= RF.PCF7;
     F.uvec4(FO.debug, S.debugView, flags, this.lightCount, this.decalCount);
+    const ft = this.features;
+    ft.debug = S.debugView !== 0;
+    ft.decals = S.decals && this.decalCount > 0;
+    ft.wetness = envState.weather.wetness > 0;
+    ft.shadows = shadowsOn;
+    ft.lightmap = S.lightmaps && this.lightmapLayers > 0;
+    ft.localLights = (flags & RF.LOCAL_LIGHTS) !== 0 && this.lightCount > 0;
+    ft.fog = fogOn;
+    ft.specAA = S.specularAA > 0;
+    ft.detail = S.detailStrength > 0;
+    ft.macro = S.macroStrength > 0;
     const g = this.decalGrid;
     F.vec4(FO.decalGrid, g.originX, g.originZ, g.cell, 1 / g.cell);
     F.uvec4(FO.decalGrid2, g.nx, g.nz, g.maxPer, 0);
@@ -894,11 +987,24 @@ export class Renderer {
     pass.setIndexBuffer(arena.index.buffer, 'uint32');
     let cur: GPURenderPipeline | null = null;
     let curMat: Material | null = null;
-    for (const dr of main.draws) {
-      const p = overdraw ? this.overdrawPipeline(dr.doubleSided) : this.stdPipeline(dr.masked, dr.doubleSided);
-      if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
-      if (dr.material !== curMat) { pass.setBindGroup(1, dr.material.bindGroup); curMat = dr.material; }
-      pass.drawIndexed(dr.prim.indexCount, dr.count, dr.prim.firstIndex, dr.prim.baseVertex, dr.first);
+    const drawList = (filter: (d: Draw) => boolean, pick: (d: Draw) => GPURenderPipeline) => {
+      for (const dr of main.draws) {
+        if (!filter(dr)) continue;
+        const p = pick(dr);
+        if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
+        if (dr.material !== curMat) { pass.setBindGroup(1, dr.material.bindGroup); curMat = dr.material; }
+        pass.drawIndexed(dr.prim.indexCount, dr.count, dr.prim.firstIndex, dr.prim.baseVertex, dr.first);
+      }
+    };
+    if (overdraw) {
+      drawList(() => true, (dr) => this.overdrawPipeline(dr.doubleSided));
+    } else if (this.maskedMode === 'direct') {
+      drawList(() => true, (dr) => this.stdPipeline(dr.masked, dr.doubleSided, dr.material));
+    } else {
+      // Opaque first (fills depth), then masked prepass, then masked colour at equal depth.
+      drawList((d) => !d.masked, (dr) => this.stdPipeline(false, dr.doubleSided, dr.material));
+      drawList((d) => d.masked, (dr) => this.maskedPipeline(true, dr.doubleSided, dr.material));
+      if (this.maskedMode === 'prepass') drawList((d) => d.masked, (dr) => this.maskedPipeline(false, dr.doubleSided, dr.material));
     }
     if (!overdraw) {
       pass.setPipeline(this.skyPipeline());

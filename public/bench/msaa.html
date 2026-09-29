@@ -1,0 +1,73 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>MSAA shading-rate microbenchmark</title></head>
+<body style="background:#111;color:#ddd;font:13px monospace"><pre id="o">running…</pre>
+<script type="module">
+// Finds which pipeline trait makes MSAA expensive: a texture-bound full-screen
+// pass, 1x vs 4x, toggling depth attachment, front_facing, derivatives, varyings.
+const o = document.getElementById('o');
+const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+const device = await adapter.requestDevice();
+const W = 1920, H = 1080;
+const tex = device.createTexture({ size: [1024, 1024], format: 'rgba8unorm', mipLevelCount: 11, usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST });
+device.queue.writeTexture({ texture: tex }, new Uint8Array(1024 * 1024 * 4).map(() => Math.random() * 255), { bytesPerRow: 4096 }, [1024, 1024]);
+const samp = device.createSampler({ magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', maxAnisotropy: 16, addressModeU: 'repeat', addressModeV: 'repeat' });
+const code = (f) => `
+@group(0) @binding(0) var t: texture_2d<f32>;
+@group(0) @binding(1) var s: sampler;
+struct V { @builtin(position) p: vec4f, @location(0) uv: vec2f, ${f.vary ? '@location(1) a: vec4f, @location(2) b: vec4f, @location(3) c: vec4f, @location(4) d: vec3f,' : ''} };
+@vertex fn vs(@builtin(vertex_index) i: u32) -> V {
+  let q = vec2f(f32((i << 1u) & 2u), f32(i & 2u)) * 2.0 - 1.0;
+  var v: V; v.p = vec4f(q, 0.5, 1.0); v.uv = vec2f(q.x * 40.0, 1.0 / max(q.y + 1.05, 0.02));
+  ${f.vary ? 'v.a = vec4f(q, 1, 1); v.b = v.a; v.c = v.a; v.d = v.a.xyz;' : ''}
+  return v;
+}
+@fragment fn fs(v: V ${f.ff ? ', @builtin(front_facing) ff: bool' : ''}) -> @location(0) vec4f {
+  var c = vec4f(0.0);
+  ${f.grad ? 'let dx = dpdx(v.uv); let dy = dpdy(v.uv);' : ''}
+  for (var k = 0; k < 24; k++) {
+    let uv = v.uv + vec2f(f32(k) * 0.13, 0.0);
+    c += ${f.grad ? 'textureSampleGrad(t, s, uv, dx, dy)' : 'textureSample(t, s, uv)'};
+  }
+  ${f.ff ? 'if (!ff) { c = -c; }' : ''}
+  ${f.vary ? 'c += (v.a + v.b + v.c + vec4f(v.d, 0)) * 1e-6;' : ''}
+  return c * (1.0 / 24.0) * 0.2;
+}`;
+async function run(samples, f) {
+  const mod = device.createShaderModule({ code: code(f) });
+  const pipe = device.createRenderPipeline({
+    layout: 'auto', vertex: { module: mod },
+    fragment: { module: mod, targets: [{ format: 'rgba16float', blend: f.depth ? undefined : { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'one', dstFactor: 'one' } } }] },
+    depthStencil: f.depth ? { format: 'depth32float', depthWriteEnabled: true, depthCompare: 'greater-equal' } : undefined,
+    primitive: { cullMode: 'none' },
+    multisample: { count: samples },
+  });
+  const bg = device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [{ binding: 0, resource: tex.createView() }, { binding: 1, resource: samp }] });
+  const target = device.createTexture({ size: [W, H], format: 'rgba16float', sampleCount: samples, usage: GPUTextureUsage.RENDER_ATTACHMENT });
+  const resolve = samples > 1 ? device.createTexture({ size: [W, H], format: 'rgba16float', usage: GPUTextureUsage.RENDER_ATTACHMENT }) : null;
+  const depth = f.depth ? device.createTexture({ size: [W, H], format: 'depth32float', sampleCount: samples, usage: GPUTextureUsage.RENDER_ATTACHMENT }) : null;
+  const frame = () => {
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginRenderPass({
+      colorAttachments: [{ view: target.createView(), resolveTarget: resolve?.createView(), loadOp: 'clear', storeOp: samples > 1 ? 'discard' : 'store' }],
+      depthStencilAttachment: depth ? { view: depth.createView(), depthClearValue: 0, depthLoadOp: 'clear', depthStoreOp: 'discard' } : undefined,
+    });
+    pass.setPipeline(pipe); pass.setBindGroup(0, bg);
+    for (let i = 0; i < 3; i++) pass.draw(3);
+    pass.end();
+    device.queue.submit([enc.finish()]);
+  };
+  for (let i = 0; i < 5; i++) frame();
+  await device.queue.onSubmittedWorkDone();
+  const t0 = performance.now();
+  for (let i = 0; i < 20; i++) frame();
+  await device.queue.onSubmittedWorkDone();
+  return ((performance.now() - t0) / 20).toFixed(2);
+}
+const rows = [];
+const cases = { base: {}, depth: { depth: 1 }, frontFacing: { ff: 1 }, grad: { grad: 1 }, varyings: { vary: 1 }, all: { depth: 1, ff: 1, grad: 1, vary: 1 } };
+for (const [name, f] of Object.entries(cases)) {
+  rows.push(`${name.padEnd(12)} 1x ${await run(1, f)} ms | 4x ${await run(4, f)} ms`);
+  o.textContent = rows.join('\n');
+}
+window.__result = rows;
+</script></body></html>
