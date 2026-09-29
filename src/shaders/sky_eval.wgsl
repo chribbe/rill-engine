@@ -23,7 +23,7 @@ fn skyAtmosphere(d: vec3f) -> vec3f {
   let cosZ = max(d.y, -0.004);
   let hitGround = raySphere(vec3f(0.0, vh, 0.0), normalize(vec3f(ld, cosZ, 0.0)), frame.atmo.x) >= 0.0;
   let uv = skyViewUv(frame.atmo.x, vh, cosZ, lightViewCos, hitGround);
-  return textureSampleLevel(skyViewLut, sampClamp, uv, 0.0).rgb * frame.sky.x * frame.exposure.z;
+  return textureSampleLevel(skyViewLut, sampClamp, uv, 0.0).rgb * frame.sky.x * frame.exposure.z * frame.skyTint.rgb;
 }
 
 fn sunIlluminanceAtCloud() -> vec3f {

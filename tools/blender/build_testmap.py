@@ -686,7 +686,7 @@ def light(obj_id, pos, intensity, rng, color=(1.0, 0.78, 0.55), kind='spot', out
 
 for i, x in enumerate([-87.5 + 25 * k for k in range(8)]):
     add_mesh_object(f'streetlight_{i}', f'Streetlight {i}', 'streetlight', 'streetlight', pos=(x, 5.6, 0.12), collision=True)
-    light(f'streetlight_{i}_lamp', (x, 5.6 - 2.05, 7.85), 2600, 28)
+    light(f'streetlight_{i}_lamp', (x, 5.6 - 2.05, 7.85), 3000, 24, outer=56, inner=28)
 
 path = path_polylines['path_forest']
 for i, idx in enumerate(range(8, len(path) - 5, 18)):
@@ -695,7 +695,7 @@ for i, idx in enumerate(range(8, len(path) - 5, 18)):
     side = Vector((-d.y, d.x)) * 2.2
     px, py = p.x + side.x, p.y + side.y
     add_mesh_object(f'path_light_{i}', f'Path light {i}', 'path_light', 'streetlight', pos=(px, py, H(px, py) - 0.05))
-    light(f'path_light_{i}_lamp', (px, py, H(px, py) + 3.95), 700, 16, color=(1.0, 0.72, 0.45), outer=75, inner=50)
+    light(f'path_light_{i}_lamp', (px, py, H(px, py) + 3.95), 800, 14, color=(1.0, 0.72, 0.45), outer=68, inner=35)
 
 for i, ly in enumerate((-3.5, 3.5)):
     light(f'underpass_lamp_{i}', (-12.0, ly, UP_CEIL - 0.1), 900, 14, color=(0.92, 0.97, 1.0), outer=80, inner=55, fog=0.5)

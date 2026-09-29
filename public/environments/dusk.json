@@ -1,17 +1,76 @@
 {
   "name": "dusk",
-  "sun": { "azimuth": 318, "elevation": -2.5, "intensity": 1.0, "angularDiameter": 0.53 },
+  "sun": {
+    "azimuth": 318,
+    "elevation": -7.0,
+    "intensity": 1.0,
+    "angularDiameter": 0.53
+  },
   "sky": {
-    "intensity": 1.0, "turbidity": 1.8, "cloudCover": 0.35, "cloudAltitude": 2200, "cloudSharpness": 0.2,
-    "cloudDensity": 1.0, "overcastLuminance": 60, "overcastTint": [0.8, 0.85, 1.0], "wind": [0, 0]
+    "intensity": 1.0,
+    "turbidity": 1.8,
+    "cloudCover": 0.3,
+    "cloudAltitude": 2200,
+    "cloudSharpness": 0.2,
+    "cloudDensity": 1.0,
+    "overcastLuminance": 20,
+    "overcastTint": [
+      0.8,
+      0.85,
+      1.0
+    ],
+    "wind": [
+      0,
+      0
+    ],
+    "tint": [
+      0.72,
+      0.88,
+      1.28
+    ]
   },
   "fog": {
-    "enabled": true, "density": 0.003, "height": 0, "falloff": 0.06, "hazeVisibilityKm": 12,
-    "anisotropy": 0.55, "albedo": [0.9, 0.93, 1.0], "sunScatter": 1.0, "startDistance": 0, "maxOpacity": 1.0
+    "enabled": true,
+    "density": 0.006,
+    "height": 0,
+    "falloff": 0.05,
+    "hazeVisibilityKm": 10,
+    "anisotropy": 0.55,
+    "albedo": [
+      0.9,
+      0.93,
+      1.0
+    ],
+    "sunScatter": 0.6,
+    "startDistance": 0,
+    "maxOpacity": 1.0
   },
-  "exposure": { "ev100": 7.6, "compensation": 0 },
-  "ambient": { "groundAlbedo": [0.1, 0.1, 0.1], "lightmapSky": 1.0, "lightmapSun": 1.0, "indirect": 1.0, "envSpecular": 1.0 },
-  "lights": { "intensity": 1.0 },
-  "weather": { "wetness": 0.1, "puddles": 0 },
-  "post": { "tonemapper": "agx", "contrast": 1.0, "saturation": 1.0, "temperature": 0 }
+  "exposure": {
+    "ev100": 4.0,
+    "compensation": 0
+  },
+  "ambient": {
+    "groundAlbedo": [
+      0.1,
+      0.1,
+      0.1
+    ],
+    "lightmapSky": 1.0,
+    "lightmapSun": 1.0,
+    "indirect": 1.0,
+    "envSpecular": 1.0
+  },
+  "lights": {
+    "intensity": 1.0
+  },
+  "weather": {
+    "wetness": 0.1,
+    "puddles": 0
+  },
+  "post": {
+    "tonemapper": "agx",
+    "contrast": 1.0,
+    "saturation": 1.0,
+    "temperature": -0.25
+  }
 }

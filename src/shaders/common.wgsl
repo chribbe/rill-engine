@@ -31,6 +31,7 @@ struct Frame {
   decalGrid2: vec4u,     // x cells x, y cells z, z max per cell, w reserved
   atmo: vec4f,           // x planet radius (km), y atmosphere top (km), z camera altitude (km), w mie scale
   sky: vec4f,            // x sun TOA illuminance (lux), y horizon haze, z env mip count, w cloud sharpness
+  skyTint: vec4f,        // rgb art-direction multiplier on the clear-sky atmosphere radiance
 };
 
 // debug.y flags

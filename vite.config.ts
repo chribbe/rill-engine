@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from 'vite';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { PNG } from 'pngjs';
 
 /**
  * Dev-only capture endpoint: the page POSTs PNGs to /__capture?name=... and
@@ -20,7 +21,17 @@ function captureEndpoint(): Plugin {
           const dir = join(process.cwd(), 'screenshots');
           mkdirSync(dir, { recursive: true });
           const file = join(dir, name.endsWith('.png') ? name : `${name}.png`);
-          writeFileSync(file, Buffer.concat(chunks));
+          const body = Buffer.concat(chunks);
+          const w = parseInt(url.searchParams.get('w') ?? '0', 10);
+          const h = parseInt(url.searchParams.get('h') ?? '0', 10);
+          if (w > 0 && h > 0) {
+            // Raw RGBA from the page: encode here (fast, deterministic).
+            const png = new PNG({ width: w, height: h });
+            body.copy(png.data, 0, 0, w * h * 4);
+            writeFileSync(file, PNG.sync.write(png, { colorType: 6 }));
+          } else {
+            writeFileSync(file, body);
+          }
           res.setHeader('content-type', 'application/json');
           res.end(JSON.stringify({ file }));
         });

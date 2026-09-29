@@ -172,15 +172,29 @@ async function main() {
       if (width && height) sizeOverride = [width, height];
       // Warm-up frame at the capture size (targets, shadows), then the captured one.
       frame(performance.now(), true);
-      const p = renderer.capture();
+      const p = renderer.captureRaw();
       frame(performance.now(), true);
-      const blob = await p;
+      const img = await p;
       sizeOverride = null;
-      const r = await fetch(`/__capture?name=${encodeURIComponent(name)}`, { method: 'POST', body: blob });
+      const r = await fetch(`/__capture?name=${encodeURIComponent(name)}&w=${img.width}&h=${img.height}`, { method: 'POST', body: img.data });
       return (await r.json()).file as string;
     },
     /** Renders `frames` frames back-to-back (MessageChannel, unthrottled) and reports timings. */
     setSize: (w: number, h: number) => { sizeOverride = w > 0 ? [w, h] : null; },
+    /** Captures every viewpoint marker (optionally a subset by index) to screenshots/<prefix>_<i>.png. */
+    shotViews: async (prefix: string, w = 1280, h = 720, only?: number[]) => {
+      const views = world.doc.objects.filter((o) => o.type === 'marker' && o.semantic === 'viewpoint');
+      const files: string[] = [];
+      for (let i = 0; i < views.length; i++) {
+        if (only && !only.includes(i)) continue;
+        const v = views[i];
+        if (v.type !== 'marker') continue;
+        player.fly = true;
+        player.teleport([v.transform.position[0], v.transform.position[1], v.transform.position[2]], v.yaw ?? 0, v.pitch ?? 0);
+        files.push(await api.shot(`${prefix}_${i}`, w, h));
+      }
+      return files;
+    },
     bench: async (frames = 120) => {
       const ch = new MessageChannel();
       const tick = () => new Promise<void>((res) => { ch.port1.onmessage = () => res(); ch.port2.postMessage(0); });

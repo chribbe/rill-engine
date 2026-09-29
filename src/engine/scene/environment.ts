@@ -27,6 +27,8 @@ export interface EnvironmentState {
     /** Zenith luminance of a fully overcast sky (nits). */
     overcastLuminance: number;
     overcastTint: Color;
+    /** Art-direction multiplier on the clear-sky radiance (also feeds ambient + reflections). */
+    tint?: Color;
     wind: [number, number];
   };
   fog: {

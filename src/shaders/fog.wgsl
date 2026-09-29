@@ -86,7 +86,15 @@ fn fogLightScatter(camPos: vec3f, dir: vec3f, dist: f32) -> vec3f {
     let h = sqrt(h2);
     let t1 = dist;
     let integ = (atan((t1 - tc) / h) - atan(-tc / h)) / h;
-    acc += l.color.rgb * l.color.w * integ * (1.0 / (4.0 * PI));
+    // Spot lights only light the medium inside their cone: evaluate the cone at
+    // the point of the (clamped) ray segment closest to the light.
+    var cone = 1.0;
+    if (l.params.y > 0.5) {
+      let pc = camPos + dir * clamp(tc, 0.0, dist);
+      let toP = normalize(pc - l.posRange.xyz);
+      cone = smoothstep(l.dirCone.w - 0.15, l.params.x, dot(toP, l.dirCone.xyz));
+    }
+    acc += l.color.rgb * l.color.w * integ * cone * (1.0 / (4.0 * PI));
   }
   return acc * sigma * frame.fogColor.rgb;
 }

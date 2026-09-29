@@ -891,10 +891,10 @@
      0.78,
      0.55
     ],
-    "intensity": 2600,
-    "range": 28,
-    "outerAngle": 65,
-    "innerAngle": 40,
+    "intensity": 3000,
+    "range": 24,
+    "outerAngle": 56,
+    "innerAngle": 28,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -940,10 +940,10 @@
      0.78,
      0.55
     ],
-    "intensity": 2600,
-    "range": 28,
-    "outerAngle": 65,
-    "innerAngle": 40,
+    "intensity": 3000,
+    "range": 24,
+    "outerAngle": 56,
+    "innerAngle": 28,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -989,10 +989,10 @@
      0.78,
      0.55
     ],
-    "intensity": 2600,
-    "range": 28,
-    "outerAngle": 65,
-    "innerAngle": 40,
+    "intensity": 3000,
+    "range": 24,
+    "outerAngle": 56,
+    "innerAngle": 28,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -1038,10 +1038,10 @@
      0.78,
      0.55
     ],
-    "intensity": 2600,
-    "range": 28,
-    "outerAngle": 65,
-    "innerAngle": 40,
+    "intensity": 3000,
+    "range": 24,
+    "outerAngle": 56,
+    "innerAngle": 28,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -1087,10 +1087,10 @@
      0.78,
      0.55
     ],
-    "intensity": 2600,
-    "range": 28,
-    "outerAngle": 65,
-    "innerAngle": 40,
+    "intensity": 3000,
+    "range": 24,
+    "outerAngle": 56,
+    "innerAngle": 28,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -1136,10 +1136,10 @@
      0.78,
      0.55
     ],
-    "intensity": 2600,
-    "range": 28,
-    "outerAngle": 65,
-    "innerAngle": 40,
+    "intensity": 3000,
+    "range": 24,
+    "outerAngle": 56,
+    "innerAngle": 28,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -1185,10 +1185,10 @@
      0.78,
      0.55
     ],
-    "intensity": 2600,
-    "range": 28,
-    "outerAngle": 65,
-    "innerAngle": 40,
+    "intensity": 3000,
+    "range": 24,
+    "outerAngle": 56,
+    "innerAngle": 28,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -1234,10 +1234,10 @@
      0.78,
      0.55
     ],
-    "intensity": 2600,
-    "range": 28,
-    "outerAngle": 65,
-    "innerAngle": 40,
+    "intensity": 3000,
+    "range": 24,
+    "outerAngle": 56,
+    "innerAngle": 28,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -1283,10 +1283,10 @@
      0.72,
      0.45
     ],
-    "intensity": 700,
-    "range": 16,
-    "outerAngle": 75,
-    "innerAngle": 50,
+    "intensity": 800,
+    "range": 14,
+    "outerAngle": 68,
+    "innerAngle": 35,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -1332,10 +1332,10 @@
      0.72,
      0.45
     ],
-    "intensity": 700,
-    "range": 16,
-    "outerAngle": 75,
-    "innerAngle": 50,
+    "intensity": 800,
+    "range": 14,
+    "outerAngle": 68,
+    "innerAngle": 35,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -1381,10 +1381,10 @@
      0.72,
      0.45
     ],
-    "intensity": 700,
-    "range": 16,
-    "outerAngle": 75,
-    "innerAngle": 50,
+    "intensity": 800,
+    "range": 14,
+    "outerAngle": 68,
+    "innerAngle": 35,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -1430,10 +1430,10 @@
      0.72,
      0.45
     ],
-    "intensity": 700,
-    "range": 16,
-    "outerAngle": 75,
-    "innerAngle": 50,
+    "intensity": 800,
+    "range": 14,
+    "outerAngle": 68,
+    "innerAngle": 35,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }
@@ -1479,10 +1479,10 @@
      0.72,
      0.45
     ],
-    "intensity": 700,
-    "range": 16,
-    "outerAngle": 75,
-    "innerAngle": 50,
+    "intensity": 800,
+    "range": 14,
+    "outerAngle": 68,
+    "innerAngle": 35,
     "sourceRadius": 0.15,
     "fogScatter": 1.0
    }

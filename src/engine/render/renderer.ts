@@ -290,7 +290,7 @@ export class Renderer {
   private frozenViewProj: Float32Array | null = null;
   private lastEnvVersion = -1;
   private time = 0;
-  private captureRequest: ((b: Blob) => void) | null = null;
+  private captureRequest: ((b: ImageData) => void) | null = null;
   lineVerts: number[] = [];
   lightmapLayers = 0;
 
@@ -780,6 +780,15 @@ export class Renderer {
 
   /** Resolves on the next rendered frame with a PNG of the final image. */
   capture(): Promise<Blob> {
+    return this.captureRaw().then((img) => {
+      const c = new OffscreenCanvas(img.width, img.height);
+      c.getContext('2d')!.putImageData(img, 0, 0);
+      return c.convertToBlob({ type: 'image/png' });
+    });
+  }
+
+  /** Resolves on the next rendered frame with the final image as RGBA pixels. */
+  captureRaw(): Promise<ImageData> {
     return new Promise((res) => (this.captureRequest = res));
   }
 
@@ -868,6 +877,8 @@ export class Renderer {
     F.uvec4(FO.decalGrid2, g.nx, g.nz, g.maxPer, 0);
     F.vec4(FO.atmo, PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM, 0.1 + Math.max(0, camera.position[1]) / 1000, sk.turbidity);
     F.vec4(FO.sky, SUN_TOA_LUX * envState.sun.intensity, 0, ENV_SPEC_MIPS, sk.cloudSharpness);
+    const tint = parseColor(sk.tint, [1, 1, 1, 1]);
+    F.vec4(FO.skyTint, tint[0], tint[1], tint[2], 0);
     d.queue.writeBuffer(this.frameBuffer, 0, F.data);
 
     // Post params
@@ -1081,7 +1092,7 @@ export class Renderer {
     st.cpuEncodeMs = performance.now() - t0 - (tcEnd - tc);
   }
 
-  private async readCapture(buf: GPUBuffer, bpr: number, w: number, h: number, format: GPUTextureFormat): Promise<Blob> {
+  private async readCapture(buf: GPUBuffer, bpr: number, w: number, h: number, format: GPUTextureFormat): Promise<ImageData> {
     await buf.mapAsync(GPUMapMode.READ);
     const src = new Uint8Array(buf.getMappedRange());
     const img = new ImageData(w, h);
@@ -1098,9 +1109,7 @@ export class Renderer {
     }
     buf.unmap();
     buf.destroy();
-    const c = new OffscreenCanvas(w, h);
-    c.getContext('2d')!.putImageData(img, 0, 0);
-    return c.convertToBlob({ type: 'image/png' });
+    return img;
   }
 
   private addLine(a: ArrayLike<number>, b: ArrayLike<number>, col: [number, number, number, number]) {
