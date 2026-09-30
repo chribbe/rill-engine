@@ -1,4 +1,4 @@
-import { atmosphereTransmittance } from '../render/sky';
+import { atmosphereTransmittance, AEROSOL_BASE } from '../render/sky';
 import { parseColor, type Color } from '../render/materials';
 
 /**
@@ -18,7 +18,7 @@ export interface EnvironmentState {
   };
   sky: {
     intensity: number;
-    /** Mie density multiplier (haze / turbidity), 1 = clean air. */
+    /** Aerosol load: 1 = typical clear day (AOD ~0.1), 0.5 = very clean air, 2-3 = hazy. */
     turbidity: number;
     cloudCover: number;
     cloudAltitude: number;
@@ -46,7 +46,8 @@ export interface EnvironmentState {
     startDistance: number;
     maxOpacity: number;
   };
-  exposure: { ev100: number; compensation: number };
+  /** Manual EV100 (also the auto-exposure start point), compensation in stops, auto limits. */
+  exposure: { ev100: number; compensation: number; auto?: boolean; min?: number; max?: number };
   ambient: {
     groundAlbedo: Color;
     lightmapSky: number;
@@ -101,7 +102,7 @@ export class Environment {
   derive(): DerivedEnvironment {
     const s = this.state;
     const sunDir = sunDirection(s.sun.azimuth, s.sun.elevation);
-    const T = atmosphereTransmittance(sunDir[1], 0.1, s.sky.turbidity);
+    const T = atmosphereTransmittance(sunDir[1], 0.1, s.sky.turbidity * AEROSOL_BASE);
     // Direct sun through clouds: thick cover blocks most of it (diffuse light
     // then arrives through the overcast sky term instead).
     const cover = s.sky.cloudCover;

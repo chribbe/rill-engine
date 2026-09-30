@@ -11,10 +11,20 @@ export const ENV_SPEC_MIPS = 6;
 const ENV_SRC_MIPS = Math.log2(ENV_SIZE) + 1;
 
 export const PLANET_RADIUS_KM = 6360;
+
+/**
+ * Aerosol baseline. The Bruneton/Hillaire default Mie coefficient integrates to an
+ * aerosol optical depth of only ~0.005 (an almost aerosol-free atmosphere), which
+ * produced a dark, over-saturated sky and ~9:1 sun:sky contrast. Real clear days
+ * have AOD ~0.08-0.15 (Nordic summer ~0.1). `turbidity` 1.0 now means AOD ~0.1:
+ * measured sky ~11-12 klx horizontal vs ~48 klx sun at 38 deg (ratio ~4:1),
+ * skylight R/B ~0.6 - in line with measured clear-sky data.
+ */
+export const AEROSOL_BASE = 20;
 export const ATMOSPHERE_TOP_KM = 6460;
 
 export interface AtmosphereSettings {
-  /** Mie density multiplier (haze / turbidity). 1 = clear. */
+  /** Mie density multiplier relative to the model default (turbidity * AEROSOL_BASE). */
   mieScale: number;
   cameraAltitudeKm: number;
   groundAlbedo: [number, number, number];
@@ -77,7 +87,7 @@ export class SkySystem {
       usage: T.STORAGE_BINDING | T.TEXTURE_BINDING,
     });
     this.envSpecularView = this.envSpecular.createView({ dimension: 'cube' });
-    this.shBuffer = d.createBuffer({ label: 'env:sh', size: 12 * 16, usage: U.STORAGE | U.COPY_DST });
+    this.shBuffer = d.createBuffer({ label: 'env:sh', size: 12 * 16, usage: U.STORAGE | U.COPY_DST | U.COPY_SRC });
     // Neutral grey sky until the first env update runs.
     const init = new Float32Array(48);
     init[0] = 1000; init[1] = 1000; init[2] = 1000;

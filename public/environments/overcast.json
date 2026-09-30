@@ -1,17 +1,74 @@
 {
   "name": "overcast",
-  "sun": { "azimuth": 200, "elevation": 30, "intensity": 1.0, "angularDiameter": 0.53 },
+  "sun": {
+    "azimuth": 200,
+    "elevation": 30,
+    "intensity": 1.0,
+    "angularDiameter": 0.53
+  },
   "sky": {
-    "intensity": 1.0, "turbidity": 2.0, "cloudCover": 1.0, "cloudAltitude": 1200, "cloudSharpness": 0.35,
-    "cloudDensity": 1.0, "overcastLuminance": 4200, "overcastTint": [0.95, 0.98, 1.04], "wind": [0, 0]
+    "intensity": 1.0,
+    "turbidity": 1.6,
+    "cloudCover": 1.0,
+    "cloudAltitude": 1200,
+    "cloudSharpness": 0.35,
+    "cloudDensity": 1.0,
+    "overcastLuminance": 4200,
+    "overcastTint": [
+      0.95,
+      0.98,
+      1.04
+    ],
+    "wind": [
+      0,
+      0
+    ]
   },
   "fog": {
-    "enabled": true, "density": 0.0006, "height": 0, "falloff": 0.03, "hazeVisibilityKm": 9,
-    "anisotropy": 0.3, "albedo": [0.95, 0.97, 1.0], "sunScatter": 0.3, "startDistance": 0, "maxOpacity": 1.0
+    "enabled": true,
+    "density": 0.0006,
+    "height": 0,
+    "falloff": 0.03,
+    "hazeVisibilityKm": 9,
+    "anisotropy": 0.3,
+    "albedo": [
+      0.95,
+      0.97,
+      1.0
+    ],
+    "sunScatter": 0.3,
+    "startDistance": 0,
+    "maxOpacity": 1.0
   },
-  "exposure": { "ev100": 12.2, "compensation": 0 },
-  "ambient": { "groundAlbedo": [0.1, 0.11, 0.1], "lightmapSky": 1.0, "lightmapSun": 1.0, "indirect": 1.0, "envSpecular": 1.0 },
-  "lights": { "intensity": 0 },
-  "weather": { "wetness": 0.15, "puddles": 0 },
-  "post": { "tonemapper": "agx", "contrast": 1.0, "saturation": 1.0, "temperature": -0.1 }
+  "exposure": {
+    "ev100": 12.2,
+    "compensation": 0,
+    "auto": true,
+    "min": 10.5,
+    "max": 13.4
+  },
+  "ambient": {
+    "groundAlbedo": [
+      0.1,
+      0.11,
+      0.1
+    ],
+    "lightmapSky": 1.0,
+    "lightmapSun": 1.0,
+    "indirect": 1.0,
+    "envSpecular": 1.0
+  },
+  "lights": {
+    "intensity": 0
+  },
+  "weather": {
+    "wetness": 0.15,
+    "puddles": 0
+  },
+  "post": {
+    "tonemapper": "agx",
+    "contrast": 1.0,
+    "saturation": 1.0,
+    "temperature": -0.1
+  }
 }

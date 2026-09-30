@@ -133,7 +133,19 @@ World (runtime, derived) ───────────────┐       
 13. **One render-list path for everything**: static objects, props and instanced vegetation are
     all instances in one table; automatic instancing by (primitive, material). Maps directly
     onto GPU culling + indirect draws later.
-14. **Assets are GLB; the runtime never depends on Blender.** Blender is the authoring and baking
+14. **Realistic aerosols.** The Bruneton/Hillaire default Mie coefficient integrates to an aerosol
+    optical depth of ~0.005 — an almost aerosol-free sky that rendered dark, over-saturated and
+    with ~9:1 sun:sky contrast (measured: 6.3 klx sky vs 55 klx sun, skylight R/B 0.26).
+    `turbidity` is now relative to AOD ≈ 0.1 (`AEROSOL_BASE = 20`): clear preset measures
+    ~11–12 klx sky vs ~48 klx sun (≈4:1) and R/B ≈ 0.6, matching real clear days.
+15. **Auto exposure (Source-style tone-map controller).** GPU centre-weighted log-luminance
+    histogram of the resolved HDR image → async readback → mean between the 35th and 92nd
+    percentiles → EV100 with a mid-grey key, adapted asymmetrically (brighten 1.3/s, darken
+    3/s) and clamped to per-environment `exposure.min/max`. Manual EV is the start point and
+    fallback. Screenshots converge/snap before capture.
+16. **Veiling-glare bloom**, energy-conserving mix (default 4 %), 13-tap/tent pyramid with a
+    Karis-weighted first downsample (no glint flicker). Off in debug views.
+17. **Assets are GLB; the runtime never depends on Blender.** Blender is the authoring and baking
     tool (headless scripts); the map document and LightmapSet are engine formats.
 
 ## 5. Content pipeline
@@ -193,6 +205,9 @@ Findings:
 - **Alpha-tested foliage** was the single biggest cost (26 ms → 12 ms with the prepass, before
   specialisation). Coverage-modifying fragments are expensive under MSAA regardless of
   discard vs sample-mask vs hardware A2C.
+- **Auto exposure + bloom** cost ≈ 0.5 ms at 3440×1440 (11.4 → 11.9 ms, measured after a cooldown).
+- **Thermal note:** long back-to-back benchmark runs throttle the GPU by up to ~30 % (14 ms vs 11 ms
+  at native); let the machine cool ~30 s before comparing numbers.
 - **16× anisotropic filtering** costs ~1–1.5 ms at 3440×1440 over 8× — kept as default (visible
   gain on long roads; see §7).
 - Load time: ~0.2–0.25 s for the whole map (54 GLBs, ~45 MB PNG textures, 2 lightmap pages).
@@ -215,8 +230,9 @@ Findings:
 
 ## 8. Known issues
 
-- Deep shade under clear sun reads near-black with AgX (physically plausible, perceptually harsh).
-  Needs local exposure/eye adaptation or a gentler toe; also more realistic canopy transmission.
+- ~~Deep shade under clear sun reads near-black~~ — fixed by realistic aerosols (sky 2× brighter,
+  whiter) + auto exposure. Remaining: no *local* exposure, so a bright exterior seen from deep
+  shade still clips (as a camera would).
 - Placeholder vegetation: crossed cards read as "cardboard" up close; no LOD/impostors; forest
   floor under dense cards is dark.
 - Distant landscape is a smooth green mesh (no forest silhouette) — placeholder.

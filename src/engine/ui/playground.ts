@@ -16,7 +16,7 @@ export interface PlaygroundHooks {
   bookmarks: Record<string, () => void>;
 }
 
-export const TONEMAPPERS: Record<string, number> = { AgX: 0, 'PBR Neutral': 1, 'ACES (Hill)': 2, 'Reinhard (luma)': 3, Clamp: 4 };
+export const TONEMAPPERS: Record<string, number> = { AgX: 0, 'AgX Punchy': 5, 'PBR Neutral': 1, 'ACES (Hill)': 2, 'Reinhard (luma)': 3, Clamp: 4 };
 
 export function createPlayground(r: Renderer, env: Environment, player: FirstPersonController, hooks: PlaygroundHooks): GUI {
   const gui = new GUI({ title: 'Rill renderer playground', width: 320 });
@@ -51,7 +51,7 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
   envBind(sun, () => E().sun, 'intensity', 0, 2, 0.01, 'Intensity ×');
   const sky = envF.addFolder('Sky');
   envBind(sky, () => E().sky, 'intensity', 0, 3, 0.01, 'Sky intensity ×');
-  envBind(sky, () => E().sky, 'turbidity', 0.2, 8, 0.05, 'Turbidity (Mie)');
+  envBind(sky, () => E().sky, 'turbidity', 0.1, 4, 0.01, 'Aerosols (1 = AOD 0.1)');
   envBind(sky, () => E().sky, 'cloudCover', 0, 1, 0.01, 'Cloud cover');
   envBind(sky, () => E().sky, 'cloudSharpness', 0.03, 1, 0.01, 'Cloud softness');
   envBind(sky, () => E().sky, 'overcastLuminance', 10, 12000, 10, 'Overcast nits');
@@ -65,7 +65,12 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
   envBind(fog, () => E().fog, 'sunScatter', 0, 3, 0.01, 'Sun inscatter');
   envBind(fog, () => E().fog, 'startDistance', 0, 100, 0.5, 'Start distance (m)');
   const exp = envF.addFolder('Exposure / ambient');
-  envBind(exp, () => E().exposure, 'ev100', 2, 17, 0.05, 'EV100');
+  envBind(exp, () => E().exposure, 'ev100', 2, 17, 0.05, 'EV100 (manual / start)');
+  exp.add(S, 'autoExposure').name('Auto exposure');
+  envBind(exp, () => E().exposure, 'min', 0, 17, 0.05, 'Auto EV min');
+  envBind(exp, () => E().exposure, 'max', 0, 17, 0.05, 'Auto EV max');
+  exp.add(r.exposure, 'key', 0.04, 0.4, 0.005).name('Auto key (mid-grey target)');
+  exp.add(S, 'bloom', 0, 0.2, 0.005).name('Bloom (veiling glare)');
   envBind(exp, () => E().exposure, 'compensation', -4, 4, 0.05, 'Compensation (stops)');
   envBind(exp, () => E().ambient, 'lightmapSky', 0, 3, 0.01, 'Lightmap sky ×');
   envBind(exp, () => E().ambient, 'lightmapSun', 0, 3, 0.01, 'Lightmap sun bounce ×');
@@ -150,7 +155,7 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
 }
 
 export function tonemapperFromName(n: string): number {
-  return ({ agx: 0, neutral: 1, aces: 2, reinhard: 3, clamp: 4 } as Record<string, number>)[n] ?? 0;
+  return ({ agx: 0, neutral: 1, aces: 2, reinhard: 3, clamp: 4, agxPunchy: 5 } as Record<string, number>)[n] ?? 0;
 }
 
 export type { EnvironmentState };

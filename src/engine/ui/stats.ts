@@ -61,7 +61,7 @@ export class StatsOverlay {
       `Tris   ${(st.triangles / 1e6).toFixed(2)}M main + ${(st.shadowTriangles / 1e6).toFixed(2)}M shadow`,
       `Objs   ${st.visibleObjects} visible / ${st.culledObjects} culled / ${st.totalObjects} total   inst ${st.instances}`,
       `Mem    tex ${mb(texMem)} MB  geo ${mb(r.arena.bytes)} MB  shadow ${mb(shadowMem)} MB  targets ${mb(r.targetBytes)} MB`,
-      `Res    ${r.renderWidth}x${r.renderHeight} ${r.settings.msaa ? 'MSAA 4x' : 'no MSAA'}  aniso ${r.settings.anisotropy}x`,
+      `Res    ${r.renderWidth}x${r.renderHeight} ${r.settings.msaa ? 'MSAA 4x' : 'no MSAA'}  aniso ${r.settings.anisotropy}x  EV ${r.currentEV.toFixed(2)}${r.settings.autoExposure ? ` (auto, metered ${r.exposure.metered.toFixed(2)})` : ''}`,
       extra,
     ];
     this.text.textContent = lines.join('\n');

@@ -8,7 +8,7 @@
   },
   "sky": {
     "intensity": 1.0,
-    "turbidity": 1.8,
+    "turbidity": 0.9,
     "cloudCover": 0.3,
     "cloudAltitude": 2200,
     "cloudSharpness": 0.2,
@@ -24,9 +24,9 @@
       0
     ],
     "tint": [
-      0.72,
-      0.88,
-      1.28
+      0.86,
+      0.93,
+      1.08
     ]
   },
   "fog": {
@@ -47,7 +47,10 @@
   },
   "exposure": {
     "ev100": 4.0,
-    "compensation": 0
+    "compensation": 0,
+    "auto": true,
+    "min": 2.6,
+    "max": 5.8
   },
   "ambient": {
     "groundAlbedo": [

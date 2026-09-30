@@ -5,10 +5,11 @@ import { FrameUniforms, FRAME_BYTES, FO, RF } from './frame';
 import { GeometryArena, VERTEX_LAYOUT_FULL, VERTEX_LAYOUT_POS, VERTEX_LAYOUT_POS_UV, type GpuMesh, type GpuPrimitive } from './geometry';
 import { TextureManager } from './textures';
 import { MaterialLibrary, type Material } from './materials';
-import { SkySystem, ENV_SPEC_MIPS, PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM } from './sky';
+import { SkySystem, ENV_SPEC_MIPS, PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM, AEROSOL_BASE } from './sky';
 import { ShadowSystem, CASCADES, type ShadowSettings } from './shadows';
 import { InstanceStore } from './instances';
 import { GpuTimer } from './timing';
+import { ExposureController } from './exposure';
 import { aabbVisible, extractPlanes, type Plane } from './culling';
 import type { Camera } from '../scene/camera';
 import { Environment, SUN_TOA_LUX } from '../scene/environment';
@@ -91,6 +92,10 @@ export interface RenderSettings {
   tonemapper: number;
   dither: boolean;
   renderScale: number;
+  /** Veiling-glare bloom strength (0 = off). Energy-conserving mix. */
+  bloom: number;
+  /** Auto exposure (eye adaptation) enabled; limits come from the environment. */
+  autoExposure: boolean;
 }
 
 export function defaultRenderSettings(): RenderSettings {
@@ -133,6 +138,8 @@ export function defaultRenderSettings(): RenderSettings {
     tonemapper: 0,
     dither: true,
     renderScale: 1,
+    bloom: 0.04,
+    autoExposure: true,
   };
 }
 
@@ -267,6 +274,16 @@ export class Renderer {
   private debugGridView: GPUTextureView;
   private cloudNoiseView: GPUTextureView;
   private postParams: GPUBuffer;
+  readonly exposure: ExposureController;
+  private bloomLevels: GPUTexture[] = [];
+  private bloomViews: GPUTextureView[] = [];
+  private bloomDownBGs: GPUBindGroup[] = [];
+  private bloomUpBGs: GPUBindGroup[] = [];
+  private bloomParamBufs: GPUBuffer[] = [];
+  private bloomLayout!: GPUBindGroupLayout;
+  /** Exposure actually used this frame (EV100, pre-exposure). */
+  currentEV = 0;
+  currentPreExposure = 1;
   private linesBuffer: GPUBuffer;
   private linesCapacity = 0;
 
@@ -313,7 +330,8 @@ export class Renderer {
     this.lightBuffer = d.createBuffer({ label: 'lights', size: 64 * 256, usage: BU.STORAGE | BU.COPY_DST });
     this.decalBuffer = d.createBuffer({ label: 'decals', size: 96 * 16, usage: BU.STORAGE | BU.COPY_DST });
     this.decalCellBuffer = d.createBuffer({ label: 'decalCells', size: 64, usage: BU.STORAGE | BU.COPY_DST });
-    this.postParams = d.createBuffer({ label: 'post', size: 48, usage: BU.UNIFORM | BU.COPY_DST });
+    this.postParams = d.createBuffer({ label: 'post', size: 64, usage: BU.UNIFORM | BU.COPY_DST });
+    this.exposure = new ExposureController(d);
     this.linesBuffer = d.createBuffer({ label: 'lines', size: 16, usage: BU.VERTEX | BU.COPY_DST });
 
     const blackArr = d.createTexture({ size: [1, 1, 2], format: 'rgba16float', usage: TU.TEXTURE_BINDING | TU.COPY_DST });
@@ -378,6 +396,16 @@ export class Renderer {
       entries: [
         { binding: 0, visibility: SS.FRAGMENT, buffer: { type: 'uniform' } },
         { binding: 1, visibility: SS.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+        { binding: 2, visibility: SS.FRAGMENT, texture: {} },
+        { binding: 3, visibility: SS.FRAGMENT, sampler: {} },
+      ],
+    });
+    this.bloomLayout = d.createBindGroupLayout({
+      label: 'bloom',
+      entries: [
+        { binding: 0, visibility: SS.FRAGMENT, buffer: { type: 'uniform' } },
+        { binding: 1, visibility: SS.FRAGMENT, texture: {} },
+        { binding: 2, visibility: SS.FRAGMENT, sampler: {} },
       ],
     });
     this.stdPipelineLayout = d.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, this.materialLayout] });
@@ -704,13 +732,108 @@ export class Renderer {
     }
     this.depth = d.createTexture({ label: 'depth', size: [width, height], format: this.depthFormat, sampleCount: samples, usage: TU.RENDER_ATTACHMENT | transient });
     this.resolved = d.createTexture({ label: 'hdr', size: [width, height], format: this.hdrFormat, usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING });
+    this.createBloomChain(width, height);
     this.postBG = d.createBindGroup({
       layout: this.postLayout,
       entries: [
         { binding: 0, resource: { buffer: this.postParams } },
         { binding: 1, resource: this.resolved.createView() },
+        { binding: 2, resource: this.bloomViews[0] },
+        { binding: 3, resource: this.sampClamp },
       ],
     });
+  }
+
+  private createBloomChain(width: number, height: number) {
+    const d = this.device;
+    for (const t of this.bloomLevels) t.destroy();
+    this.bloomLevels = [];
+    this.bloomViews = [];
+    this.bloomDownBGs = [];
+    this.bloomUpBGs = [];
+    let w = Math.max(1, width >> 1), h = Math.max(1, height >> 1);
+    for (let i = 0; i < 7 && Math.min(w, h) >= 4; i++) {
+      const t = d.createTexture({ label: `bloom${i}`, size: [w, h], format: 'rgba16float', usage: TU.RENDER_ATTACHMENT | TU.TEXTURE_BINDING });
+      this.bloomLevels.push(t);
+      this.bloomViews.push(t.createView());
+      w = Math.max(1, w >> 1);
+      h = Math.max(1, h >> 1);
+    }
+    const n = this.bloomLevels.length;
+    while (this.bloomParamBufs.length < n * 2) {
+      this.bloomParamBufs.push(d.createBuffer({ size: 16, usage: BU.UNIFORM | BU.COPY_DST }));
+    }
+    const params = (i: number, texelW: number, texelH: number, mode: number) => {
+      const buf = this.bloomParamBufs[i];
+      const a = new ArrayBuffer(16);
+      new Float32Array(a, 0, 2).set([1 / texelW, 1 / texelH]);
+      new Uint32Array(a, 8, 2).set([mode, 0]);
+      d.queue.writeBuffer(buf, 0, a);
+      return buf;
+    };
+    for (let i = 0; i < n; i++) {
+      const src = i === 0 ? this.resolved!.createView() : this.bloomViews[i - 1];
+      const sw = i === 0 ? width : this.bloomLevels[i - 1].width;
+      const sh = i === 0 ? height : this.bloomLevels[i - 1].height;
+      this.bloomDownBGs.push(d.createBindGroup({
+        layout: this.bloomLayout,
+        entries: [
+          { binding: 0, resource: { buffer: params(i, sw, sh, i === 0 ? 0 : 1) } },
+          { binding: 1, resource: src },
+          { binding: 2, resource: this.sampClamp },
+        ],
+      }));
+    }
+    for (let i = 0; i < n - 1; i++) {
+      // Upsample level i+1 into level i.
+      const s = this.bloomLevels[i + 1];
+      this.bloomUpBGs.push(d.createBindGroup({
+        layout: this.bloomLayout,
+        entries: [
+          { binding: 0, resource: { buffer: params(n + i, s.width, s.height, 2) } },
+          { binding: 1, resource: this.bloomViews[i + 1] },
+          { binding: 2, resource: this.sampClamp },
+        ],
+      }));
+    }
+  }
+
+  private bloomPipeline(up: boolean): GPURenderPipeline {
+    const key = `bloom:${up}`;
+    let p = this.pipelines.get(key);
+    if (!p) {
+      const mod = shaderModule(this.device, 'bloom');
+      p = this.device.createRenderPipeline({
+        label: key,
+        layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.bloomLayout] }),
+        vertex: { module: mod, entryPoint: 'vsMain' },
+        fragment: {
+          module: mod, entryPoint: up ? 'fsUp' : 'fsDown',
+          targets: [{ format: 'rgba16float', blend: up ? { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'one', dstFactor: 'one' } } : undefined }],
+        },
+        primitive: { topology: 'triangle-list' },
+      });
+      this.pipelines.set(key, p);
+    }
+    return p;
+  }
+
+  private encodeBloom(enc: GPUCommandEncoder) {
+    const n = this.bloomLevels.length;
+    for (let i = 0; i < n; i++) {
+      const pass = enc.beginRenderPass({ label: `bloomDown${i}`, colorAttachments: [{ view: this.bloomViews[i], loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] });
+      pass.setPipeline(this.bloomPipeline(false));
+      pass.setBindGroup(0, this.bloomDownBGs[i]);
+      pass.draw(3);
+      pass.end();
+    }
+    for (let i = n - 2; i >= 0; i--) {
+      const pass = enc.beginRenderPass({ label: `bloomUp${i}`, colorAttachments: [{ view: this.bloomViews[i], loadOp: 'load', storeOp: 'store' }] });
+      pass.setPipeline(this.bloomPipeline(true));
+      pass.setBindGroup(0, this.bloomUpBGs[i]);
+      pass.draw(3);
+      pass.end();
+    }
   }
 
   get renderWidth() {
@@ -823,7 +946,18 @@ export class Renderer {
     F.vec4(FO.sunDir, de.sunDir[0], de.sunDir[1], de.sunDir[2], sunCosR);
     F.vec4(FO.sunColor, de.sunIlluminance[0], de.sunIlluminance[1], de.sunIlluminance[2], 1);
     const A = envState.ambient;
-    F.vec4(FO.exposure, de.preExposure, envState.exposure.ev100, envState.sky.intensity, A.indirect);
+    const ex = envState.exposure;
+    const ev = this.exposure.update({
+      auto: S.autoExposure && (ex.auto ?? true),
+      ev100: ex.ev100,
+      compensation: ex.compensation,
+      min: ex.min ?? ex.ev100 - 2,
+      max: ex.max ?? ex.ev100 + 1.5,
+    }, dt);
+    const preExposure = 1 / (1.2 * Math.pow(2, ev));
+    this.currentEV = ev;
+    this.currentPreExposure = preExposure;
+    F.vec4(FO.exposure, preExposure, ev, envState.sky.intensity, A.indirect);
     const fog = envState.fog;
     const hazeDensity = fog.hazeVisibilityKm > 0 ? 3.912 / (fog.hazeVisibilityKm * 1000) : 0;
     const fogOn = S.fog && fog.enabled;
@@ -875,14 +1009,14 @@ export class Renderer {
     const g = this.decalGrid;
     F.vec4(FO.decalGrid, g.originX, g.originZ, g.cell, 1 / g.cell);
     F.uvec4(FO.decalGrid2, g.nx, g.nz, g.maxPer, 0);
-    F.vec4(FO.atmo, PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM, 0.1 + Math.max(0, camera.position[1]) / 1000, sk.turbidity);
+    F.vec4(FO.atmo, PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM, 0.1 + Math.max(0, camera.position[1]) / 1000, sk.turbidity * AEROSOL_BASE);
     F.vec4(FO.sky, SUN_TOA_LUX * envState.sun.intensity, 0, ENV_SPEC_MIPS, sk.cloudSharpness);
     const tint = parseColor(sk.tint, [1, 1, 1, 1]);
     F.vec4(FO.skyTint, tint[0], tint[1], tint[2], 0);
     d.queue.writeBuffer(this.frameBuffer, 0, F.data);
 
     // Post params
-    const post = new ArrayBuffer(48);
+    const post = new ArrayBuffer(64);
     const pu = new Uint32Array(post);
     const pf = new Float32Array(post);
     pu[0] = S.tonemapper;
@@ -891,6 +1025,8 @@ export class Renderer {
     pf.set([envState.exposure.compensation * 0, pp.contrast, pp.saturation, pp.temperature], 4);
     const wb = whiteBalance(pp.temperature);
     pf.set([wb[0], wb[1], wb[2], 1], 8);
+    const bloomOn = S.bloom > 0 && S.debugView === 0;
+    pf.set([bloomOn ? S.bloom : 0, 1 / Math.max(1, this.bloomLevels.length), 0, 0], 12);
     d.queue.writeBuffer(this.postParams, 0, post);
 
     // ---- culling + draw lists
@@ -947,7 +1083,7 @@ export class Renderer {
     const enc = d.createCommandEncoder({ label: 'frame' });
     this.timer.beginFrame();
     if (env.version !== this.lastEnvVersion || this.sky.dirty) {
-      this.sky.encodeUpdate(enc, this.frameBuffer, { mieScale: sk.turbidity, cameraAltitudeKm: 0.1, groundAlbedo: [ga[0], ga[1], ga[2]] }, de.sunDir);
+      this.sky.encodeUpdate(enc, this.frameBuffer, { mieScale: sk.turbidity * AEROSOL_BASE, cameraAltitudeKm: 0.1, groundAlbedo: [ga[0], ga[1], ga[2]] }, de.sunDir);
       this.lastEnvVersion = env.version;
     }
     const arena = this.arena;
@@ -1051,6 +1187,8 @@ export class Renderer {
     pass.end();
 
     // Post
+    this.exposure.encode(enc, this.resolved!.createView(), this.width, this.height, preExposure);
+    if (S.bloom > 0 && S.debugView === 0) this.encodeBloom(enc);
     const swap = this.gpu.context.getCurrentTexture();
     const post2 = enc.beginRenderPass({
       label: 'post',
@@ -1073,6 +1211,7 @@ export class Renderer {
     this.timer.endFrame(enc);
     d.queue.submit([enc.finish()]);
     this.timer.afterSubmit();
+    this.exposure.afterSubmit();
     if (captureBuf && this.captureRequest) {
       const resolve = this.captureRequest;
       this.captureRequest = null;

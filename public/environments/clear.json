@@ -1,17 +1,74 @@
 {
   "name": "clear",
-  "sun": { "azimuth": 215, "elevation": 38, "intensity": 1.0, "angularDiameter": 0.53 },
+  "sun": {
+    "azimuth": 215,
+    "elevation": 38,
+    "intensity": 1.0,
+    "angularDiameter": 0.53
+  },
   "sky": {
-    "intensity": 1.0, "turbidity": 1.3, "cloudCover": 0.22, "cloudAltitude": 1800, "cloudSharpness": 0.16,
-    "cloudDensity": 1.0, "overcastLuminance": 6000, "overcastTint": [1.0, 1.0, 1.0], "wind": [0, 0]
+    "intensity": 1.0,
+    "turbidity": 1.1,
+    "cloudCover": 0.22,
+    "cloudAltitude": 1800,
+    "cloudSharpness": 0.16,
+    "cloudDensity": 1.0,
+    "overcastLuminance": 6000,
+    "overcastTint": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "wind": [
+      0,
+      0
+    ]
   },
   "fog": {
-    "enabled": true, "density": 0.0, "height": 0, "falloff": 0.05, "hazeVisibilityKm": 30,
-    "anisotropy": 0.6, "albedo": [1.0, 1.0, 1.0], "sunScatter": 1.0, "startDistance": 0, "maxOpacity": 1.0
+    "enabled": true,
+    "density": 0.0,
+    "height": 0,
+    "falloff": 0.05,
+    "hazeVisibilityKm": 30,
+    "anisotropy": 0.6,
+    "albedo": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "sunScatter": 1.0,
+    "startDistance": 0,
+    "maxOpacity": 1.0
   },
-  "exposure": { "ev100": 14.7, "compensation": 0 },
-  "ambient": { "groundAlbedo": [0.12, 0.13, 0.1], "lightmapSky": 1.0, "lightmapSun": 1.0, "indirect": 1.0, "envSpecular": 1.0 },
-  "lights": { "intensity": 0 },
-  "weather": { "wetness": 0, "puddles": 0 },
-  "post": { "tonemapper": "agx", "contrast": 1.0, "saturation": 1.0, "temperature": 0 }
+  "exposure": {
+    "ev100": 14.0,
+    "compensation": 0,
+    "auto": true,
+    "min": 12.0,
+    "max": 15.3
+  },
+  "ambient": {
+    "groundAlbedo": [
+      0.12,
+      0.13,
+      0.1
+    ],
+    "lightmapSky": 1.0,
+    "lightmapSun": 1.0,
+    "indirect": 1.0,
+    "envSpecular": 1.0
+  },
+  "lights": {
+    "intensity": 0
+  },
+  "weather": {
+    "wetness": 0,
+    "puddles": 0
+  },
+  "post": {
+    "tonemapper": "agx",
+    "contrast": 1.0,
+    "saturation": 1.0,
+    "temperature": 0
+  }
 }

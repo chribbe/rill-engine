@@ -170,8 +170,14 @@ async function main() {
     /** Renders one frame now (independent of rAF) and saves it to ./screenshots/<name>.png (dev server). */
     shot: async (name: string, width?: number, height?: number) => {
       if (width && height) sizeOverride = [width, height];
-      // Warm-up frame at the capture size (targets, shadows), then the captured one.
-      frame(performance.now(), true);
+      // Warm-up frames at the capture size (targets, shadows) and let auto
+      // exposure meter this view and snap to it, then the captured frame.
+      for (let i = 0; i < 6; i++) {
+        if (i >= 2) renderer.exposure.snapFrames = 1;
+        frame(performance.now(), true);
+        await renderer.device.queue.onSubmittedWorkDone();
+        await new Promise((r) => setTimeout(r, 0));
+      }
       const p = renderer.captureRaw();
       frame(performance.now(), true);
       const img = await p;

@@ -3,16 +3,19 @@
 #include "common"
 
 struct PostParams {
-  tonemapper: u32,      // 0 AgX, 1 Khronos PBR Neutral, 2 ACES (Hill), 3 Reinhard (luma), 4 clamp
+  tonemapper: u32,      // 0 AgX, 1 Khronos PBR Neutral, 2 ACES (Hill), 3 Reinhard (luma), 4 clamp, 5 AgX Punchy
   debugRaw: u32,
   dither: u32,
   pad: u32,
   grade: vec4f,         // x exposure compensation (stops), y contrast, z saturation, w white balance temperature shift
   tint: vec4f,          // rgb white balance gains
+  bloom: vec4f,         // x strength (energy-conserving mix), y 1 / pyramid levels
 };
 
 @group(0) @binding(0) var<uniform> P: PostParams;
 @group(0) @binding(1) var hdrTex: texture_2d<f32>;
+@group(0) @binding(2) var bloomTex: texture_2d<f32>;
+@group(0) @binding(3) var bloomSamp: sampler;
 
 @vertex
 fn vsMain(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -26,7 +29,7 @@ fn agxContrast(x: vec3f) -> vec3f {
   let x4 = x2 * x2;
   return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
 }
-fn agx(c: vec3f) -> vec3f {
+fn agx(c: vec3f, punchy: bool) -> vec3f {
   let m = mat3x3f(vec3f(0.842479062253094, 0.0423282422610123, 0.0423756549057051),
                   vec3f(0.0784335999999992, 0.878468636469772, 0.0784336),
                   vec3f(0.0792237451477643, 0.0791661274605434, 0.879142973793104));
@@ -39,6 +42,12 @@ fn agx(c: vec3f) -> vec3f {
   v = clamp(log2(max(v, vec3f(1e-10))), vec3f(minEv), vec3f(maxEv));
   v = (v - minEv) / (maxEv - minEv);
   v = agxContrast(v);
+  if (punchy) {
+    // AgX "Punchy" look (Blender): power 1.35, saturation 1.4 in display space.
+    v = pow(max(v, vec3f(0.0)), vec3f(1.35));
+    let l2 = dot(v, vec3f(0.2126, 0.7152, 0.0722));
+    v = l2 + 1.4 * (v - l2);
+  }
   v = mi * v;
   // AgX output is display-encoded (~ gamma 2.2); convert back to linear for the sRGB encode.
   return pow(max(v, vec3f(0.0)), vec3f(2.2));
@@ -86,6 +95,12 @@ fn fsMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     out = saturate(c);
   } else {
     c = s.rgb / max(s.a, 1e-6);
+    if (P.bloom.x > 0.0) {
+      // Veiling glare: redistributes a small fraction of the energy (no gain).
+      let uv = pos.xy / vec2f(textureDimensions(hdrTex));
+      let b = textureSampleLevel(bloomTex, bloomSamp, uv, 0.0).rgb * P.bloom.y;
+      c = mix(c, b, P.bloom.x);
+    }
     c *= exp2(P.grade.x);
     c *= P.tint.rgb;
     // Contrast around mid grey in log space, then saturation - both default neutral.
@@ -94,7 +109,8 @@ fn fsMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     c *= lc / l;
     c = max(mix(vec3f(luminance(c)), c, P.grade.z), vec3f(0.0));
     switch (P.tonemapper) {
-      case 0u: { out = agx(c); }
+      case 0u: { out = agx(c, false); }
+      case 5u: { out = agx(c, true); }
       case 1u: { out = pbrNeutral(c); }
       case 2u: { out = acesHill(c); }
       case 3u: { out = reinhardLuma(c); }
