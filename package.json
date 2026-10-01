@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "textures": "node tools/textures/generate.ts",
     "map": "node tools/blender/run.ts build",
-    "bake": "node tools/blender/run.ts bake"
+    "bake": "node tools/blender/run.ts bake",
+    "compress": "node tools/textures/compress.ts"
   },
   "devDependencies": {
     "@webgpu/types": "^0.1.74",

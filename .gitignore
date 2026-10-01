@@ -6,3 +6,4 @@ dist
 /tools/blender/__pycache__
 /.bake-cache
 /screenshots
+/public/textures/bc7

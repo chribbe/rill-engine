@@ -11,6 +11,18 @@ export interface TextureHandle {
   kind: TextureKind;
   bytes: number;
   url: string;
+  /** Block-compressed (BC7) upload from an offline KTX2. */
+  compressed?: boolean;
+}
+
+/** Entry of public/textures/bc7/index.json (written by tools/textures/compress.ts). */
+interface CompressedEntry {
+  kind: TextureKind;
+  file: string;
+  width: number;
+  height: number;
+  levels: number;
+  bytes: number;
 }
 
 export interface TextureLoadOptions {
@@ -36,6 +48,8 @@ export class TextureManager {
   private paramBuffers = new Map<string, GPUBuffer>();
   readonly all: TextureHandle[] = [];
   mipFilter: MipFilter = 'lanczos';
+  /** url -> offline BC7 version (null = compression disabled / unsupported). */
+  private compressed: Map<string, { url: string; entry: CompressedEntry }> | null = null;
 
   readonly white: TextureHandle;
   readonly black: TextureHandle;
@@ -53,8 +67,35 @@ export class TextureManager {
     this.black = this.solid('black', [0, 0, 0, 255], 'color');
     this.gray = this.solid('gray', [128, 128, 128, 255], 'linear');
     this.flatNormal = this.solid('flatNormal', [128, 128, 255, 255], 'normal');
-    // ORM: AO = 1, roughness = 1 (scaled by the material factor), metallic = 0
-    this.defaultOrm = this.solid('defaultOrm', [255, 255, 0, 255], 'linear');
+    // ORM(H): AO = 1, roughness = 1 (scaled by the material factor), metallic = 0, height = 0.5
+    this.defaultOrm = this.solid('defaultOrm', [255, 255, 0, 128], 'linear');
+  }
+
+  /**
+   * Uses offline BC7 KTX2 files for textures listed in the index when the device
+   * supports BC formats. Must run before materials load. Textures are only
+   * substituted when the requested kind matches the kind they were encoded for
+   * (mips/colour space are baked offline) and they tile (wrap = true).
+   */
+  async enableCompression(indexUrl = '/textures/bc7/index.json'): Promise<number> {
+    if (!this.device.features.has('texture-compression-bc')) return 0;
+    try {
+      const res = await fetch(indexUrl);
+      if (!res.ok) return 0;
+      const doc = (await res.json()) as { textures: Record<string, CompressedEntry> };
+      const dir = indexUrl.slice(0, indexUrl.lastIndexOf('/') + 1);
+      const root = dir.replace(/bc7\/$/, '');
+      this.compressed = new Map();
+      for (const [file, entry] of Object.entries(doc.textures)) this.compressed.set(root + file, { url: dir + entry.file, entry });
+      return this.compressed.size;
+    } catch (e) {
+      console.warn('[textures] compressed index unavailable', e);
+      return 0;
+    }
+  }
+
+  get compressedCount() {
+    return this.all.filter((t) => t.compressed).length;
   }
 
   get totalBytes() {
@@ -89,6 +130,14 @@ export class TextureManager {
   }
 
   private async loadImpl(url: string, kind: TextureKind, wrap: boolean): Promise<TextureHandle> {
+    const c = wrap ? this.compressed?.get(url) : undefined;
+    if (c && c.entry.kind === kind) {
+      try {
+        return await this.loadKtx2(url, c.url, kind);
+      } catch (e) {
+        console.warn(`[textures] ${c.url}: ${(e as Error).message}; falling back to PNG`);
+      }
+    }
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Texture fetch failed: ${url} (${res.status})`);
     const blob = await res.blob();
@@ -122,6 +171,43 @@ export class TextureManager {
     let bytes = 0;
     for (let i = 0; i < mips; i++) bytes += Math.max(1, width >> i) * Math.max(1, height >> i) * 4;
     const h: TextureHandle = { texture, view, width, height, kind, bytes, url };
+    this.all.push(h);
+    return h;
+  }
+
+  /** KTX2 with BC7 levels (no supercompression), uploaded as-is. */
+  private async loadKtx2(url: string, ktxUrl: string, kind: TextureKind): Promise<TextureHandle> {
+    const res = await fetch(ktxUrl);
+    if (!res.ok) throw new Error(`fetch failed (${res.status})`);
+    const buf = await res.arrayBuffer();
+    const dv = new DataView(buf);
+    const ID = [0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a];
+    if (ID.some((b, i) => dv.getUint8(i) !== b)) throw new Error('not a KTX2 file');
+    const vk = dv.getUint32(12, true);
+    const width = dv.getUint32(20, true);
+    const height = dv.getUint32(24, true);
+    const levels = Math.max(1, dv.getUint32(40, true));
+    if (dv.getUint32(44, true) !== 0) throw new Error('supercompressed KTX2 not supported');
+    const format: GPUTextureFormat | undefined = vk === 146 ? 'bc7-rgba-unorm-srgb' : vk === 145 ? 'bc7-rgba-unorm' : undefined;
+    if (!format) throw new Error(`unsupported vkFormat ${vk}`);
+    if ((format === 'bc7-rgba-unorm-srgb') !== (kind === 'color')) throw new Error('colour space does not match texture kind');
+    const texture = this.device.createTexture({
+      label: url,
+      size: [width, height],
+      format,
+      mipLevelCount: levels,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    let bytes = 0;
+    for (let i = 0; i < levels; i++) {
+      const off = Number(dv.getBigUint64(80 + i * 24, true));
+      const len = Number(dv.getBigUint64(88 + i * 24, true));
+      const bw = Math.ceil(Math.max(1, width >> i) / 4), bh = Math.ceil(Math.max(1, height >> i) / 4);
+      if (len !== bw * bh * 16) throw new Error(`level ${i}: ${len} bytes, expected ${bw * bh * 16}`);
+      this.device.queue.writeTexture({ texture, mipLevel: i }, new Uint8Array(buf, off, len), { bytesPerRow: bw * 16, rowsPerImage: bh }, [bw * 4, bh * 4]);
+      bytes += len;
+    }
+    const h: TextureHandle = { texture, view: texture.createView(), width, height, kind, bytes, url, compressed: true };
     this.all.push(h);
     return h;
   }

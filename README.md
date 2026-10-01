@@ -43,7 +43,8 @@ Requires Blender 5.x at `/Applications/Blender.app` (or set `BLENDER`).
 ```bash
 npm run textures        # procedural texture set -> public/textures
 npm run map             # Blender builds the test map -> public/assets/testmap, public/maps/testmap/map.json
-npm run bake -- --samples 256   # Cycles lightmap bake -> public/maps/testmap/lightmaps
+npm run bake -- --samples 256   # Cycles lightmap + probe bake -> public/maps/testmap/lightmaps
+npm run compress        # offline BC7/KTX2 textures -> public/textures/bc7 (optional; PNG fallback)
 ```
 
-All generated content is committed, so the app runs without Blender.
+All generated content (except the local BC7 cache) is committed, so the app runs without Blender.
