@@ -99,7 +99,7 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
   rend.add(S, 'alphaToCoverage').name('Alpha to coverage');
   rend.add(S, 'tonemapper', TONEMAPPERS).name('Tone mapper');
   rend.add(S, 'dither').name('Output dither');
-  rend.add(S, 'renderScale', 0.5, 1, 0.05).name('Render scale');
+  rend.add(S, 'renderScale', 0.25, 1, 0.05).name('Render scale');
   rend.add(S, 'fog').name('Fog (global toggle)');
   rend.add(S, 'sun').name('Sun direct');
   rend.add(S, 'skyAmbient').name('Sky ambient (SH)');

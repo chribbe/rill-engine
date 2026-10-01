@@ -24,6 +24,11 @@ export class CollisionWorld {
     }
     for (let t = 0; t < idx.length; t += 3) {
       const a = idx[t] * 3, b = idx[t + 1] * 3, c = idx[t + 2] * 3;
+      // Skip zero-area triangles (sphere poles, welded slivers): closest-point maths divides by their area.
+      const ux = wp[b] - wp[a], uy = wp[b + 1] - wp[a + 1], uz = wp[b + 2] - wp[a + 2];
+      const vx = wp[c] - wp[a], vy = wp[c + 1] - wp[a + 1], vz = wp[c + 2] - wp[a + 2];
+      const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+      if (cx * cx + cy * cy + cz * cz < 1e-14) continue;
       const ti = this.tris.length / 9;
       this.tris.push(wp[a], wp[a + 1], wp[a + 2], wp[b], wp[b + 1], wp[b + 2], wp[c], wp[c + 1], wp[c + 2]);
       const minX = Math.min(wp[a], wp[b], wp[c]), maxX = Math.max(wp[a], wp[b], wp[c]);
@@ -93,7 +98,8 @@ export class CollisionWorld {
         const q = closestPointOnTriangle(p, T, o);
         const dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2];
         const d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 >= r * r || d2 < 1e-12) continue;
+        // Written so NaN (degenerate input) also skips.
+        if (!(d2 < r * r) || d2 < 1e-12) continue;
         const d = Math.sqrt(d2);
         const k = (r - d) / d;
         p[0] += dx * k; p[1] += dy * k; p[2] += dz * k;
@@ -137,7 +143,9 @@ function closestPointOnTriangle(p: [number, number, number], T: number[], o: num
     const w = (d4 - d3) / (d4 - d3 + (d5 - d6));
     return [T[o + 3] + (T[o + 6] - T[o + 3]) * w, T[o + 4] + (T[o + 7] - T[o + 4]) * w, T[o + 5] + (T[o + 8] - T[o + 5]) * w];
   }
-  const denom = 1 / (va + vb + vc);
+  const sum = va + vb + vc;
+  if (Math.abs(sum) < 1e-20) return [ax, ay, az];
+  const denom = 1 / sum;
   const v = vb * denom, w = vc * denom;
   return [ax + abx * v + acx * w, ay + aby * v + acy * w, az + abz * v + acz * w];
 }

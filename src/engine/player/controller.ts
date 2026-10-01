@@ -127,6 +127,8 @@ export class FirstPersonController {
     }
     this.velocity[1] -= 9.81 * dt;
 
+    // Never let a bad collision result poison the camera (NaN = white screen).
+    const safe = [this.feet[0], this.feet[1], this.feet[2]];
     // Substeps keep collision stable at high speed.
     const steps = Math.max(1, Math.ceil((Math.hypot(this.velocity[0], this.velocity[2]) * dt) / 0.1));
     const sdt = dt / steps;
@@ -160,6 +162,11 @@ export class FirstPersonController {
       } else {
         this.onGround = false;
       }
+    }
+    if (!this.feet.every(Number.isFinite) || !this.velocity.every(Number.isFinite)) {
+      console.warn('[player] non-finite collision result; reverting step');
+      this.feet[0] = safe[0]; this.feet[1] = safe[1]; this.feet[2] = safe[2];
+      this.velocity[0] = this.velocity[1] = this.velocity[2] = 0;
     }
     if (this.feet[1] < -100) this.teleport([this.feet[0], 50, this.feet[2]]);
     // Smooth vertical eye motion on steps (only when stepping up/down on ground).

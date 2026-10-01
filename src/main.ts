@@ -35,6 +35,11 @@ async function main() {
   const renderer = new Renderer(gpu);
   const camera = new Camera();
 
+  // Retina/HiDPI: render at one pixel per CSS pixel by default (exact 2x nearest upscale),
+  // ~4x cheaper than native; ?scale=1 (or the Render scale slider) restores full density.
+  const scaleParam = params.get('scale');
+  renderer.settings.renderScale = scaleParam ? Math.min(1, Math.max(0.25, +scaleParam || 1)) : (window.devicePixelRatio || 1) >= 2 ? 0.5 : 1;
+
   // Exact device-pixel sizing: no CSS scaling blur.
   let cssW = window.innerWidth, cssH = window.innerHeight, dpr = window.devicePixelRatio || 1;
   let devW = Math.round(cssW * dpr), devH = Math.round(cssH * dpr);
