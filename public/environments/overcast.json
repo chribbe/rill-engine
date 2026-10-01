@@ -3,21 +3,21 @@
   "sun": {
     "azimuth": 200,
     "elevation": 30,
-    "intensity": 1.0,
+    "intensity": 1,
     "angularDiameter": 0.53
   },
   "sky": {
-    "intensity": 1.0,
+    "intensity": 1,
     "turbidity": 1.6,
-    "cloudCover": 1.0,
+    "cloudCover": 1,
     "cloudAltitude": 1200,
     "cloudSharpness": 0.35,
-    "cloudDensity": 1.0,
+    "cloudDensity": 1,
     "overcastLuminance": 4200,
     "overcastTint": [
-      0.95,
-      0.98,
-      1.04
+      0.93,
+      0.97,
+      1.05
     ],
     "wind": [
       0,
@@ -32,17 +32,17 @@
     "hazeVisibilityKm": 9,
     "anisotropy": 0.3,
     "albedo": [
+      0.9,
       0.95,
-      0.97,
-      1.0
+      1.04
     ],
     "sunScatter": 0.3,
     "startDistance": 0,
-    "maxOpacity": 1.0
+    "maxOpacity": 1
   },
   "exposure": {
     "ev100": 12.2,
-    "compensation": 0,
+    "compensation": 0.3,
     "auto": true,
     "min": 10.5,
     "max": 13.4
@@ -53,10 +53,10 @@
       0.11,
       0.1
     ],
-    "lightmapSky": 1.0,
-    "lightmapSun": 1.0,
-    "indirect": 1.0,
-    "envSpecular": 1.0
+    "lightmapSky": 1,
+    "lightmapSun": 1,
+    "indirect": 1,
+    "envSpecular": 1
   },
   "lights": {
     "intensity": 0
@@ -67,8 +67,38 @@
   },
   "post": {
     "tonemapper": "agx",
-    "contrast": 1.0,
-    "saturation": 1.0,
-    "temperature": -0.1
+    "contrast": 1,
+    "saturation": 1,
+    "temperature": -0.1,
+    "grade": {
+      "saturation": 1.2,
+      "slope": [
+        1,
+        1,
+        1.02
+      ],
+      "offset": [
+        0,
+        0,
+        0.008
+      ],
+      "power": [
+        1,
+        0.98,
+        0.97
+      ],
+      "shadowTint": [
+        -0.004,
+        0,
+        0.01,
+        1
+      ],
+      "highlightTint": [
+        -0.008,
+        0,
+        0.018,
+        1
+      ]
+    }
   }
 }

@@ -404,7 +404,7 @@ export class Renderer {
     this.lightBuffer = d.createBuffer({ label: 'lights', size: 64 * 256, usage: BU.STORAGE | BU.COPY_DST });
     this.decalBuffer = d.createBuffer({ label: 'decals', size: 96 * 16, usage: BU.STORAGE | BU.COPY_DST });
     this.decalCellBuffer = d.createBuffer({ label: 'decalCells', size: 64, usage: BU.STORAGE | BU.COPY_DST });
-    this.postParams = d.createBuffer({ label: 'post', size: 64, usage: BU.UNIFORM | BU.COPY_DST });
+    this.postParams = d.createBuffer({ label: 'post', size: 144, usage: BU.UNIFORM | BU.COPY_DST });
     this.exposure = new ExposureController(d);
     this.captureFrameBuffer = d.createBuffer({ label: 'captureFrame', size: FRAME_BYTES, usage: BU.UNIFORM | BU.COPY_DST });
     this.dummyVolume = d.createTexture({ size: [1, 1, 1], dimension: '3d', format: 'rgba16float', usage: TU.TEXTURE_BINDING }).createView({ dimension: '3d' });
@@ -1409,7 +1409,7 @@ export class Renderer {
     this.writeFrameUniforms(this.frame, this.frameBuffer, camera, this.width, this.height, env, de, preExposure, ev, flags, S.debugView);
 
     // Post params
-    const post = new ArrayBuffer(64);
+    const post = new ArrayBuffer(144);
     const pu = new Uint32Array(post);
     const pf = new Float32Array(post);
     pu[0] = S.tonemapper;
@@ -1420,6 +1420,13 @@ export class Renderer {
     pf.set([wb[0], wb[1], wb[2], 1], 8);
     const bloomOn = S.bloom > 0 && S.debugView === 0;
     pf.set([bloomOn ? S.bloom : 0, 1 / Math.max(1, this.bloomLevels.length), 0, 0], 12);
+    const G = pp.grade ?? {};
+    const v3 = (a: number[] | undefined, d: number) => (a && a.length >= 3 ? [a[0], a[1], a[2]] : [d, d, d]);
+    pf.set([...v3(G.slope, 1), G.saturation ?? 1], 16);
+    pf.set([...v3(G.offset, 0), 0], 20);
+    pf.set([...v3(G.power, 1), 0], 24);
+    pf.set([...v3(G.shadowTint, 0), G.shadowTint?.[3] ?? 0], 28);
+    pf.set([...v3(G.highlightTint, 0), G.highlightTint?.[3] ?? 0], 32);
     d.queue.writeBuffer(this.postParams, 0, post);
 
     // ---- culling + draw lists

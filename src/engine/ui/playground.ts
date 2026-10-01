@@ -26,7 +26,7 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
   const proxy = { preset: E().name, view: 'lit' };
 
   const envF = gui.addFolder('Environment');
-  envF.add(proxy, 'preset', ['clear', 'overcast', 'foggy', 'dusk', 'winter']).name('Weather preset').onChange(async (v: string) => {
+  envF.add(proxy, 'preset', ['clear', 'overcast', 'foggy', 'dusk', 'winter', 'bluehour']).name('Weather preset').onChange(async (v: string) => {
     await hooks.setPreset(v);
     gui.controllersRecursive().forEach((c) => c.updateDisplay());
   });

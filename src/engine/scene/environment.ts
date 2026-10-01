@@ -61,7 +61,11 @@ export interface EnvironmentState {
    * melt: wet dark edges around the snow; dry: dormant-season tint (winter grass).
    */
   weather: { wetness: number; puddles: number; snow?: number; melt?: number; dry?: number };
-  post: { tonemapper: string; contrast: number; saturation: number; temperature: number };
+  post: {
+    tonemapper: string; contrast: number; saturation: number; temperature: number;
+    /** Display-space grade after tone mapping (neutral when omitted). Tints are rgb + amount. */
+    grade?: { slope?: number[]; offset?: number[]; power?: number[]; saturation?: number; shadowTint?: number[]; highlightTint?: number[] };
+  };
 }
 
 export const SUN_TOA_LUX = 120000;

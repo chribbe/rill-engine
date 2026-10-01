@@ -1,57 +1,62 @@
 {
-  "name": "winter",
+  "name": "bluehour",
   "sun": {
-    "azimuth": 200,
-    "elevation": 30,
+    "azimuth": 318,
+    "elevation": -6,
     "intensity": 1,
     "angularDiameter": 0.53
   },
   "sky": {
     "intensity": 1,
-    "turbidity": 1.6,
-    "cloudCover": 1,
-    "cloudAltitude": 1200,
-    "cloudSharpness": 0.35,
+    "turbidity": 0.9,
+    "cloudCover": 0.8,
+    "cloudAltitude": 2200,
+    "cloudSharpness": 0.2,
     "cloudDensity": 1,
-    "overcastLuminance": 3600,
+    "overcastLuminance": 20,
     "overcastTint": [
-      0.92,
-      0.96,
-      1.05
+      0.8,
+      0.85,
+      1
     ],
     "wind": [
       0,
       0
+    ],
+    "tint": [
+      0.66,
+      0.88,
+      1.12
     ]
   },
   "fog": {
     "enabled": true,
-    "density": 0.0012,
+    "density": 0.012,
     "height": 0,
-    "falloff": 0.03,
-    "hazeVisibilityKm": 5,
-    "anisotropy": 0.3,
+    "falloff": 0.05,
+    "hazeVisibilityKm": 4,
+    "anisotropy": 0.55,
     "albedo": [
+      0.78,
       0.9,
-      0.95,
-      1.04
+      1.08
     ],
-    "sunScatter": 0.3,
+    "sunScatter": 0.6,
     "startDistance": 0,
     "maxOpacity": 1
   },
   "exposure": {
-    "ev100": 12,
-    "compensation": 0.35,
+    "ev100": 4,
+    "compensation": -0.8,
     "auto": true,
-    "min": 10.3,
-    "max": 13.6
+    "min": 2.4,
+    "max": 5.4
   },
   "ambient": {
     "groundAlbedo": [
-      0.3,
-      0.31,
-      0.32
+      0.1,
+      0.1,
+      0.1
     ],
     "lightmapSky": 1,
     "lightmapSun": 1,
@@ -59,13 +64,13 @@
     "envSpecular": 1
   },
   "lights": {
-    "intensity": 0
+    "intensity": 1
   },
   "weather": {
-    "wetness": 0.25,
-    "puddles": 0.2,
-    "snow": 0.55,
-    "melt": 0.65,
+    "wetness": 0.3,
+    "puddles": 0.15,
+    "snow": 0.35,
+    "melt": 0.4,
     "dry": 1
   },
   "post": {
@@ -74,35 +79,35 @@
     "saturation": 1,
     "temperature": -0.2,
     "grade": {
-      "saturation": 1.18,
+      "saturation": 1.3,
       "slope": [
+        0.97,
         1,
-        1,
-        1.02
+        1.03
       ],
       "offset": [
-        0,
-        0,
-        0.01
+        -0.004,
+        0.01,
+        0.028
       ],
       "power": [
-        1,
+        1.02,
         0.98,
         0.96
       ],
       "shadowTint": [
-        -0.004,
+        -0.02,
         0,
-        0.012,
+        0.025,
         1
       ],
       "highlightTint": [
-        -0.008,
+        0.01,
         0,
-        0.02,
+        -0.01,
         1
       ]
     }
   },
-  "notes": "Late-winter thaw (Stockholm, March): patchy old snow, melt water, dormant grass, low grey sky."
+  "notes": "Winter blue hour in fog (Insertion-style forest path): lamps on, lifted blue shadows."
 }

@@ -10,6 +10,12 @@ struct PostParams {
   grade: vec4f,         // x exposure compensation (stops), y contrast, z saturation, w white balance temperature shift
   tint: vec4f,          // rgb white balance gains
   bloom: vec4f,         // x strength (energy-conserving mix), y 1 / pyramid levels
+  // Display-space colour grade (Source 2 colour-correction style), neutral by default:
+  cdlSlope: vec4f,      // rgb ASC-CDL slope (gain), w saturation
+  cdlOffset: vec4f,     // rgb offset (lift)
+  cdlPower: vec4f,      // rgb power (gamma)
+  splitShadow: vec4f,   // rgb tint added to shadows, w amount
+  splitHigh: vec4f,     // rgb tint added to highlights, w amount
 };
 
 @group(0) @binding(0) var<uniform> P: PostParams;
@@ -118,6 +124,15 @@ fn fsMain(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     }
   }
   var srgb = linearToSrgb(saturate(out));
+  if (s.a >= 0.0) {
+    // Grade on the display-encoded image (like a LUT), after tone mapping.
+    srgb = pow(max(srgb * P.cdlSlope.rgb + P.cdlOffset.rgb, vec3f(0.0)), P.cdlPower.rgb);
+    let y = dot(srgb, vec3f(0.2126, 0.7152, 0.0722));
+    srgb = mix(vec3f(y), srgb, P.cdlSlope.w);
+    let t = smoothstep(0.0, 1.0, y);
+    srgb += P.splitShadow.rgb * P.splitShadow.w * (1.0 - t) + P.splitHigh.rgb * P.splitHigh.w * t;
+    srgb = saturate(srgb);
+  }
   if (P.dither != 0u) {
     srgb += (ign(pos.xy) - 0.5) / 255.0;
   }
