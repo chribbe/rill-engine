@@ -167,7 +167,8 @@ fn vsMain(v: VSIn) -> VSOut {
   o.pos = frame.viewProj * wp;
   o.worldPos = wp.xyz;
   o.normal = normalize(normalMatrix(inst.model) * v.normal.xyz);
-  o.tangent = vec4f(normalize((inst.model * vec4f(v.tangent.xyz, 0.0)).xyz), select(-1.0, 1.0, v.tangent.w >= 0.0));
+  // Not normalised here: a zero tangent must stay zero (the fragment stage orthonormalises with a fallback).
+  o.tangent = vec4f((inst.model * vec4f(v.tangent.xyz, 0.0)).xyz, select(-1.0, 1.0, v.tangent.w >= 0.0));
   o.uv0 = v.uv0;
   o.lmUv = v.uv1 * inst.lmST.xy + inst.lmST.zw;
   o.viewDepth = -(frame.view * wp).z;
@@ -311,7 +312,15 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   var Ng = normalize(in.normal);
   var T = in.tangent.xyz;
   if (!front) { Ng = -Ng; }
-  T = normalize(T - Ng * dot(Ng, T));
+  // Gram-Schmidt; when the tangent is (near) parallel to the normal or missing
+  // (bent foliage normals at impostor/card edges), fall back to any perpendicular
+  // instead of normalising a zero vector into NaN.
+  T = T - Ng * dot(Ng, T);
+  if (!(dot(T, T) > 1e-8)) {
+    T = select(vec3f(0.0, 1.0, 0.0), vec3f(1.0, 0.0, 0.0), abs(Ng.x) < 0.9);
+    T = T - Ng * dot(Ng, T);
+  }
+  T = normalize(T);
   let B = cross(Ng, T) * in.tangent.w * select(-1.0, 1.0, front);
 
   var s: Surface;
