@@ -195,6 +195,24 @@ World (runtime, derived) ───────────────┐       
     from the real tree models) placed where the mask is forest, and distant miljonprogram blocks
     on the hills with clearings around them. ~11 k triangles total; fog/aerial perspective does
     the rest.
+25. **Scanned CC0 materials, imported into engine conventions.** 14 Poly Haven sets (road
+    asphalt with sealed cracks, board-formed and brushed concrete, exposed aggregate, plaster,
+    brick, slabs, lawn, pine-forest floor, gravel, lichen granite, pine bark, moss, dirt) are
+    fetched at 2K by `tools/textures/scanned.ts` into a gitignored cache (~165 MB) and written
+    as 1K PNGs: albedo averaged in linear light and **recalibrated to a target mean luminance**
+    (scans range 0.09–0.41; e.g. asphalt 0.10, concrete 0.26, lawn 0.12), optional linear tint
+    (every grass scan was dry-season brown → summer green), OpenGL normals renormalised with
+    the downsampling variance in alpha, AO/rough/metal + normalised height packed into ORM.
+    Real-world sizes come from Poly Haven's metadata and are written into the materials'
+    `physicalSize`. The procedural generator skips scanned names (`--procedural` to force).
+    Credits in `public/textures/CREDITS.md`.
+26. **Dithered LOD crossfade.** Within ±10 % of each switch distance both neighbouring LODs are
+    drawn with complementary screen-space masks (IGN dither vs fade t), so every pixel shows
+    exactly one LOD and nothing pops. The fade rides in the visible-list entry
+    (slot 24 bits | t 6 bits | in/out 2 bits) — no per-frame instance writes — and only draws
+    inside a band use the `USE_LOD_FADE` pipeline variant (discard in the opaque pass and in the
+    masked prepass; the equal-depth colour pass inherits the coverage). Costs 0.4–1.1 ms at
+    1080p (double drawing inside the bands); shadows keep a single LOD.
 
 ## 5. Content pipeline
 
@@ -204,9 +222,10 @@ npm run map        # Blender: build_testmap.py    → public/assets/testmap/*.gl
                    #   tree-line textures, maps/testmap/map.json  (~25 s)
 npm run bake       # Blender/Cycles: bake_lightmaps.py -- [--samples 256] [--size 2048] [--no-denoise]
                    #   → maps/testmap/lightmaps/{lm_0_{sky,rnm0,rnm1,rnm2,sun}.hdr, probes_*.bin, lightmapset.json}
+npm run scanned    # tools/textures/scanned.ts  → Poly Haven 2K maps (.texture-cache) → 1K PNGs + manifest + material sizes
 npm run compress   # tools/textures/compress.ts → public/textures/bc7/*.ktx2 + index.json (incremental, ~30 s full)
 ```
-Order after content changes: `textures` → `map` → `bake` → `compress`. The BC7 folder is a
+Order after content changes: `textures` / `scanned` → `map` → `bake` → `compress`. The BC7 folder is a
 build output (gitignored); without it the engine loads PNGs and builds mips on the GPU.
 `?bc=0` in the URL forces the PNG path for comparisons.
 
@@ -307,13 +326,13 @@ Findings:
 - ~~Deep shade under clear sun reads near-black~~ — fixed by realistic aerosols (sky 2× brighter,
   whiter) + auto exposure. Remaining: no *local* exposure, so a bright exterior seen from deep
   shade still clips (as a camera would).
-- Vegetation: LOD switches pop (no dithered crossfade yet); impostors are a single side view on
-  three planes (star-shaped from above); spruce sprays seen from directly below read as flat
-  fronds; no wind.
+- Vegetation: impostors are a single side view on three planes (star-shaped from above); spruce
+  sprays seen from directly below read as flat fronds; no wind. The crossfade dither is a static
+  screen-space pattern (visible as stipple while a tree is inside a band; no TAA to hide it).
+- Large scanned surfaces (2–3 m repeats over a 200 m road / lawns) show tiling at grazing
+  angles; the macro layer helps but texture bombing / blend variety would be better.
 - Far scenery is a ground-level illusion: from well above the map edge the tree-line strips and
   the flat canopy band between 145–210 m are visible as such.
-- Content is still procedural (no scanned textures yet); the forest floor and grass are the
-  weakest materials at close range.
 - Lightmap bounce is baked for the reference sun direction (clear preset); other sun angles keep
   realtime direct light but approximate bounce.
 - Hidden browser pane → presentation throttled (use `rill.shot` / `rill.bench`, read `gpuSpanMs`).
@@ -323,8 +342,9 @@ Findings:
 - Lightmap atlas waste: ring-shaped charts (parapet caps) and curved path ribbons pack into
   their bounding boxes (building charts ~40 % empty, forest path 93 %). Split islands or use a
   better packer.
-- 8 noisy normal maps stay RGBA8 (BC7 can't hold per-texel noise). Plan: BC5 normals with the
-  normal variance folded into the ORM roughness mips (Source 2 style), then compress everything.
+- 11 normal maps stay RGBA8 (BC7 can't hold per-texel noise — most scanned ground normals fall
+  in this class). Plan: BC5 normals with the normal variance folded into the ORM roughness mips
+  (Source 2 style), then compress everything. Now the main GPU-memory item.
 - BC7 encoder is single-pass PCA + LS (no exhaustive mode 7/4, no perceptual weighting) — fine
   for these textures, worth revisiting for scanned content. Impostor/tree-line textures are
   re-rendered (and so re-compressed) on every map build.
@@ -365,10 +385,10 @@ Findings:
 Done: directional lightmaps, reflection probes, probe volume, blend materials, BC7, LOD
 vegetation with impostors, far scenery (decisions 18–24).
 
-1. **Scanned CC0 materials** (ground, bark, concrete, asphalt) through the same JSON model —
-   needs a download step (ambientCG/Poly Haven) and the user's go-ahead.
-2. **BC5 normals + variance-in-roughness**, so every texture compresses.
-3. **Vegetation polish:** dithered LOD crossfade, wind (trunk sway + spray flutter, shared by
+1. **BC5 normals + variance-in-roughness**, so every texture compresses (scanned ground normals).
+2. **Anti-tiling for large scanned surfaces** (stochastic/texture-bombing or a second scan blended
+   by macro noise) and a scanned birch bark / tiles set.
+3. **Vegetation polish:** wind (trunk sway + spray flutter, shared by
    prepass/shadow/lit vertex stages), octahedral impostors, undergrowth (blueberry/lingon, ferns).
 4. **Foliage shading variant** (no box-projected probes for rough foliage) and GPU culling +
    indirect draws for the forest; hierarchical sectors.

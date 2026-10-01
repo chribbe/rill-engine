@@ -642,9 +642,10 @@ build(b)
 
 b = MeshBuilder('car_placeholder')
 b.box(-0.9, 0.9, -2.25, 2.25, 0.3, 0.95, 'car_paint')
-b.box(-0.8, 0.8, -1.2, 1.0, 0.95, 1.45, 'glass_window')
+b.box(-0.8, 0.8, -1.2, 1.0, 0.95, 1.45, 'glass_window', skip=('-z',))  # sits on the body: no coplanar underside
 for (wx, wy) in [(-0.8, -1.4), (0.8, -1.4), (-0.8, 1.4), (0.8, 1.4)]:
-    b.tube((wx - 0.12 * (1 if wx > 0 else -1), wy, 0.32), (wx + 0.1 * (1 if wx > 0 else -1), wy, 0.32), 0.32, 0.32, 'rubber_dark', sides=12)
+    # Wheel caps stand 3 cm proud of the body sides (coplanar caps z-fought).
+    b.tube((wx - 0.12 * (1 if wx > 0 else -1), wy, 0.32), (wx + 0.13 * (1 if wx > 0 else -1), wy, 0.32), 0.32, 0.32, 'rubber_dark', sides=12)
 build(b)
 
 b = MeshBuilder('fence_segment')

@@ -1012,8 +1012,17 @@ recipes.decals = () => {
 };
 
 // ------------------------------------------------------------ run
-const names = process.argv.slice(2);
-const list = names.length ? names : Object.keys(recipes);
+// Sets replaced by scans (tools/textures/scanned.json) are skipped unless --procedural is given.
+const argv = process.argv.slice(2);
+const procedural = argv.includes('--procedural');
+const names = argv.filter((a) => !a.startsWith('--'));
+const scannedPath = join(import.meta.dirname, 'scanned.json');
+const scanned = new Set<string>(existsSync(scannedPath) ? JSON.parse(readFileSync(scannedPath, 'utf8')).sets.map((s: { name: string }) => s.name) : []);
+const list = (names.length ? names : Object.keys(recipes)).filter((n) => {
+  if (procedural || !scanned.has(n)) return true;
+  console.log(`  ${n.padEnd(22)} skipped (scanned set; --procedural to regenerate)`);
+  return false;
+});
 console.log(`Generating ${list.length} texture recipe(s) -> ${OUT}`);
 const t0 = performance.now();
 for (const n of list) {

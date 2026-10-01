@@ -7,3 +7,4 @@ dist
 /.bake-cache
 /screenshots
 /public/textures/bc7
+/.texture-cache

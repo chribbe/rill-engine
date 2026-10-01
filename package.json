@@ -11,6 +11,7 @@
     "textures": "node tools/textures/generate.ts",
     "map": "node tools/blender/run.ts build",
     "bake": "node tools/blender/run.ts bake",
+    "scanned": "node tools/textures/scanned.ts",
     "compress": "node tools/textures/compress.ts"
   },
   "devDependencies": {

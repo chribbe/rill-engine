@@ -42,6 +42,7 @@ Requires Blender 5.x at `/Applications/Blender.app` (or set `BLENDER`).
 
 ```bash
 npm run textures        # procedural texture set -> public/textures
+npm run scanned         # scanned CC0 sets from Poly Haven (2K cache) -> 1K textures (see public/textures/CREDITS.md)
 npm run map             # Blender builds the test map -> public/assets/testmap, public/maps/testmap/map.json
 npm run bake -- --samples 256   # Cycles lightmap + probe bake -> public/maps/testmap/lightmaps
 npm run compress        # offline BC7/KTX2 textures -> public/textures/bc7 (optional; PNG fallback)
