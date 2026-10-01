@@ -11,6 +11,7 @@
     "textures": "node tools/textures/generate.ts",
     "map": "node tools/blender/run.ts build",
     "bake": "node tools/blender/run.ts bake",
+    "map:hasselby": "node tools/blender/run.ts hasselby",
     "scanned": "node tools/textures/scanned.ts",
     "compress": "node tools/textures/compress.ts"
   },

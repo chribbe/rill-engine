@@ -530,5 +530,205 @@
    1,
    1
   ]
+ },
+ "brick_yellow": {
+  "averageAlbedo": [
+   0.4423,
+   0.2737,
+   0.1417
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "brown_brick_02",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/brown_brick_02"
+  }
+ },
+ "brick_tan": {
+  "averageAlbedo": [
+   0.4056,
+   0.2074,
+   0.0758
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1.9,
+   1.9
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "brick_wall_12",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/brick_wall_12"
+  }
+ },
+ "plaster_beige": {
+  "averageAlbedo": [
+   0.5982,
+   0.4603,
+   0.3272
+  ],
+  "size": 1024,
+  "physicalSize": [
+   3,
+   3
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "beige_wall_001",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/beige_wall_001"
+  }
+ },
+ "plaster_worn": {
+  "averageAlbedo": [
+   0.5415,
+   0.4909,
+   0.4676
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2,
+   2
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "painted_plaster_wall",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/painted_plaster_wall"
+  }
+ },
+ "concrete_viaduct": {
+  "averageAlbedo": [
+   0.2421,
+   0.2177,
+   0.1774
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1.805,
+   1.805
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "concrete_wall_009",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/concrete_wall_009"
+  }
+ },
+ "concrete_weathered": {
+  "averageAlbedo": [
+   0.2265,
+   0.1953,
+   0.1681
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1.55,
+   1.55
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "concrete_layers",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/concrete_layers"
+  }
+ },
+ "paving_tiles": {
+  "averageAlbedo": [
+   0.2391,
+   0.2177,
+   0.1869
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1.825,
+   1.825
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "concrete_tiles_02",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/concrete_tiles_02"
+  }
+ },
+ "terrazzo": {
+  "averageAlbedo": [
+   0.3775,
+   0.289,
+   0.1808
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2,
+   2
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "old_mosaic_floor",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/old_mosaic_floor"
+  }
+ },
+ "roof_tiles": {
+  "averageAlbedo": [
+   0.1806,
+   0.0331,
+   0.0119
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1.2,
+   1.2
+  ]
+ },
+ "railing_bars": {
+  "averageAlbedo": [
+   0.0233,
+   0.0267,
+   0.0307
+  ],
+  "size": 256,
+  "physicalSize": [
+   0.5,
+   0.5
+  ]
+ },
+ "tiles_brown": {
+  "averageAlbedo": [
+   0.0685,
+   0.0377,
+   0.0228
+  ],
+  "size": 1024,
+  "physicalSize": [
+   0.6,
+   0.6
+  ]
+ },
+ "sign_tbana": {
+  "averageAlbedo": [
+   0.5369,
+   0.5662,
+   0.6286
+  ],
+  "size": 512,
+  "physicalSize": [
+   0.9,
+   0.9
+  ]
  }
 }

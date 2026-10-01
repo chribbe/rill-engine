@@ -1,0 +1,7 @@
+{
+ "inherits": "glass_window",
+ "emissive": [1.0, 0.7, 0.4],
+ "emissiveIntensity": 45,
+ "interior": { "style": "home", "room": [3.4, 2.8], "depth": 4.2, "lit": 0.32 },
+ "notes": "Flat windows with interior-mapped rooms (curtains, furniture); about a third lit at night."
+}

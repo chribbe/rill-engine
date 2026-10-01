@@ -3,21 +3,160 @@
   "resolution": "2k",
   "size": 1024,
   "sets": [
-    { "name": "asphalt", "id": "asphalt_02", "albedoLuma": 0.10, "materials": ["asphalt"] },
-    { "name": "concrete_cast", "id": "brushed_concrete", "albedoLuma": 0.26, "materials": ["concrete_cast"] },
-    { "name": "concrete_formwork", "id": "concrete_slab_wall_02", "albedoLuma": 0.24, "assign": ["concrete_wall"] },
-    { "name": "concrete_aggregate", "id": "gravel_embedded_concrete", "albedoLuma": 0.24, "materials": ["concrete_aggregate"] },
-    { "name": "plaster", "id": "plastered_wall", "albedoLuma": 0.62, "materials": ["plaster"] },
-    { "name": "brick_red", "id": "brick_wall_09", "albedoLuma": 0.17, "materials": ["brick_red"] },
-    { "name": "paving_slabs", "id": "concrete_pavement", "albedoLuma": 0.24, "materials": ["paving_slabs"] },
-    { "name": "ground_grass", "id": "forrest_ground_01", "albedoLuma": 0.12, "tint": [0.52, 1.0, 0.62], "materials": ["ground_grass"] },
-    { "name": "ground_forest", "id": "forest_leaves_02", "albedoLuma": 0.075, "tint": [0.7, 0.95, 1.1], "materials": ["ground_forest"] },
-    { "name": "gravel", "id": "gravel_floor_02", "albedoLuma": 0.28, "materials": ["gravel"] },
-    { "name": "rock_granite", "id": "mossy_rock", "albedoLuma": 0.2, "materials": ["rock_granite"] },
-    { "name": "bark_pine", "id": "pine_bark", "albedoLuma": 0.11, "materials": ["bark_pine"] },
-    { "name": "moss", "id": "concrete_moss", "albedoLuma": 0.1, "materials": ["moss"] },
-    { "name": "dirt", "id": "dirt", "albedoLuma": 0.12, "materials": ["dirt"] },
-    { "name": "granite_kerb", "id": "granite_tile_03", "albedoLuma": 0.2, "assign": ["granite_curb"] },
-    { "name": "snow", "id": "snow_02", "albedoLuma": 0.62, "heightInAlbedo": true, "materials": ["snow"] }
+    { "name": "asphalt",
+      "id": "asphalt_02",
+      "albedoLuma": 0.1,
+      "materials": [
+        "asphalt"
+      ]
+    },
+    { "name": "concrete_cast",
+      "id": "brushed_concrete",
+      "albedoLuma": 0.26,
+      "materials": [
+        "concrete_cast"
+      ]
+    },
+    { "name": "concrete_formwork",
+      "id": "concrete_slab_wall_02",
+      "albedoLuma": 0.24,
+      "assign": [
+        "concrete_wall"
+      ]
+    },
+    { "name": "concrete_aggregate",
+      "id": "gravel_embedded_concrete",
+      "albedoLuma": 0.24,
+      "materials": [
+        "concrete_aggregate"
+      ]
+    },
+    { "name": "plaster",
+      "id": "plastered_wall",
+      "albedoLuma": 0.62,
+      "materials": [
+        "plaster"
+      ]
+    },
+    { "name": "brick_red",
+      "id": "brick_wall_09",
+      "albedoLuma": 0.17,
+      "materials": [
+        "brick_red"
+      ]
+    },
+    { "name": "paving_slabs",
+      "id": "concrete_pavement",
+      "albedoLuma": 0.24,
+      "materials": [
+        "paving_slabs"
+      ]
+    },
+    { "name": "ground_grass",
+      "id": "forrest_ground_01",
+      "albedoLuma": 0.12,
+      "tint": [
+        0.52,
+        1.0,
+        0.62
+      ],
+      "materials": [
+        "ground_grass"
+      ]
+    },
+    { "name": "ground_forest",
+      "id": "forest_leaves_02",
+      "albedoLuma": 0.075,
+      "tint": [
+        0.7,
+        0.95,
+        1.1
+      ],
+      "materials": [
+        "ground_forest"
+      ]
+    },
+    { "name": "gravel",
+      "id": "gravel_floor_02",
+      "albedoLuma": 0.28,
+      "materials": [
+        "gravel"
+      ]
+    },
+    { "name": "rock_granite",
+      "id": "mossy_rock",
+      "albedoLuma": 0.2,
+      "materials": [
+        "rock_granite"
+      ]
+    },
+    { "name": "bark_pine",
+      "id": "pine_bark",
+      "albedoLuma": 0.11,
+      "materials": [
+        "bark_pine"
+      ]
+    },
+    { "name": "moss",
+      "id": "concrete_moss",
+      "albedoLuma": 0.1,
+      "materials": [
+        "moss"
+      ]
+    },
+    { "name": "dirt",
+      "id": "dirt",
+      "albedoLuma": 0.12,
+      "materials": [
+        "dirt"
+      ]
+    },
+    { "name": "granite_kerb",
+      "id": "granite_tile_03",
+      "albedoLuma": 0.2,
+      "assign": [
+        "granite_curb"
+      ]
+    },
+    { "name": "snow",
+      "id": "snow_02",
+      "albedoLuma": 0.62,
+      "heightInAlbedo": true,
+      "materials": [
+        "snow"
+      ]
+    },
+    { "name": "brick_yellow",
+      "id": "brown_brick_02",
+      "albedoLuma": 0.3
+    },
+    { "name": "brick_tan",
+      "id": "brick_wall_12",
+      "albedoLuma": 0.24
+    },
+    { "name": "plaster_beige",
+      "id": "beige_wall_001",
+      "albedoLuma": 0.48
+    },
+    { "name": "plaster_worn",
+      "id": "painted_plaster_wall",
+      "albedoLuma": 0.5
+    },
+    { "name": "concrete_viaduct",
+      "id": "concrete_wall_009",
+      "albedoLuma": 0.22
+    },
+    { "name": "concrete_weathered",
+      "id": "concrete_layers",
+      "albedoLuma": 0.2
+    },
+    { "name": "paving_tiles",
+      "id": "concrete_tiles_02",
+      "albedoLuma": 0.22
+    },
+    { "name": "terrazzo",
+      "id": "old_mosaic_floor",
+      "albedoLuma": 0.3
+    }
   ]
 }

@@ -33,6 +33,8 @@ const M_UNLIT: u32 = 1024u;
 const M_DOUBLE_SIDED: u32 = 2048u;
 const M_NO_LIGHTMAP_SH_RATIO: u32 = 4096u;
 const M_BLEND: u32 = 8192u;
+const M_EMISSIVE_TEX: u32 = 16384u;
+const M_INTERIOR: u32 = 32768u;
 
 // Pipeline specialisation. The renderer compiles one variant per (material
 // features x active global features); disabled blocks are removed by the
@@ -55,6 +57,7 @@ override USE_PROBE_VOLUME: bool = true;
 override USE_REFL_PROBES: bool = true;
 override USE_BLEND: bool = true;
 override USE_SNOW: bool = true;
+override USE_INTERIOR: bool = true;
 // Dithered LOD crossfade (only pipelines that draw instances inside a transition band).
 override USE_LOD_FADE: bool = false;
 // Prefiltered environment reflections (compiled out for rough foliage).
@@ -481,6 +484,140 @@ struct ShadeOut {
 };
 
 
+// ---------------------------------------------------------------- interior mapping
+// Fake rooms behind glazing (Van Dongen 2008). The view ray is intersected with
+// a box room in the pane's UV frame: uv0 in metres, u along the facade, v up
+// from the storey's floor (map tools write room-space UVs on panes). Wall,
+// floor and furniture colours, curtains and the lit state at night come from a
+// hash of the room's world position. bBaseColor: rgb tint, w lit fraction;
+// bUvTransform: room width, storey height, depth, style (0 home, 1 shop,
+// 2 office, 3 hall); emissive: room light colour x intensity (nits).
+fn ihash(p: vec3f) -> vec4f {
+  var q = fract(p * vec3f(0.1031, 0.1030, 0.0973));
+  q += dot(q, q.yzx + 33.33);
+  let a = fract((q.xxy + q.yzz) * q.zyx);
+  return vec4f(a, fract((a.x + a.y) * 21.37 + a.z * 7.13));
+}
+
+fn interiorRadiance(uv: vec2f, uvDx: vec2f, uvDy: vec2f, dpx: vec3f, dpy: vec3f, wp: vec3f, V: vec3f, Ng: vec3f, irr: vec3f) -> vec3f {
+  // World directions of +u / +v (cotangent frame from screen derivatives).
+  let dp2perp = cross(dpy, Ng);
+  let dp1perp = cross(Ng, dpx);
+  let det = dot(dpx, dp2perp);
+  if (abs(det) < 1e-14) { return vec3f(0.0); }
+  var gu = (dp2perp * uvDx.x + dp1perp * uvDy.x) / det;
+  var gv = (dp2perp * uvDx.y + dp1perp * uvDy.y) / det;
+  if (dot(gu, gu) < 1e-12 || dot(gv, gv) < 1e-12) { return vec3f(0.0); }
+  gu = normalize(gu);
+  gv = normalize(gv);
+  // glTF UVs are V-down: work with v pointing up.
+  let flip = gv.y < 0.0;
+  let vb = select(uv.y, 1.0 - uv.y, flip);
+  let gvb = select(gv, -gv, flip);
+  let P = material.bUvTransform;
+  let rs = max(P.xyz, vec3f(0.2));
+  let style = u32(P.w + 0.5);
+  let rc = vec2f(uv.x, vb) / rs.xy;
+  let cell = floor(rc);
+  let f = rc - cell;
+  let origin = wp - gu * (f.x * rs.x) - gvb * (f.y * rs.y);
+  let h = ihash(floor(origin * 2.0 + 0.5));
+  let h2 = ihash(floor(origin * 2.0 + 0.5) + vec3f(17.0, 3.0, 11.0));
+
+  let night = frame.ground.w;
+  let lit = h.w < material.bBaseColor.w;
+  var lightCol = material.emissive.rgb;
+  if (style == 0u) {
+    if (h2.x > 0.84) { lightCol = lightCol * vec3f(0.55, 0.8, 1.35); }        // fluorescent kitchen
+    else if (h2.x > 0.74) { lightCol = lightCol * vec3f(0.35, 0.5, 1.1) * 0.6; } // TV glow
+  }
+  // Ambient room light: daylight through the window, plus the room's lamps.
+  let lamp = select(0.0, 1.0, lit) * select(night, 0.25 + 0.75 * night, style != 0u);
+
+  // Curtains just behind the glass (homes).
+  if (style == 0u) {
+    let cw = 0.08 + 0.1 * h2.y;
+    if (f.x < cw || f.x > 1.0 - cw * (0.6 + 0.8 * h2.z)) {
+      let pal = array<vec3f, 4>(vec3f(0.55, 0.42, 0.25), vec3f(0.42, 0.18, 0.12), vec3f(0.6, 0.58, 0.5), vec3f(0.25, 0.32, 0.22));
+      let cc = pal[u32(h2.w * 3.99)] * material.bBaseColor.rgb;
+      let fold = 0.8 + 0.2 * sin(f.x * rs.x * 40.0);
+      return cc * fold * (irr * 0.45 + lightCol * lamp * 0.35);
+    }
+  }
+
+  // Ray through the room box (unit cube: x across, y up, z into the room).
+  let dW = -V;
+  let d = vec3f(dot(dW, gu) / rs.x, dot(dW, gvb) / rs.y, max(dot(dW, -Ng), 1e-3) / rs.z);
+  let p0 = vec3f(f, 0.0);
+  let tx = select(1e9, (select(0.0, 1.0, d.x > 0.0) - p0.x) / d.x, abs(d.x) > 1e-6);
+  let ty = select(1e9, (select(0.0, 1.0, d.y > 0.0) - p0.y) / d.y, abs(d.y) > 1e-6);
+  let tz = 1.0 / d.z;
+  let t = min(min(tx, ty), tz);
+  let hp = p0 + d * t;
+
+  var wall: vec3f;
+  var floorC: vec3f;
+  var ceil = vec3f(0.7, 0.69, 0.66);
+  if (style == 0u) {
+    let wp_ = array<vec3f, 6>(vec3f(0.62, 0.56, 0.42), vec3f(0.5, 0.55, 0.45), vec3f(0.68, 0.64, 0.56), vec3f(0.46, 0.5, 0.55), vec3f(0.64, 0.5, 0.38), vec3f(0.58, 0.58, 0.56));
+    wall = wp_[u32(h.x * 5.99)];
+    floorC = mix(vec3f(0.2, 0.12, 0.06), vec3f(0.32, 0.27, 0.2), h.y);
+  } else if (style == 1u) {
+    wall = mix(vec3f(0.72, 0.7, 0.66), vec3f(0.6, 0.62, 0.6), h.x);
+    floorC = vec3f(0.36, 0.35, 0.33);
+  } else if (style == 2u) {
+    wall = vec3f(0.62, 0.62, 0.6);
+    floorC = vec3f(0.26, 0.27, 0.28);
+  } else {
+    wall = vec3f(0.12, 0.075, 0.05);   // brown station tiles
+    floorC = vec3f(0.4, 0.38, 0.35);
+    ceil = vec3f(0.55, 0.55, 0.53);
+  }
+  wall *= material.bBaseColor.rgb;
+
+  var alb = wall;
+  var glow = vec3f(0.0);
+  if (t == tz) {
+    // back wall: furniture / shelves / counter silhouettes
+    alb = wall * 0.92;
+    if (style == 0u) {
+      let x0 = 0.12 + 0.35 * h2.z;
+      if (hp.y < 0.32 && hp.x > x0 && hp.x < x0 + 0.38) { alb = mix(vec3f(0.12, 0.08, 0.05), vec3f(0.3, 0.2, 0.12), h2.y); }
+      if (hp.y > 0.48 && hp.y < 0.66 && abs(hp.x - 0.5 - 0.2 * (h.z - 0.5)) < 0.09) { alb = vec3f(0.35, 0.3, 0.22) * (0.6 + 0.6 * h2.x); }
+    } else if (style == 1u) {
+      if (hp.y > 0.05 && hp.y < 0.62) {
+        let band = floor(hp.y / 0.13);
+        let item = ihash(vec3f(floor(hp.x * 14.0), band, h.x * 91.0));
+        let shelf = fract(hp.y / 0.13) < 0.12;
+        alb = select(mix(vec3f(0.5, 0.15, 0.1), vec3f(0.15, 0.3, 0.6), item.x) * (0.4 + 0.8 * item.y), vec3f(0.5), shelf);
+      }
+    } else if (style == 3u) {
+      if (hp.y < 0.3 && abs(hp.x - 0.5) < 0.3) { alb = vec3f(0.3, 0.3, 0.32); }   // ticket counter
+    }
+  } else if (t == tx) {
+    alb = wall;
+    if (style == 1u && hp.y > 0.05 && hp.y < 0.62) {
+      let item = ihash(vec3f(floor(hp.z * 10.0), floor(hp.y / 0.13), h.y * 53.0));
+      alb = mix(vec3f(0.45, 0.4, 0.2), vec3f(0.2, 0.35, 0.25), item.x) * (0.5 + 0.6 * item.z);
+    }
+  } else if (d.y < 0.0) {
+    alb = floorC;
+    if (style != 0u) { alb *= 0.9 + 0.1 * select(0.0, 1.0, (u32(floor(hp.x * 8.0) + floor(hp.z * 8.0)) & 1u) == 0u); }
+  } else {
+    alb = ceil;
+    // ceiling fittings
+    if (style == 0u) {
+      if (length(hp.xz - vec2f(0.5, 0.55)) < 0.06) { glow = lightCol * lamp * 3.0; }
+    } else if (abs(fract(hp.z * 2.0) - 0.5) < 0.08 && abs(hp.x - 0.5) < 0.35) {
+      glow = lightCol * lamp * 2.5;
+    }
+  }
+  // Daylight falls off into the room; lamps light it from the ceiling centre.
+  let day = irr * mix(0.6, 0.18, saturate(hp.z)) * (0.75 + 0.25 * hp.y);
+  let lampFall = 0.45 + 0.55 / (1.0 + 5.0 * dot(hp - vec3f(0.5, 0.9, 0.55), hp - vec3f(0.5, 0.9, 0.55)));
+  return alb * (day + lightCol * lamp * lampFall * 0.5) + glow;
+}
+
 fn shade(in: VSOut, front: bool, vl: VertexLight) -> ShadeOut {
   let inst = instances[in.slot];
   let camPos = frame.cameraPos.xyz;
@@ -556,7 +693,9 @@ fn shade(in: VSOut, front: bool, vl: VertexLight) -> ShadeOut {
   // Texture AO x baked vertex AO (vertex colour G; 1 for meshes without colours).
   s.ao = mix(1.0, orm.r, material.pbr.w) * in.color.g;
   // Emission (lamp lenses) follows the environment's local-light switch.
-  s.emissive = material.emissive.rgb * frame.ground.w;
+  s.emissive = material.emissive.rgb * frame.ground.w * select(vec3f(1.0), bc.rgb, matFlag(M_EMISSIVE_TEX));
+  // Interior glazing: the emissive colour lights the fake rooms instead.
+  if (USE_INTERIOR && matFlag(M_INTERIOR)) { s.emissive = vec3f(0.0); }
   s.Ng = Ng;
 
   // --- tangent-space normal with detail layer
@@ -926,6 +1065,12 @@ fn shade(in: VSOut, front: bool, vl: VertexLight) -> ShadeOut {
 
   var color = direct + indirectDiffuse + indirectSpec + local + s.emissive;
   if (matFlag(M_UNLIT)) { color = s.emissive + s.albedo * irr; }
+  if (USE_INTERIOR && matFlag(M_INTERIOR)) {
+    // Rooms seen through the glass, behind its Fresnel reflection.
+    let NoVi = saturate(dot(Ng, V));
+    let Fi = 0.04 + 0.96 * pow(1.0 - NoVi, 5.0);
+    color += interiorRadiance(in.uv0, uv0Dx, uv0Dy, dpx, dpy, wp, V, Ng, irr) * (1.0 - Fi);
+  }
 
   // ---------------------------------------------------------------- debug (lit)
   if (DEBUG_VIEWS) {

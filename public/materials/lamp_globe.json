@@ -1,0 +1,1 @@
+{ "inherits": "lamp_emissive", "baseColorFactor": [0.85, 0.86, 0.85], "roughness": 0.4, "emissive": [0.78, 0.9, 1.0], "emissiveIntensity": 2600, "notes": "Opal glass globe of a mercury path lamp (bluish white)." }

@@ -1,0 +1,2 @@
+{ "inherits": "paving_slabs", "baseColor": "paving_tiles_albedo.png", "normal": "paving_tiles_normal.png", "orm": "paving_tiles_orm.png", "physicalSize": 1.825,
+  "notes": "Square / forecourt concrete slabs (Poly Haven concrete_tiles_02)." }

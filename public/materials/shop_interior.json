@@ -1,0 +1,8 @@
+{
+ "inherits": "glass_window",
+ "baseColorFactor": [0.012, 0.014, 0.016],
+ "emissive": [1.0, 0.92, 0.8],
+ "emissiveIntensity": 70,
+ "interior": { "style": "shop", "room": [6.5, 4.2], "depth": 7, "lit": 0.92 },
+ "notes": "Shop windows: lit sales floor with shelving (day and night)."
+}

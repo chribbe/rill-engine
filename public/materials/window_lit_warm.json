@@ -1,0 +1,10 @@
+{
+ "inherits": "glass_window",
+ "emissive": [
+  1.0,
+  0.72,
+  0.42
+ ],
+ "emissiveIntensity": 55,
+ "notes": "Lit window (warm interior). Scaled by environment lamp intensity."
+}

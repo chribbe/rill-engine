@@ -1,0 +1,10 @@
+{
+ "inherits": "glass_window",
+ "emissive": [
+  1.0,
+  0.9,
+  0.75
+ ],
+ "emissiveIntensity": 90,
+ "notes": "Shop window with a lit interior (night)."
+}

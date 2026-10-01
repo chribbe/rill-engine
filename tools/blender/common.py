@@ -85,13 +85,25 @@ class MeshBuilder:
         self.mats = []
         self.explicit_uv = {}
         self.smooth_faces = set()
+        # Lightmap chart groups: faces with the same id are packed as one chart
+        # (their UV0 layout must not overlap), 0 = automatic (UV0 islands).
+        self.chart = self.bm.faces.layers.int.new('chart')
+        self._charts = 0
+        # Optional lightmap layout coordinates (when UV0 is not a valid layout,
+        # e.g. room-space UVs on interior-mapped panes). Removed before export.
+        self.uvl = self.bm.loops.layers.uv.new('Layout')
+        self.has_layout = self.bm.faces.layers.int.new('has_layout')
+
+    def new_chart(self):
+        self._charts += 1
+        return self._charts
 
     def mat(self, name):
         if name not in self.mats:
             self.mats.append(name)
         return self.mats.index(name)
 
-    def face(self, pts, mat, uvs=None, smooth=False):
+    def face(self, pts, mat, uvs=None, smooth=False, chart=0, luvs=None):
         vs = [self.bm.verts.new(Vector(p)) for p in pts]
         try:
             f = self.bm.faces.new(vs)
@@ -99,6 +111,11 @@ class MeshBuilder:
             return None
         f.material_index = self.mat(mat)
         f.smooth = smooth
+        f[self.chart] = chart
+        if luvs is not None:
+            for loop, uv in zip(f.loops, luvs):
+                loop[self.uvl].uv = uv
+            f[self.has_layout] = 1
         if uvs is not None:
             for loop, uv in zip(f.loops, uvs):
                 loop[self.uv0].uv = uv
@@ -108,9 +125,9 @@ class MeshBuilder:
             f.tag = False
         return f
 
-    def quad(self, a, b, c, d, mat, uvs=None, smooth=False):
+    def quad(self, a, b, c, d, mat, uvs=None, smooth=False, chart=0, luvs=None):
         """CCW when seen from the front (normal by right-hand rule)."""
-        return self.face([a, b, c, d], mat, uvs, smooth)
+        return self.face([a, b, c, d], mat, uvs, smooth, chart, luvs)
 
     def box(self, x0, x1, y0, y1, z0, z1, mat, skip=(), mats=None):
         m = lambda k: (mats or {}).get(k, mat)
@@ -197,9 +214,14 @@ class MeshBuilder:
                     rng[mname] = (min(lo, c[0]), max(hi, c[0]))
             print(f'  {self.name}: vertex colour R ' + ', '.join(f'{k} {lo:.2f}..{hi:.2f}' for k, (lo, hi) in rng.items()))
         res = None
+        for f in bm.faces:
+            if not f[self.has_layout]:
+                for loop in f.loops:
+                    loop[self.uvl].uv = loop[self.uv0].uv
         if lightmap_tpm:
             uv1 = bm.loops.layers.uv.new('Lightmap')
-            res = pack_lightmap_uvs(bm, self.uv0, uv1, lightmap_tpm)
+            res = pack_lightmap_uvs(bm, self.uvl, uv1, lightmap_tpm)
+        bm.loops.layers.uv.remove(self.uvl)
         me = bpy.data.meshes.new(self.name)
         bm.to_mesh(me)
         bm.free()
@@ -233,45 +255,175 @@ class MeshBuilder:
         return obj, res
 
 
+def _hull(pts):
+    """Convex hull (monotone chain), CCW."""
+    pts = sorted(set(pts))
+    if len(pts) < 3:
+        return pts
+    cross = lambda o, a, b: (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    lo, hi = [], []
+    for p in pts:
+        while len(lo) >= 2 and cross(lo[-2], lo[-1], p) <= 0:
+            lo.pop()
+        lo.append(p)
+    for p in reversed(pts):
+        while len(hi) >= 2 and cross(hi[-2], hi[-1], p) <= 0:
+            hi.pop()
+        hi.append(p)
+    return lo[:-1] + hi[:-1]
+
+
+def _min_rect(pts):
+    """(area, angle) of the minimum-area bounding rectangle (rotating calipers over the hull)."""
+    h = _hull(pts)
+    if len(h) < 3:
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        return (max(xs) - min(xs)) * (max(ys) - min(ys)), 0.0
+    best = (float('inf'), 0.0)
+    for i in range(len(h)):
+        ex, ey = h[(i + 1) % len(h)][0] - h[i][0], h[(i + 1) % len(h)][1] - h[i][1]
+        ang = math.atan2(ey, ex)
+        c, s_ = math.cos(-ang), math.sin(-ang)
+        us = [p[0] * c - p[1] * s_ for p in h]
+        vs = [p[0] * s_ + p[1] * c for p in h]
+        area = (max(us) - min(us)) * (max(vs) - min(vs))
+        if area < best[0]:
+            best = (area, ang)
+    return best
+
+
+def _uv_area(f, uv0):
+    pts = [l[uv0].uv for l in f.loops]
+    return abs(sum(pts[i - 1].x * pts[i].y - pts[i].x * pts[i - 1].y for i in range(len(pts)))) / 2
+
+
+def _split_sparse(isl, uv0, min_fill=0.55):
+    """Greedy region growing: splits an island whose faces fill its best bounding
+    rectangle poorly (e.g. a ribbon around a corner) into well-filled charts."""
+    faces = set(isl)
+    area = {f: _uv_area(f, uv0) for f in isl}
+    pts = {f: [(l[uv0].uv.x, l[uv0].uv.y) for l in f.loops] for f in isl}
+    charts = []
+    left = set(isl)
+    while left:
+        seed = max(left, key=lambda f: area[f])
+        group, gpts, garea = [seed], list(pts[seed]), area[seed]
+        left.discard(seed)
+        frontier = [g for e in seed.edges for g in e.link_faces if g in left]
+        while frontier:
+            f = frontier.pop(0)
+            if f not in left:
+                continue
+            ra, _ = _min_rect(gpts + pts[f])
+            if ra > 1e-12 and (garea + area[f]) / ra < min_fill:
+                continue
+            group.append(f)
+            gpts += pts[f]
+            garea += area[f]
+            left.discard(f)
+            frontier += [g for e in f.edges for g in e.link_faces if g in left and g in faces]
+        charts.append(group)
+    return charts
+
+
 def pack_lightmap_uvs(bm, uv0, uv1, tpm, pad=2):
     """Texel-exact lightmap chart packing.
 
     Islands come from the metre-space UV0 layout, so chart texel density is
-    uniform (tpm texels per metre). Each island gets `pad` texels of padding
-    on every side, islands are rotated to landscape and shelf-packed.
+    uniform (tpm texels per metre). Each chart is turned to its minimum-area
+    bounding rectangle (diagonal walls and roofs pack tight), sparse islands
+    are split into well-filled charts, every chart gets `pad` texels of padding
+    on every side, and charts are rotated to landscape and shelf-packed.
     Returns (W, H) in texels; UV1 is normalised to that rectangle.
     """
     islands = bmesh_utils.bmesh_linked_uv_islands(bm, uv0)
+    # Islands sharing an explicit chart id are packed together (union-find).
+    lay = bm.faces.layers.int.get('chart')
+    parent = list(range(len(islands)))
+
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    owner = {}
+    for i, isl in enumerate(islands):
+        for f in isl:
+            cid = f[lay] if lay is not None else 0
+            if cid:
+                if cid in owner:
+                    parent[find(i)] = find(owner[cid])
+                else:
+                    owner[cid] = i
+    groups = {}
+    for i, isl in enumerate(islands):
+        groups.setdefault(find(i), []).extend(isl)
+    explicit = {r for r in groups if lay is not None and any(f[lay] for f in groups[r])}
+    charts = []
+    for r, isl in groups.items():
+        if r in explicit:
+            charts.append(isl)
+            continue
+        pts = [(l[uv0].uv.x, l[uv0].uv.y) for f in isl for l in f.loops]
+        ra, _ang = _min_rect(pts)
+        fill = sum(_uv_area(f, uv0) for f in isl) / ra if ra > 1e-12 else 1.0
+        if fill < 0.45 and 1 < len(isl) <= 600:
+            charts += _split_sparse(isl, uv0)
+        else:
+            charts.append(isl)
     items = []
-    for isl in islands:
-        us = [l[uv0].uv.x for f in isl for l in f.loops]
-        vs = [l[uv0].uv.y for f in isl for l in f.loops]
-        u0, u1, v0, v1 = min(us), max(us), min(vs), max(vs)
+    for isl in charts:
+        pts = [(l[uv0].uv.x, l[uv0].uv.y) for f in isl for l in f.loops]
+        ra, ang = _min_rect(pts)
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        if ra >= (max(xs) - min(xs)) * (max(ys) - min(ys)) * 0.98:
+            ang = 0.0          # axis-aligned is (nearly) as good: keep texels on the world grid
+        c, s_ = math.cos(-ang), math.sin(-ang)
+        loc = lambda u, v: (u * c - v * s_, u * s_ + v * c)
+        lus = [loc(*p) for p in pts]
+        u0, u1 = min(p[0] for p in lus), max(p[0] for p in lus)
+        v0, v1 = min(p[1] for p in lus), max(p[1] for p in lus)
         w = max(1, math.ceil((u1 - u0) * tpm)) + 2 * pad
         h = max(1, math.ceil((v1 - v0) * tpm)) + 2 * pad
         rot = h > w
         if rot:
             w, h = h, w
-        items.append({'faces': isl, 'u0': u0, 'u1': u1, 'v0': v0, 'v1': v1, 'w': w, 'h': h, 'rot': rot})
+        items.append({'faces': isl, 'loc': loc, 'u0': u0, 'u1': u1, 'v0': v0, 'v1': v1, 'w': w, 'h': h, 'rot': rot})
     if not items:
         return (4, 4)
-    items.sort(key=lambda it: -it['h'])
+    items.sort(key=lambda it: (-it['h'], -it['w']))
     area = sum(it['w'] * it['h'] for it in items)
-    W = max(max(it['w'] for it in items), int(math.ceil(math.sqrt(area * 1.08))))
-    x = y = shelf_h = 0
-    for it in items:
-        if x + it['w'] > W:
-            x = 0
-            y += shelf_h
-            shelf_h = 0
-        it['x'], it['y'] = x, y
-        x += it['w']
-        shelf_h = max(shelf_h, it['h'])
-    H = y + shelf_h
+    wmax = max(it['w'] for it in items)
+
+    def shelf(W, place=False):
+        x = y = shelf_h = 0
+        for it in items:
+            if x + it['w'] > W:
+                x = 0
+                y += shelf_h
+                shelf_h = 0
+            if place:
+                it['x'], it['y'] = x, y
+            x += it['w']
+            shelf_h = max(shelf_h, it['h'])
+        return y + shelf_h
+
+    # Shelf-pack at a few atlas widths and keep the smallest rectangle.
+    cands = {wmax} | {max(wmax, int(math.ceil(math.sqrt(area * k)))) for k in (1.0, 1.08, 1.2, 1.4, 1.7, 2.0, 2.6, 3.5)}
+    W = min(cands, key=lambda w: (w * shelf(w), abs(w - shelf(w))))
+    H = shelf(W, place=True)
+    if os.environ.get('RILL_LMDEBUG') and W * H > 300000:
+        used = sum(sum(_uv_area(f, uv0) for f in it['faces']) * tpm * tpm for it in items)
+        print(f'    lightmap {W}x{H}: {len(items)} charts, faces cover {used / (W * H):.0%}')
+        for it in sorted(items, key=lambda it: -it['w'] * it['h'])[:6]:
+            fa = sum(_uv_area(f, uv0) for f in it['faces']) * tpm * tpm
+            print(f"      chart {it['w']}x{it['h']} faces={len(it['faces'])} fill={fa / (it['w'] * it['h']):.2f}")
     for it in items:
         for f in it['faces']:
             for l in f.loops:
-                u, v = l[uv0].uv.x, l[uv0].uv.y
+                u, v = it['loc'](l[uv0].uv.x, l[uv0].uv.y)
                 if it['rot']:
                     tx = (v - it['v0']) * tpm
                     ty = (it['u1'] - u) * tpm

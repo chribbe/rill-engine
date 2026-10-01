@@ -1,0 +1,21 @@
+{
+ "baseColor": "brick_tan_albedo.png",
+ "normal": "brick_tan_normal.png",
+ "orm": "brick_tan_orm.png",
+ "physicalSize": 1.9,
+ "baseColorFactor": [
+  0.37,
+  0.313,
+  0.594
+ ],
+ "roughness": 1,
+ "porosity": 0.6,
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 23,
+  "albedoStrength": 0.12,
+  "roughnessStrength": 0.05,
+  "stainStrength": 0.22
+ },
+ "notes": "Dark red-brown facing brick (H\u00e4sselby torg centre)."
+}

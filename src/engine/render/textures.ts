@@ -119,6 +119,31 @@ export class TextureManager {
     return h;
   }
 
+  /** Registers a runtime-drawn texture (sign atlas...) under `url`, with mips. */
+  async registerCanvas(url: string, source: OffscreenCanvas | HTMLCanvasElement | ImageBitmap, kind: TextureKind): Promise<TextureHandle> {
+    const { width, height } = source;
+    const mips = mipCount(width, height);
+    const texture = this.device.createTexture({
+      label: url,
+      size: [width, height],
+      format: 'rgba8unorm',
+      mipLevelCount: mips,
+      viewFormats: kind === 'color' ? ['rgba8unorm-srgb'] : [],
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC | GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    this.device.queue.copyExternalImageToTexture({ source }, { texture, mipLevel: 0, premultipliedAlpha: false }, [width, height]);
+    this.generateMips(texture, kind, false);
+    const view = texture.createView(
+      kind === 'color' ? { format: 'rgba8unorm-srgb', usage: GPUTextureUsage.TEXTURE_BINDING } : { usage: GPUTextureUsage.TEXTURE_BINDING },
+    );
+    let bytes = 0;
+    for (let i = 0; i < mips; i++) bytes += Math.max(1, width >> i) * Math.max(1, height >> i) * 4;
+    const h: TextureHandle = { texture, view, width, height, kind, bytes, url };
+    this.all.push(h);
+    for (const wrap of [true, false]) this.cache.set(`${url}|${kind}|${wrap}`, Promise.resolve(h));
+    return h;
+  }
+
   load(url: string, kind: TextureKind, opts: TextureLoadOptions = {}): Promise<TextureHandle> {
     const key = `${url}|${kind}|${opts.wrap ?? true}`;
     let p = this.cache.get(key);

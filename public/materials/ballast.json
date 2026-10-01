@@ -1,0 +1,7 @@
+{
+ "inherits": "gravel",
+ "physicalSize": 1.2,
+ "baseColorFactor": "#8a7f74",
+ "porosity": 0.4,
+ "notes": "Track ballast (macadam), rust-stained."
+}

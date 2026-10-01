@@ -341,6 +341,35 @@ recipes.tiles_white = () => {
   saveMaterial('tiles_white', S, [P, P], { albedo, height, rough }, { aoRadius: 2, aoDepth: 150 });
 };
 
+recipes.roof_tiles = () => {
+  // Swedish two-wave red clay tiles (enkupigt lertegel): 4 courses x 5 tiles per 1.2 m,
+  // each tile one S-wave across, courses overlapping with a lower lip. Fired-clay
+  // colour varies per tile; weathering darkens the lower edges.
+  const S = 1024, P = 1.2;
+  const albedo = new Img(S, S), height = new Field(S, S), rough = new Field(S, S);
+  const red = lin('#8a3b22'), dark = lin('#5a2416'), orange = lin('#a14c2b');
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = (x + 0.5) / S, v = (y + 0.5) / S;
+    const sv = v * 4, iy = Math.floor(sv), fv = sv - iy;          // fv: 0 at the upper edge, 1 at the lip
+    const shift = (iy % 2) * 0.5;
+    const su = u * 5 + shift, ix = Math.floor(su), fu = su - ix;
+    // S-wave profile across the tile, ridge at the overlap side
+    const wave = Math.sin(fu * Math.PI * 2) * 0.5 + 0.5;
+    const lip = smoothstep(0.82, 0.98, fv);
+    const h = wave * 0.012 + fv * 0.01 - smoothstep(0.97, 1.0, fv) * 0.02 + lip * 0.004;
+    height.data[y * S + x] = h;
+    const r = hash2(ix, iy, 401) / 4294967296;
+    const base = [0, 1, 2].map((c) => (r < 0.5 ? lerp(red[c], orange[c], r * 2) : lerp(red[c], dark[c], (r - 0.5) * 1.6)));
+    const grime = 0.8 + 0.2 * (1 - smoothstep(0.55, 1.0, fv)) + fbm(u, v, 24, 3, 402) * 0.12;
+    const groove = 0.5 + 0.5 * Math.pow(wave, 0.7);
+    const underLip = 0.45 + 0.55 * smoothstep(0.0, 0.12, fv);   // shadow under the course above
+    const k = grime * groove * underLip;
+    albedo.set(x, y, base[0] * k, base[1] * k, base[2] * k);
+    rough.data[y * S + x] = 0.78 + 0.15 * (1 - wave) + fbm(u, v, 32, 2, 403) * 0.05;
+  }
+  saveMaterial('roof_tiles', S, [P, P], { albedo, height, rough }, { aoRadius: 6, aoDepth: 60 });
+};
+
 recipes.ground_grass = () => {
   const S = 1024, P = 2;
   const albedo = new Img(S, S), height = new Field(S, S), rough = new Field(S, S);
@@ -977,6 +1006,69 @@ recipes.fence_chainlink = () => {
     metal.data[y * S + x] = 1;
   }
   saveMaterial('fence_chainlink', S, [P, P], { albedo, rough, metal });
+};
+
+recipes.tiles_brown = () => {
+  // 1950s T-bana station wall tiles: 15 x 15 cm glazed stoneware, dark brown with
+  // per-tile glaze variation, 4 mm grout. Tile = 0.6 m (4 x 4 tiles).
+  const S = 1024, P = 0.6;
+  const albedo = new Img(S, S), height = new Field(S, S), rough = new Field(S, S);
+  const glazeA = lin('#3b2a20'), glazeB = lin('#5a3f2c'), grout = lin('#6d675e');
+  const g = 0.002 / P * 4;   // half grout width in tile-cell units
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = (x + 0.5) / S, v = (y + 0.5) / S;
+    const cu = u * 4, cv = v * 4, iu = Math.floor(cu), iv = Math.floor(cv);
+    const fu = cu - iu, fv = cv - iv;
+    const e = Math.min(fu, 1 - fu, fv, 1 - fv);                  // distance to the cell edge
+    const inTile = smoothstep(g * 0.8, g * 1.4, e);
+    const r = hash2(iu, iv, 931) / 4294967296;
+    const glaze = [0, 1, 2].map((c) => lerp(glazeA[c], glazeB[c], r) * (0.9 + 0.15 * fbm(u, v, 24, 2, 932)));
+    const c = [0, 1, 2].map((k) => lerp(grout[k], glaze[k], inTile));
+    albedo.set(x, y, c[0], c[1], c[2]);
+    height.data[y * S + x] = inTile * 0.002 + smoothstep(0.0, 0.25, e) * 0.0008;
+    rough.data[y * S + x] = lerp(0.9, 0.22 + 0.1 * fbm(u, v, 16, 2, 933), inTile);
+  }
+  saveMaterial('tiles_brown', S, [P, P], { albedo, height, rough }, { aoRadius: 3, aoDepth: 80 });
+};
+
+recipes.sign_tbana = () => {
+  // SL tunnelbana sign (1950s design): blue T inside a blue ring on a white disc.
+  // The texture spans the disc diameter (UVs from the disc caps).
+  const S = 512, P = 0.9;
+  const albedo = new Img(S, S), rough = new Field(S, S);
+  const blue = lin('#0b5aa6'), white = lin('#f2f0e6');
+  const aa = (d: number) => clamp01(d * S + 0.5);            // signed distance (tile units) -> coverage
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = (x + 0.5) / S - 0.5, v = 0.5 - (y + 0.5) / S;     // centred, v up
+    const r = Math.hypot(u, v);
+    const ring = aa(Math.min(r - 0.415, 0.5 - r));               // blue ring between r 0.415 and the rim
+    const bar = aa(Math.min(0.29 - Math.abs(u), 0.075 - Math.abs(v - 0.2)));
+    const stem = aa(Math.min(0.085 - Math.abs(u), 0.2 - Math.abs(v + 0.06)));
+    const t = Math.max(ring, bar, stem);
+    albedo.set(x, y, lerp(white[0], blue[0], t), lerp(white[1], blue[1], t), lerp(white[2], blue[2], t));
+    rough.data[y * S + x] = 0.25;
+  }
+  saveMaterial('sign_tbana', S, [P, P], { albedo, rough });
+};
+
+recipes.railing_bars = () => {
+  // 1950s viaduct railing infill: 16 mm flat bars at 125 mm, dark painted steel (alpha mask).
+  const S = 256, P = 0.5;
+  const albedo = new Img(S, S), rough = new Field(S, S), metal = new Field(S, S);
+  const half = 0.008 / P;
+  const paint = lin('#2c3034'), rust = lin('#4a3326');
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = (x + 0.5) / S, v = (y + 0.5) / S;
+    const f = (u * 4) % 1, d = Math.abs(f - 0.5) / 4;           // distance to the bar centre (tile units)
+    const a = clamp01((half - d) * S + 0.5);
+    const r = smoothstep(0.55, 0.9, fbm(u * 0.25, v, 12, 3, 921)) * 0.6 + smoothstep(0.85, 1.0, 1 - v) * 0.2;
+    const k = 0.9 + 0.2 * fbm(u, v, 40, 2, 922);
+    const c = [0, 1, 2].map((i) => lerp(paint[i], rust[i], r) * k);
+    albedo.set(x, y, c[0], c[1], c[2], a);
+    rough.data[y * S + x] = 0.6 + r * 0.3;
+    metal.data[y * S + x] = 0;
+  }
+  saveMaterial('railing_bars', S, [P, P], { albedo, rough, metal });
 };
 
 function detailMap(name: string, size: number, physical: number, fn: (u: number, v: number) => [number, number]) {

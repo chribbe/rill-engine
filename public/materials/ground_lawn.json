@@ -1,0 +1,17 @@
+{
+ "inherits": "ground_grass",
+ "blend": {
+  "material": "dirt",
+  "contrast": 3.5,
+  "height": 0.8,
+  "noise": 0.9
+ },
+ "clutter": [],
+ "notes": "Suburban lawn worn to earth near paths (vertex colour R). Hässelby slice; November: dull olive, not straw.",
+ "dryTint": [
+  1.1,
+  0.93,
+  0.74
+ ],
+ "dryStrength": 0.7
+}

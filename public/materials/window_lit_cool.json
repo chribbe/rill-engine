@@ -1,0 +1,10 @@
+{
+ "inherits": "glass_window",
+ "emissive": [
+  0.9,
+  0.95,
+  1.0
+ ],
+ "emissiveIntensity": 45,
+ "notes": "Lit window (fluorescent)."
+}

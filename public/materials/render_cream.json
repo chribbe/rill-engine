@@ -1,0 +1,21 @@
+{
+ "baseColor": "plaster_beige_albedo.png",
+ "normal": "plaster_beige_normal.png",
+ "orm": "plaster_beige_orm.png",
+ "physicalSize": 3,
+ "baseColorFactor": [
+  0.97,
+  1.151,
+  1.314
+ ],
+ "roughness": 1,
+ "porosity": 0.6,
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 23,
+  "albedoStrength": 0.12,
+  "roughnessStrength": 0.05,
+  "stainStrength": 0.22
+ },
+ "notes": "Cream render."
+}

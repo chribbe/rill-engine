@@ -12,7 +12,8 @@ import { buildDecals, type DecalSet } from '../render/decals';
 const RUNTIME_DECALS = ['decal_bullet', 'decal_bullet_metal'];
 import { ClutterSystem, type ClutterSource } from '../render/clutter';
 import { CollisionWorld, Surface } from './collision';
-import type { DecalObject, MapDocument, MapObject, ReflectionProbeObject, Transform } from './mapformat';
+import type { DecalObject, MapDocument, MapObject, ReflectionProbeObject, SignObject, Transform } from './mapformat';
+import { buildSigns } from '../render/signs';
 
 /**
  * Runtime world built from a MapDocument. The document stays the source of
@@ -104,6 +105,7 @@ export class World {
         console.warn('[world] lightmaps unavailable:', e);
       }
     }
+    await w.buildSigns(doc.objects.filter((o): o is SignObject => o.type === 'sign'));
     const decals = doc.objects.filter((o): o is DecalObject => o.type === 'decal');
     w.decals = await buildDecals(renderer.device, renderer.textures, decals, RUNTIME_DECALS);
     if (w.decals) {
@@ -119,6 +121,17 @@ export class World {
     }
     w.loadMs = performance.now() - t0;
     return w;
+  }
+
+  /** All text signs as one mesh: atlas faces (backlit / painted) and lightbox bodies. */
+  private async buildSigns(signs: SignObject[]) {
+    const b = await buildSigns(this.renderer.textures, signs, '/textures/runtime/signs.png', (o) => transformMatrix(o.transform) as Float32Array);
+    if (!b) return;
+    const prims = [b.lit, b.painted, b.body].filter((p): p is NonNullable<typeof p> => !!p);
+    const mesh = this.renderer.arena.upload({ name: 'signs', primitives: prims });
+    const mats = await Promise.all(mesh.primitives.map((p) => this.renderer.materials.get(p.material)));
+    const r = this.makeRenderable('signs', mesh, mats, mat4.identity(), false, 2, fnv1a('signs'));
+    this.objects.set('signs', { doc: signs[0], renderables: [r] });
   }
 
   private mesh(ref: string): Promise<GpuMesh> {
@@ -328,6 +341,7 @@ export class World {
       case 'decal':
       case 'marker':
       case 'probeVolume':
+      case 'sign':
         break;
     }
   }

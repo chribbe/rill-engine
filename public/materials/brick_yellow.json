@@ -1,0 +1,21 @@
+{
+ "baseColor": "brick_tan_albedo.png",
+ "normal": "brick_tan_normal.png",
+ "orm": "brick_tan_orm.png",
+ "physicalSize": 1.9,
+ "baseColorFactor": [
+  1.183,
+  1.784,
+  2.507
+ ],
+ "roughness": 1,
+ "porosity": 0.6,
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 23,
+  "albedoStrength": 0.12,
+  "roughnessStrength": 0.05,
+  "stainStrength": 0.22
+ },
+ "notes": "Yellow facing brick (school)."
+}

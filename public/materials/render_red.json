@@ -1,0 +1,21 @@
+{
+ "baseColor": "plaster_worn_albedo.png",
+ "normal": "plaster_worn_normal.png",
+ "orm": "plaster_worn_orm.png",
+ "physicalSize": 2,
+ "baseColorFactor": [
+  0.554,
+  0.224,
+  0.15
+ ],
+ "roughness": 1,
+ "porosity": 0.6,
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 23,
+  "albedoStrength": 0.12,
+  "roughnessStrength": 0.05,
+  "stainStrength": 0.22
+ },
+ "notes": "Red-brown render (tower end walls)."
+}

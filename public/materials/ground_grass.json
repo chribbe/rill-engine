@@ -12,17 +12,17 @@
   "roughnessStrength": 0.02,
   "stainStrength": 0.2
  },
- "snow": 1.0,
+ "snow": 1,
  "dryTint": [
   1.55,
   0.95,
   0.62
  ],
- "dryStrength": 1.0,
+ "dryStrength": 1,
  "clutter": [
   {
    "model": "assets/testmap/clutter_grass.glb",
-   "density": 6.0,
+   "density": 6,
    "scale": [
     0.4,
     0.95

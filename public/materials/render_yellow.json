@@ -1,0 +1,21 @@
+{
+ "baseColor": "plaster_worn_albedo.png",
+ "normal": "plaster_worn_normal.png",
+ "orm": "plaster_worn_orm.png",
+ "physicalSize": 2,
+ "baseColorFactor": [
+  1.108,
+  0.917,
+  0.428
+ ],
+ "roughness": 1,
+ "porosity": 0.6,
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 23,
+  "albedoStrength": 0.12,
+  "roughnessStrength": 0.05,
+  "stainStrength": 0.22
+ },
+ "notes": "Stockholm yellow render (low slab blocks)."
+}

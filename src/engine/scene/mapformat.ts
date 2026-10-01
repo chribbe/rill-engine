@@ -107,7 +107,37 @@ export interface ReflectionProbeObject extends MapObjectBase {
   probe: { boxMin: [number, number, number]; boxMax: [number, number, number]; blend?: number; priority?: number };
 }
 
-export type MapObject = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject;
+/**
+ * Text sign (shop fascia, station name band, street sign), rasterised at load
+ * with the bundled fonts. Face in the local XY plane facing +Z, centred.
+ */
+export interface SignObject extends MapObjectBase {
+  type: 'sign';
+  sign: {
+    text: string;
+    /** Face size in metres [width, height]. */
+    size: [number, number];
+    font?: 'Barlow Condensed' | 'Jost' | 'Archivo Black' | 'Pacifico' | 'Inter';
+    weight?: number;
+    italic?: boolean;
+    color?: string;
+    background?: string;
+    border?: string;
+    align?: 'left' | 'center' | 'right';
+    /** Cap height share of the face height (all lines). */
+    textHeight?: number;
+    letterSpacing?: number;
+    padding?: number;
+    uppercase?: boolean;
+    /** Backlit sign (emissive face). */
+    backlit?: number;
+    /** Lightbox depth in metres (0 = flat panel on a wall). */
+    depth?: number;
+    doubleSided?: boolean;
+  };
+}
+
+export type MapObject = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject | SignObject;
 
 export interface LightmapSetDocument {
   format: 'rill.lightmapset';

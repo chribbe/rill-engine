@@ -1,0 +1,5 @@
+{
+ "inherits": "paving_slabs",
+ "baseColorFactor": [1.55, 1.52, 1.42],
+ "notes": "Light concrete platform edge band."
+}

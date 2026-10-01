@@ -1,0 +1,9 @@
+{
+ "inherits": "gravel",
+ "baseColorFactor": [
+  0.55,
+  0.55,
+  0.55
+ ],
+ "notes": "Flat roof (gravel/felt)."
+}

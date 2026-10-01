@@ -47,6 +47,22 @@ export interface MaterialDef {
   };
   emissive?: Color;
   emissiveIntensity?: number;
+  /** Emission is tinted by the base colour texture (backlit signs, displays). */
+  emissiveFromBaseColor?: boolean;
+  /**
+   * Fake rooms behind glazing (interior mapping). Needs room-space UVs on the
+   * pane (u along the facade, v up from the storey floor, metres). The emissive
+   * colour is the rooms' light (night; shops/offices also by day).
+   */
+  interior?: {
+    style?: 'home' | 'shop' | 'office' | 'hall';
+    /** Room width and storey height (m). */
+    room?: [number, number];
+    depth?: number;
+    /** Fraction of rooms lit. */
+    lit?: number;
+    tint?: Color;
+  };
   /** How strongly the surface darkens / smooths when wet (0 = sealed, 1 = porous). */
   porosity?: number;
   translucency?: number;
@@ -93,6 +109,8 @@ export const MF = {
   UNLIT: 1024,
   DOUBLE_SIDED: 2048,
   BLEND: 8192,
+  EMISSIVE_TEX: 16384,
+  INTERIOR: 32768,
 } as const;
 
 export const MATERIAL_PARAM_BYTES = 240;
@@ -211,6 +229,8 @@ export class Material {
     if (d.shader === 'unlit') flags |= MF.UNLIT;
     if (this.doubleSided) flags |= MF.DOUBLE_SIDED;
     if (this.blendDef) flags |= MF.BLEND;
+    if (d.emissiveFromBaseColor) flags |= MF.EMISSIVE_TEX;
+    if (d.interior) flags |= MF.INTERIOR;
     u[28] = flags;
     const rr = d.roughnessRange ?? [0, 1];
     f.set([rr[0], rr[1], d.triplanarSharpness ?? 4, mac?.stainStrength ?? 0], 32);
@@ -222,6 +242,14 @@ export class Material {
       const brr = b.roughnessRange ?? [0, 1];
       f.set([b.roughness ?? 1, b.metallic ?? 0, b.normalStrength ?? 1, b.aoStrength ?? 1], 44);
       f.set([d.blend?.contrast ?? 6, d.blend?.height ?? 0.6, d.blend?.noise ?? 0.3, brr[1] - brr[0]], 48);
+    }
+    const it = d.interior;
+    if (it && !b) {
+      // Interior mapping reuses the (unused) blend-layer slots.
+      const tint = parseColor(it.tint, [1, 1, 1, 1]);
+      f.set([tint[0], tint[1], tint[2], it.lit ?? 0.3], 36);
+      const style = { home: 0, shop: 1, office: 2, hall: 3 }[it.style ?? 'home'];
+      f.set([it.room?.[0] ?? 3.6, it.room?.[1] ?? 2.8, it.depth ?? 4, style], 40);
     }
     const dry = parseColor(d.dryTint, [1, 1, 1, 1]);
     f.set([d.alphaDistance === 'average' ? 1 : 0, d.snow ?? defaultSnow(d), d.dryStrength ?? (d.dryTint ? 1 : 0), 0], 52);

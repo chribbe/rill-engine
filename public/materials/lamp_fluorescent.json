@@ -1,0 +1,1 @@
+{ "inherits": "lamp_emissive", "emissive": [0.86, 0.95, 1.0], "emissiveIntensity": 25000, "notes": "Fluorescent tube diffuser (platform canopy, station hall)." }

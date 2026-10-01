@@ -1,0 +1,7 @@
+{
+ "inherits": "glass_window",
+ "emissive": [0.86, 0.95, 1.0],
+ "emissiveIntensity": 40,
+ "interior": { "style": "office", "room": [3.6, 3.1], "depth": 5, "lit": 0.45 },
+ "notes": "Offices / classrooms: fluorescent ceiling strips."
+}

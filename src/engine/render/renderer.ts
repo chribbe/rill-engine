@@ -827,6 +827,7 @@ export class Renderer {
       USE_REFL_PROBES: on(g.reflProbes && !foliage && d.reflections !== false),
       USE_BLEND: on(!!m.blendDef),
       USE_SNOW: on(g.season && d.shader !== 'unlit'),
+      USE_INTERIOR: on(!!d.interior),
     };
     let bits = 0;
     Object.values(constants).forEach((v, i) => (bits |= (v ? 1 : 0) << i));

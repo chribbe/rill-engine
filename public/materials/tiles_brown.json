@@ -1,0 +1,11 @@
+{
+ "baseColor": "tiles_brown_albedo.png",
+ "normal": "tiles_brown_normal.png",
+ "orm": "tiles_brown_orm.png",
+ "physicalSize": 0.6,
+ "roughness": 1,
+ "specular": 0.6,
+ "porosity": 0,
+ "macro": { "texture": "macro_variation.png", "physicalSize": 9, "albedoStrength": 0.08, "stainStrength": 0.12 },
+ "notes": "Dark brown glazed station wall tiles (15 cm)."
+}

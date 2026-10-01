@@ -1,0 +1,17 @@
+{
+ "baseColor": "concrete_viaduct_albedo.png",
+ "normal": "concrete_viaduct_normal.png",
+ "orm": "concrete_viaduct_orm.png",
+ "physicalSize": 1.8,
+ "baseColorFactor": [1.0, 1.06, 1.18],
+ "roughness": 1,
+ "porosity": 0.7,
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 21,
+  "albedoStrength": 0.16,
+  "roughnessStrength": 0.06,
+  "stainStrength": 0.3
+ },
+ "notes": "Board-formed 1950s viaduct concrete (T-bana bridges), neutralised to grey."
+}
