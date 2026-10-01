@@ -265,9 +265,11 @@ fn lodFadeKill(pos: vec2f, f: f32) -> bool {
 // ------------------------------------------------------------------ helpers
 
 fn decodeNormal(t: vec4f) -> vec4f {
-  // rgb: unit normal, a: 1 - 2 * (normal variance -> added GGX alpha^2)
-  let n = normalize(t.xyz * 2.0 - 1.0);
-  return vec4f(n, (1.0 - t.a) * 0.5);
+  // xy from the texture, z rebuilt: BC5 normal maps store only xy (their variance is
+  // folded into the ORM roughness offline); uncompressed maps are unit vectors with
+  // a: 1 - 2 * (normal variance -> added GGX alpha^2).
+  let xy = t.xy * 2.0 - 1.0;
+  return vec4f(xy, sqrt(saturate(1.0 - dot(xy, xy))), (1.0 - t.a) * 0.5);
 }
 
 fn blendRNM(n1: vec3f, n2: vec3f) -> vec3f {

@@ -188,7 +188,7 @@ export class TextureManager {
     const height = dv.getUint32(24, true);
     const levels = Math.max(1, dv.getUint32(40, true));
     if (dv.getUint32(44, true) !== 0) throw new Error('supercompressed KTX2 not supported');
-    const format: GPUTextureFormat | undefined = vk === 146 ? 'bc7-rgba-unorm-srgb' : vk === 145 ? 'bc7-rgba-unorm' : undefined;
+    const format: GPUTextureFormat | undefined = vk === 146 ? 'bc7-rgba-unorm-srgb' : vk === 145 ? 'bc7-rgba-unorm' : vk === 141 ? 'bc5-rg-unorm' : undefined;
     if (!format) throw new Error(`unsupported vkFormat ${vk}`);
     if ((format === 'bc7-rgba-unorm-srgb') !== (kind === 'color')) throw new Error('colour space does not match texture kind');
     const texture = this.device.createTexture({

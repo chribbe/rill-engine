@@ -20,5 +20,6 @@
  "roughnessRange": [
   0.85,
   1.0
- ]
+ ],
+ "reflections": false
 }

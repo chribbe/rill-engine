@@ -636,7 +636,8 @@ export class Renderer {
       USE_SPEC_AA: on(g.specAA),
       USE_DIR_LIGHTMAP: on(g.dirLightmap && g.lightmap && !foliage),
       USE_PROBE_VOLUME: on(g.probeVolume),
-      USE_REFL_PROBES: on(g.reflProbes),
+      // Rough foliage / clutter: sky reflection only (no box-projected local probes).
+      USE_REFL_PROBES: on(g.reflProbes && !foliage && d.reflections !== false),
       USE_BLEND: on(!!m.blendDef),
       USE_SNOW: on(g.season && d.shader !== 'unlit'),
     };

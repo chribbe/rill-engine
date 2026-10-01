@@ -8,20 +8,22 @@
 // maps, 8-bit quantised per level) so compressed and uncompressed loads match.
 // Output: public/textures/bc7/<name>.ktx2 + index.json (read by TextureManager).
 import { PNG } from 'pngjs';
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { availableParallelism } from 'node:os';
 import { encodeBlock, decodeBlock } from './bc7.ts';
+import { encodeBC5Block, decodeBC4Block } from './bc5.ts';
 
 const PUBLIC = join(import.meta.dirname, '../../public');
 const TEX = join(PUBLIC, 'textures');
 const OUT = join(TEX, 'bc7');
-const MIN_NORMAL_PSNR = 36;
+
 
 type Kind = 'color' | 'linear' | 'normal';
-interface Job { file: string; kind: Kind }
-interface Result { file: string; kind: Kind; width: number; height: number; levels: number; bytes: number; psnr: number[]; ms: number; modes: number[] }
+/** normalPair: the normal map used with this ORM (its variance is folded into roughness). */
+interface Job { file: string; kind: Kind; normalPair?: string }
+interface Result { file: string; kind: Kind; format: 'bc7' | 'bc5'; width: number; height: number; levels: number; bytes: number; psnr: number[]; ms: number; modes: number[]; normalPair?: string }
 
 // ------------------------------------------------------------ mip chain (mirrors mipgen.wgsl)
 const LANCZOS = [-0.0412, 0.1144, 0.4268, 0.4268, 0.1144, -0.0412];
@@ -90,6 +92,43 @@ export function nextLevel(src: Level, kind: Kind): Level {
   return { w, h, data: out };
 }
 
+// ------------------------------------------------------------ BC5 level encode (normal xy)
+function encodeLevelBC5(L: Level): { data: Uint8Array; se: number } {
+  const bw = Math.ceil(L.w / 4), bh = Math.ceil(L.h / 4);
+  const data = new Uint8Array(bw * bh * 16);
+  const px = new Float32Array(64);
+  const dec = new Float32Array(16);
+  let se = 0;
+  for (let by = 0; by < bh; by++) {
+    for (let bx = 0; bx < bw; bx++) {
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
+        const sx = Math.min(bx * 4 + x, L.w - 1), sy = Math.min(by * 4 + y, L.h - 1);
+        for (let c = 0; c < 4; c++) px[(y * 4 + x) * 4 + c] = L.data[(sy * L.w + sx) * 4 + c];
+      }
+      const off = (by * bw + bx) * 16;
+      encodeBC5Block(px, data, off);
+      for (const [ch, o] of [[0, 0], [1, 8]]) {
+        decodeBC4Block(data, off + o, dec);
+        for (let i = 0; i < 16; i++) { const d = dec[i] - px[i * 4 + ch]; se += d * d; }
+      }
+    }
+  }
+  return { data, se };
+}
+
+/** Normal variance (alpha of our normal mips) -> wider GGX roughness in the ORM's G channel. */
+function foldVariance(orm: Level, nrm: Level) {
+  for (let y = 0; y < orm.h; y++) for (let x = 0; x < orm.w; x++) {
+    const nx = Math.min(nrm.w - 1, Math.floor((x + 0.5) * nrm.w / orm.w)), ny = Math.min(nrm.h - 1, Math.floor((y + 0.5) * nrm.h / orm.h));
+    const v = (1 - nrm.data[(ny * nrm.w + nx) * 4 + 3] / 255) * 0.5;
+    if (v <= 0) continue;
+    const i = (y * orm.w + x) * 4 + 1;
+    const r = orm.data[i] / 255;
+    // Shader: alpha = r^2, alpha' = sqrt(alpha^2 + v)  =>  r' = (r^4 + v)^(1/4).
+    orm.data[i] = q8(Math.pow(r ** 4 + v, 0.25));
+  }
+}
+
 // ------------------------------------------------------------ BC7 level encode
 function encodeLevel(L: Level, modes: number[]): { data: Uint8Array; se: number } {
   const bw = Math.ceil(L.w / 4), bh = Math.ceil(L.h / 4);
@@ -115,31 +154,37 @@ function encodeLevel(L: Level, modes: number[]): { data: Uint8Array; se: number 
 }
 
 // ------------------------------------------------------------ KTX2 writer
+const VK_FORMAT_BC5_UNORM_BLOCK = 141;
 const VK_FORMAT_BC7_UNORM_BLOCK = 145;
 const VK_FORMAT_BC7_SRGB_BLOCK = 146;
 
-function writeKtx2(width: number, height: number, srgb: boolean, levels: Uint8Array[]): Uint8Array {
+function writeKtx2(width: number, height: number, format: 'bc7' | 'bc5', srgb: boolean, levels: Uint8Array[]): Uint8Array {
   const n = levels.length;
   const headerBytes = 12 + 9 * 4 + 4 * 4 + 2 * 8 + n * 24;
-  // Data format descriptor: one basic block, one BC7 sample.
-  const dfd = new DataView(new ArrayBuffer(44));
-  dfd.setUint32(0, 44, true);
+  // Data format descriptor: one basic block; BC7 = one sample, BC5 = R and G samples.
+  const samples = format === 'bc5' ? 2 : 1;
+  const dfdBytes = 4 + 24 + 16 * samples;
+  const dfd = new DataView(new ArrayBuffer(dfdBytes));
+  dfd.setUint32(0, dfdBytes, true);
   dfd.setUint32(4, 0, true); // vendorId 0 | descriptorType 0
   dfd.setUint16(8, 2, true); // version
-  dfd.setUint16(10, 40, true); // descriptorBlockSize
-  dfd.setUint8(12, 136); // KHR_DF_MODEL_BC7
+  dfd.setUint16(10, 24 + 16 * samples, true); // descriptorBlockSize
+  dfd.setUint8(12, format === 'bc5' ? 132 : 134); // KHR_DF_MODEL_BC5 / KHR_DF_MODEL_BC7
   dfd.setUint8(13, 1); // BT.709 primaries
   dfd.setUint8(14, srgb ? 2 : 1); // transfer: sRGB / linear
   dfd.setUint8(15, 0); // alpha straight
   dfd.setUint8(16, 3); dfd.setUint8(17, 3); // 4x4 texel block
   dfd.setUint8(20, 16); // bytesPlane0
-  dfd.setUint16(28, 0, true); // sample: bitOffset 0
-  dfd.setUint8(30, 127); // bitLength - 1
-  dfd.setUint8(31, 0); // channel BC7 colour
-  dfd.setUint32(36, 0, true); // sampleLower
-  dfd.setUint32(40, 0xffffffff, true); // sampleUpper
+  for (let k = 0; k < samples; k++) {
+    const o = 28 + 16 * k;
+    dfd.setUint16(o, format === 'bc5' ? 64 * k : 0, true); // bitOffset
+    dfd.setUint8(o + 2, format === 'bc5' ? 63 : 127); // bitLength - 1
+    dfd.setUint8(o + 3, format === 'bc5' ? k : 0); // channel: BC5 red / green, BC7 colour
+    dfd.setUint32(o + 8, 0, true); // sampleLower
+    dfd.setUint32(o + 12, 0xffffffff, true); // sampleUpper
+  }
   const dfdOff = headerBytes;
-  let off = dfdOff + 44;
+  let off = dfdOff + dfdBytes;
   // Level data smallest-first, 16-byte aligned.
   const offsets: number[] = new Array(n);
   for (let i = n - 1; i >= 0; i--) {
@@ -150,10 +195,11 @@ function writeKtx2(width: number, height: number, srgb: boolean, levels: Uint8Ar
   const buf = new Uint8Array(off);
   const dv = new DataView(buf.buffer);
   buf.set([0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a], 0);
-  const hdr = [srgb ? VK_FORMAT_BC7_SRGB_BLOCK : VK_FORMAT_BC7_UNORM_BLOCK, 1, width, height, 0, 0, 1, n, 0];
+  const vk = format === 'bc5' ? VK_FORMAT_BC5_UNORM_BLOCK : srgb ? VK_FORMAT_BC7_SRGB_BLOCK : VK_FORMAT_BC7_UNORM_BLOCK;
+  const hdr = [vk, 1, width, height, 0, 0, 1, n, 0];
   hdr.forEach((v, i) => dv.setUint32(12 + i * 4, v, true));
   dv.setUint32(48, dfdOff, true);
-  dv.setUint32(52, 44, true);
+  dv.setUint32(52, dfdBytes, true);
   dv.setUint32(56, 0, true); // kvd
   dv.setUint32(60, 0, true);
   dv.setBigUint64(64, 0n, true); // sgd
@@ -177,16 +223,26 @@ function processJob(job: Job): Result {
     L = nextLevel(L, job.kind);
     chain.push(L);
   }
+  // ORM paired with a normal map: fold the normal variance of each mip into roughness
+  // (the BC5 normal map carries no variance channel).
+  if (job.normalPair && existsSync(join(TEX, job.normalPair))) {
+    const np = PNG.sync.read(readFileSync(join(TEX, job.normalPair)));
+    let N: Level = { w: np.width, h: np.height, data: new Uint8Array(np.data.buffer, np.data.byteOffset, np.data.length) };
+    const nchain: Level[] = [N];
+    while (N.w > 1 || N.h > 1) { N = nextLevel(N, 'normal'); nchain.push(N); }
+    chain.forEach((lv, i) => foldVariance(lv, nchain[Math.min(nchain.length - 1, i + Math.max(0, Math.round(Math.log2(np.width / png.width))))]));
+  }
+  const format = job.kind === 'normal' ? 'bc5' : 'bc7';
   const modes = [0, 0, 0, 0, 0, 0, 0, 0];
   const psnr: number[] = [];
   const blobs = chain.map((lv, i) => {
-    const { data, se } = encodeLevel(lv, modes);
-    if (i < 3) psnr.push(+(10 * Math.log10((255 * 255) / Math.max(1e-9, se / (lv.w * lv.h * 4)))).toFixed(1));
+    const { data, se } = format === 'bc5' ? encodeLevelBC5(lv) : encodeLevel(lv, modes);
+    if (i < 3) psnr.push(+(10 * Math.log10((255 * 255) / Math.max(1e-9, se / (lv.w * lv.h * (format === 'bc5' ? 2 : 4))))).toFixed(1));
     return data;
   });
-  const ktx = writeKtx2(png.width, png.height, job.kind === 'color', blobs);
+  const ktx = writeKtx2(png.width, png.height, format, job.kind === 'color', blobs);
   writeFileSync(join(OUT, job.file.replace(/\.png$/, '.ktx2')), ktx);
-  return { file: job.file, kind: job.kind, width: png.width, height: png.height, levels: chain.length, bytes: ktx.length, psnr, ms: performance.now() - t, modes };
+  return { file: job.file, kind: job.kind, format, width: png.width, height: png.height, levels: chain.length, bytes: ktx.length, psnr, ms: performance.now() - t, modes, normalPair: job.normalPair };
 }
 
 // ------------------------------------------------------------ driver
@@ -204,6 +260,7 @@ if (!isMainThread) {
 
   // Texture kinds from material usage (decal textures stay PNG: the decal atlas copies rgba8 layers).
   const kinds = new Map<string, Kind>();
+  const normalOf = new Map<string, string>(); // orm -> the normal map it is used with
   const use = (file: unknown, kind: Kind, mat: string) => {
     if (typeof file !== 'string' || file.includes('/')) return;
     const prev = kinds.get(file);
@@ -219,28 +276,26 @@ if (!isMainThread) {
     use(d.detail?.albedo, 'linear', f);
     use(d.detail?.normal, 'normal', f);
     use(d.macro?.texture, 'linear', f);
+    if (typeof d.orm === 'string' && typeof d.normal === 'string' && !normalOf.has(d.orm)) normalOf.set(d.orm, d.normal);
   }
   const indexPath = join(OUT, 'index.json');
   const prevIndex = existsSync(indexPath) ? JSON.parse(readFileSync(indexPath, 'utf8')).textures ?? {} : {};
-  const prevRejected: string[] = existsSync(indexPath) ? JSON.parse(readFileSync(indexPath, 'utf8')).uncompressed ?? [] : [];
-  const indexTime = existsSync(indexPath) ? statSync(indexPath).mtimeMs : 0;
   const index: Record<string, unknown> = {};
-  const rejected: string[] = [];
   const jobs: Job[] = [];
+  const mtime = (f: string) => (existsSync(join(TEX, f)) ? statSync(join(TEX, f)).mtimeMs : 0);
   for (const [file, kind] of kinds) {
     if (!existsSync(join(TEX, file))) { console.warn(`[compress] missing ${file}`); continue; }
     const ktx = join(OUT, file.replace(/\.png$/, '.ktx2'));
+    const pair = kind === 'linear' ? normalOf.get(file) : undefined;
+    const format = kind === 'normal' ? 'bc5' : 'bc7';
     const prev = prevIndex[file];
-    if (!force && prev && prev.kind === kind && existsSync(ktx) && statSync(ktx).mtimeMs > statSync(join(TEX, file)).mtimeMs) {
+    const fresh = prev && prev.kind === kind && prev.format === format && prev.normalPair === pair && existsSync(ktx)
+      && statSync(ktx).mtimeMs > Math.max(mtime(file), pair ? mtime(pair) : 0);
+    if (!force && fresh) {
       index[file] = prev;
       continue;
     }
-    const rej = prevRejected.find((x) => x.startsWith(file + ' '));
-    if (!force && rej && statSync(join(TEX, file)).mtimeMs < indexTime) {
-      rejected.push(rej);
-      continue;
-    }
-    jobs.push({ file, kind });
+    jobs.push({ file, kind, normalPair: pair });
   }
   console.log(`[compress] ${kinds.size} textures, ${jobs.length} to encode on ${Math.min(nJobs, jobs.length)} workers`);
   const t0 = performance.now();
@@ -256,7 +311,7 @@ if (!isMainThread) {
       const feed = () => worker.postMessage(next < jobs.length ? jobs[next++] : null);
       worker.on('message', (r: Result) => {
         results.push(r);
-        console.log(`  ${r.file.padEnd(32)} ${r.kind.padEnd(6)} ${r.width}x${r.height} PSNR ${r.psnr.join('/')} dB  ${(r.bytes / 1024).toFixed(0)} KiB  ${(r.ms / 1000).toFixed(1)}s`);
+        console.log(`  ${r.file.padEnd(32)} ${r.format} ${r.kind.padEnd(6)} ${r.width}x${r.height} PSNR ${r.psnr.join('/')} dB  ${(r.bytes / 1024).toFixed(0)} KiB  ${(r.ms / 1000).toFixed(1)}s${r.normalPair ? '  (+variance of ' + r.normalPair + ')' : ''}`);
         feed();
       });
       worker.on('exit', () => { if (--active === 0) resolve(); });
@@ -265,20 +320,12 @@ if (!isMainThread) {
     }
   });
   for (const r of results) {
-    // Per-texel noise normal maps (gravel, grass...) do not survive BC7's line-fit
-    // endpoints; they stay uncompressed until normals move to BC5 + variance-in-roughness.
-    if (r.kind === 'normal' && Math.min(...r.psnr) < MIN_NORMAL_PSNR) {
-      rejected.push(`${r.file} (${Math.min(...r.psnr)} dB)`);
-      rmSync(join(OUT, r.file.replace(/\.png$/, '.ktx2')), { force: true });
-      continue;
-    }
-    index[r.file] = { kind: r.kind, file: r.file.replace(/\.png$/, '.ktx2'), width: r.width, height: r.height, levels: r.levels, bytes: r.bytes, psnr: r.psnr[0] };
+    index[r.file] = { kind: r.kind, format: r.format, file: r.file.replace(/\.png$/, '.ktx2'), width: r.width, height: r.height, levels: r.levels, bytes: r.bytes, psnr: r.psnr[0], normalPair: r.normalPair };
   }
   const sorted = Object.fromEntries(Object.entries(index).sort(([a], [b]) => a.localeCompare(b)));
-  writeFileSync(indexPath, JSON.stringify({ format: 'rill.textures.bc7', version: 1, textures: sorted, uncompressed: rejected }, null, 1));
+  writeFileSync(indexPath, JSON.stringify({ format: 'rill.textures.bc', version: 2, textures: sorted }, null, 1));
   const total = Object.values(sorted).reduce((s: number, e) => s + (e as { bytes: number }).bytes, 0);
   const modes = results.reduce((m, r) => m.map((v, i) => v + r.modes[i]), [0, 0, 0, 0, 0, 0, 0, 0]);
   const nb = modes.reduce((a, b) => a + b, 0) || 1;
-  if (rejected.length) console.log(`[compress] kept uncompressed (normal PSNR < ${MIN_NORMAL_PSNR} dB): ${rejected.join(', ')}`);
-  console.log(`[compress] done in ${((performance.now() - t0) / 1000).toFixed(1)}s: ${(total / 1048576).toFixed(1)} MiB BC7 total; modes 1/5/6 = ${[1, 5, 6].map((m) => ((100 * modes[m]) / nb).toFixed(0) + '%').join('/')}`);
+  console.log(`[compress] done in ${((performance.now() - t0) / 1000).toFixed(1)}s: ${(total / 1048576).toFixed(1)} MiB (BC7 + BC5); BC7 modes 1/5/6 = ${[1, 5, 6].map((m) => ((100 * modes[m]) / nb).toFixed(0) + '%').join('/')}`);
 }

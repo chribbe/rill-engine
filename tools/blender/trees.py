@@ -400,12 +400,17 @@ def emit(sk, name, lod):
         if lod == 1:
             if i % 3:
                 continue
-            scale = 1.65
-        s = c.side * (c.width * scale * 0.5)
-        a = c.axis * (c.length * scale)
-        q = [c.base - s, c.base + s, c.base + s + a, c.base - s + a]
-        uvs = [(1, 0), (0, 0), (0, 1), (1, 1)] if c.flip else [(0, 0), (1, 0), (1, 1), (0, 1)]
-        b.face(q, c.mat or leaf, uvs=uvs, smooth=True)
+            scale = 1.45  # 1/3 of the cards at 1.45x: ~70 % of LOD0 fill (alpha-tested fill is the MSAA cost)
+        m = c.mat or leaf
+        sv = c.side * (c.width * scale)
+        av = c.axis * (c.length * scale)
+        # Card trimmed to its texture's opaque outline (UV octagon), flipped cards mirror u.
+        poly = card_octagon(m)
+        pts = [c.base + sv * ((1 - u if c.flip else u) - 0.5) + av * v for u, v in poly]
+        uvs = list(poly)
+        if c.flip:
+            pts, uvs = pts[::-1], uvs[::-1]  # keep the winding after mirroring
+        b.face(pts, m, uvs=uvs, smooth=True)
     return b
 
 
@@ -461,6 +466,43 @@ def card_coverage(mat):
         img.pixels.foreach_get(px)
         _coverage[mat] = float((px[3::4] > d.get('alphaCutoff', 0.5)).mean())
     return _coverage[mat]
+
+
+_octagons = {}
+
+
+def card_octagon(mat, pad=0.015):
+    """Conservative 8-sided outline (k-DOP) of a card texture's opaque texels in UV
+    space (v up). Cards are emitted as this polygon instead of a full quad, which
+    removes much of the transparent fill alpha testing pays for (main + shadow passes)."""
+    if mat in _octagons:
+        return _octagons[mat]
+    d = material_def(mat)
+    img = bpy.data.images.load(os.path.join(PUBLIC, 'textures', d['baseColor']), check_existing=True)
+    w, h = img.size
+    px = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(px)
+    a = px[3::4].reshape(h, w)  # rows bottom-up, i.e. v increasing
+    ys, xs = np.nonzero(a > d.get('alphaCutoff', 0.5) * 0.5)
+    if len(xs) == 0:
+        _octagons[mat] = [(0, 0), (1, 0), (1, 1), (0, 1)]
+        return _octagons[mat]
+    u = (xs + 0.5) / w
+    v = (ys + 0.5) / h
+    lo_u, hi_u = u.min() - pad, u.max() + pad
+    lo_v, hi_v = v.min() - pad, v.max() + pad
+    lo_s, hi_s = (u + v).min() - pad * 1.41, (u + v).max() + pad * 1.41
+    lo_d, hi_d = (u - v).min() - pad * 1.41, (u - v).max() + pad * 1.41
+    # Octagon vertices = intersections of consecutive slabs (counter-clockwise from the bottom edge).
+    poly = [
+        (lo_s - lo_v, lo_v), (hi_d + lo_v, lo_v),     # bottom edge between the diagonal cuts
+        (hi_u, hi_u - hi_d), (hi_u, hi_s - hi_u),     # right edge
+        (hi_s - hi_v, hi_v), (lo_d + hi_v, hi_v),     # top edge
+        (lo_u, lo_u - lo_d), (lo_u, lo_s - lo_u),     # left edge
+    ]
+    poly = [(min(1.0, max(0.0, x)), min(1.0, max(0.0, y))) for x, y in poly]
+    _octagons[mat] = poly
+    return poly
 
 
 def crown_visibility_fn(bm, mat_names):

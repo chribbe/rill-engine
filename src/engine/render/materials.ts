@@ -70,6 +70,8 @@ export interface MaterialDef {
   /** Dormant-season albedo multiplier (dry grass, winter moss) and how strongly the season applies. */
   dryTint?: Color;
   dryStrength?: number;
+  /** Local (box-projected) reflection probes; false = sky reflection only (cheap, for rough clutter). */
+  reflections?: boolean;
   /** Ground clutter scattered over surfaces with this material (detail props). */
   clutter?: ClutterDef[];
   /** Offline bake hints (average albedo for bounce light). */

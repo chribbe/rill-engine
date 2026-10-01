@@ -27,7 +27,7 @@
     0.7,
     1.35
    ],
-   "maxDistance": 28
+   "maxDistance": 22
   },
   {
    "model": "assets/testmap/clutter_grass.glb",
@@ -36,7 +36,7 @@
     0.6,
     1.1
    ],
-   "maxDistance": 28
+   "maxDistance": 22
   },
   {
    "model": "assets/testmap/clutter_fern.glb",
@@ -45,7 +45,7 @@
     0.8,
     1.5
    ],
-   "maxDistance": 40
+   "maxDistance": 32
   }
  ]
 }
