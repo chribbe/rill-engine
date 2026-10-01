@@ -1,0 +1,21 @@
+{
+ "format": "rill.model",
+ "version": 1,
+ "name": "tree_birch_b",
+ "semantic": "vegetation",
+ "lods": [
+  {
+   "mesh": "tree_birch_b.glb",
+   "distance": 0.0
+  },
+  {
+   "mesh": "tree_birch_b_lod1.glb",
+   "distance": 30.0
+  },
+  {
+   "mesh": "tree_birch_b_lod2.glb",
+   "distance": 95.0
+  }
+ ],
+ "notes": "birch (seed 32); LOD distances in metres at scale 1, scaled by instance size."
+}

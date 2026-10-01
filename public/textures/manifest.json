@@ -121,9 +121,9 @@
  },
  "ground_forest": {
   "averageAlbedo": [
-   0.1199,
-   0.0808,
-   0.0344
+   0.0727,
+   0.0682,
+   0.0242
   ],
   "size": 1024,
   "physicalSize": [
@@ -205,9 +205,9 @@
  },
  "foliage_pine": {
   "averageAlbedo": [
-   0.0481,
-   0.0765,
-   0.0218
+   0.0953,
+   0.1235,
+   0.04
   ],
   "size": 1024,
   "physicalSize": [
@@ -217,9 +217,9 @@
  },
  "foliage_birch": {
   "averageAlbedo": [
-   0.1504,
-   0.2346,
-   0.0384
+   0.1297,
+   0.2115,
+   0.0345
   ],
   "size": 1024,
   "physicalSize": [
@@ -237,6 +237,90 @@
   "physicalSize": [
    0.1,
    0.1
+  ]
+ },
+ "moss": {
+  "averageAlbedo": [
+   0.1054,
+   0.1343,
+   0.0288
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "dirt": {
+  "averageAlbedo": [
+   0.0951,
+   0.0787,
+   0.0638
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "foliage_spruce": {
+  "averageAlbedo": [
+   0.0585,
+   0.0904,
+   0.0222
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "bark_pine_upper": {
+  "averageAlbedo": [
+   0.3669,
+   0.127,
+   0.0435
+  ],
+  "size": 512,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "bark_birch_base": {
+  "averageAlbedo": [
+   0.0824,
+   0.0745,
+   0.0631
+  ],
+  "size": 512,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "forest_canopy": {
+  "averageAlbedo": [
+   0.0386,
+   0.0752,
+   0.0228
+  ],
+  "size": 1024,
+  "physicalSize": [
+   48,
+   48
+  ]
+ },
+ "facade_far": {
+  "averageAlbedo": [
+   0.4176,
+   0.3904,
+   0.3384
+  ],
+  "size": 512,
+  "physicalSize": [
+   10.8,
+   11.2
   ]
  }
 }

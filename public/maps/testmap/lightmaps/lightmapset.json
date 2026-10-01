@@ -2,7 +2,7 @@
  "format": "rill.lightmapset",
  "version": 1,
  "backend": "blender-cycles 5.2.0 LTS",
- "bakedAt": "2026-10-01T07:42:21",
+ "bakedAt": "2026-10-01T08:41:08",
  "atlasSize": [
   2048,
   2048
@@ -355,13 +355,13 @@
    ],
    "file": "probes_probes_main.bin",
    "layout": "f16[z][y][x][component sky,sunBounce][face +x,-x,+y,-y,+z,-z][rgb]",
-   "validFraction": 0.999
+   "validFraction": 0.798
   }
  ],
  "stats": {
   "samples": 256,
   "denoise": true,
-  "bakeSeconds": 236.7,
+  "bakeSeconds": 361.6,
   "texelsUsed": 2622633,
   "objects": 34
  }

@@ -1,0 +1,21 @@
+{
+ "format": "rill.model",
+ "version": 1,
+ "name": "tree_spruce_a",
+ "semantic": "vegetation",
+ "lods": [
+  {
+   "mesh": "tree_spruce_a.glb",
+   "distance": 0.0
+  },
+  {
+   "mesh": "tree_spruce_a_lod1.glb",
+   "distance": 30.0
+  },
+  {
+   "mesh": "tree_spruce_a_lod2.glb",
+   "distance": 95.0
+  }
+ ],
+ "notes": "spruce (seed 21); LOD distances in metres at scale 1, scaled by instance size."
+}
