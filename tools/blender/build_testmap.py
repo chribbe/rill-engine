@@ -820,6 +820,35 @@ for (i, wx, facing) in [(0, UP_IX0, 90), (1, UP_IX1, 270)]:
     for k, yc in enumerate([-4.0, 3.0]):
         wall_decal(f'decal_grime_tunnel_{i}_{k}', 'decal_grime_base', wx, yc, UP_FLOOR + 0.45, 5.0, 0.9, facing)
 
+# Probe volume: ambient cubes for dynamic / instanced objects (baked with the lightmaps).
+objects.append({'id': 'probes_main', 'name': 'Main probe volume', 'type': 'probeVolume', 'semantic': 'lighting',
+                'transform': {'position': [0.0, 12.0, 0.0]}, 'volume': {'size': [200.0, 30.0, 200.0], 'spacing': [4.0, 3.0, 4.0]}})
+
+
+# Reflection probes: captured in-engine; box = parallax volume + influence (Blender coords).
+def refl_probe(pid, name, capture, bmin, bmax, blend=1.5, priority=0):
+    lo = to_engine(bmin)
+    hi = to_engine(bmax)
+    emin = [min(lo[k], hi[k]) for k in range(3)]
+    emax = [max(lo[k], hi[k]) for k in range(3)]
+    objects.append({'id': pid, 'name': name, 'type': 'reflectionProbe', 'semantic': 'lighting',
+                    'transform': {'position': to_engine(capture)},
+                    'probe': {'boxMin': emin, 'boxMax': emax, 'blend': blend, 'priority': priority}})
+
+
+refl_probe('rp_tunnel', 'Underpass tunnel', (-12, 0, UP_FLOOR + 1.5), (UP_IX0, -7.2, UP_FLOOR), (UP_IX1, 7.2, UP_CEIL), blend=1.0, priority=3)
+refl_probe('rp_ramp_n', 'Underpass north ramp', (-12, 18, -0.6), (UP_IX0, 7, UP_FLOOR), (UP_IX1, 31, 4), blend=1.5, priority=2)
+refl_probe('rp_ramp_s', 'Underpass south ramp', (-12, -18, -0.6), (UP_IX0, -31, UP_FLOOR), (UP_IX1, -7, 4), blend=1.5, priority=2)
+refl_probe('rp_arcade', 'Arcade', (27.5, -21.6, 1.5), (5.3, -23, 0), (49.7, -20, 2.9), blend=0.8, priority=3)
+refl_probe('rp_plaza', 'Plaza', (-28, 9, 1.7), (-46, 4.2, 0), (-9, 14, 9), blend=2.0, priority=1)
+refl_probe('rp_road_w', 'Road west', (-72, 0, 1.7), (-100, -9, 0), (-45, 9, 12), blend=4.0)
+refl_probe('rp_road_c', 'Road centre', (-20, 0, 1.7), (-46, -9, 0), (6, 9, 12), blend=4.0)
+refl_probe('rp_road_e', 'Road east', (50, 0, 1.7), (5, -9, 0), (100, 9, 16), blend=4.0)
+refl_probe('rp_parking', 'Parking', (-31, -18, 1.7), (-46, -31, 0), (-17, -6, 8), blend=2.0, priority=1)
+refl_probe('rp_wall', 'Retaining wall strip', (21, 10, 1.7), (-6, 7, 0), (56, 16, 8), blend=2.0, priority=1)
+refl_probe('rp_bldg_n', 'Slab block north side', (28, -14, 1.7), (5, -20, 0), (52, -9, 16), blend=2.0, priority=1)
+refl_probe('rp_forest', 'Forest hill', (40, 45, H(40, 45) + 2), (-6, 16, -2), (100, 100, 40), blend=6.0)
+
 # Viewpoints (bookmarks for testing / screenshots)
 VIEWS = [
     ('Road grazing (long sightline)', (-95, -1.8, 0.0), 90, -1),

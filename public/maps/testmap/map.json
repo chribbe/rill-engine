@@ -12478,6 +12478,355 @@
    }
   },
   {
+   "id": "probes_main",
+   "name": "Main probe volume",
+   "type": "probeVolume",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     0.0,
+     12.0,
+     0.0
+    ]
+   },
+   "volume": {
+    "size": [
+     200.0,
+     30.0,
+     200.0
+    ],
+    "spacing": [
+     4.0,
+     3.0,
+     4.0
+    ]
+   }
+  },
+  {
+   "id": "rp_tunnel",
+   "name": "Underpass tunnel",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     -12,
+     -1.6,
+     0
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     -14.5,
+     -3.1,
+     -7.2
+    ],
+    "boxMax": [
+     -9.5,
+     -0.5,
+     7.2
+    ],
+    "blend": 1.0,
+    "priority": 3
+   }
+  },
+  {
+   "id": "rp_ramp_n",
+   "name": "Underpass north ramp",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     -12,
+     -0.6,
+     -18
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     -14.5,
+     -3.1,
+     -31
+    ],
+    "boxMax": [
+     -9.5,
+     4,
+     -7
+    ],
+    "blend": 1.5,
+    "priority": 2
+   }
+  },
+  {
+   "id": "rp_ramp_s",
+   "name": "Underpass south ramp",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     -12,
+     -0.6,
+     18
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     -14.5,
+     -3.1,
+     7
+    ],
+    "boxMax": [
+     -9.5,
+     4,
+     31
+    ],
+    "blend": 1.5,
+    "priority": 2
+   }
+  },
+  {
+   "id": "rp_arcade",
+   "name": "Arcade",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     27.5,
+     1.5,
+     21.6
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     5.3,
+     0,
+     20
+    ],
+    "boxMax": [
+     49.7,
+     2.9,
+     23
+    ],
+    "blend": 0.8,
+    "priority": 3
+   }
+  },
+  {
+   "id": "rp_plaza",
+   "name": "Plaza",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     -28,
+     1.7,
+     -9
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     -46,
+     0,
+     -14
+    ],
+    "boxMax": [
+     -9,
+     9,
+     -4.2
+    ],
+    "blend": 2.0,
+    "priority": 1
+   }
+  },
+  {
+   "id": "rp_road_w",
+   "name": "Road west",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     -72,
+     1.7,
+     0
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     -100,
+     0,
+     -9
+    ],
+    "boxMax": [
+     -45,
+     12,
+     9
+    ],
+    "blend": 4.0,
+    "priority": 0
+   }
+  },
+  {
+   "id": "rp_road_c",
+   "name": "Road centre",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     -20,
+     1.7,
+     0
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     -46,
+     0,
+     -9
+    ],
+    "boxMax": [
+     6,
+     12,
+     9
+    ],
+    "blend": 4.0,
+    "priority": 0
+   }
+  },
+  {
+   "id": "rp_road_e",
+   "name": "Road east",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     50,
+     1.7,
+     0
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     5,
+     0,
+     -9
+    ],
+    "boxMax": [
+     100,
+     16,
+     9
+    ],
+    "blend": 4.0,
+    "priority": 0
+   }
+  },
+  {
+   "id": "rp_parking",
+   "name": "Parking",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     -31,
+     1.7,
+     18
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     -46,
+     0,
+     6
+    ],
+    "boxMax": [
+     -17,
+     8,
+     31
+    ],
+    "blend": 2.0,
+    "priority": 1
+   }
+  },
+  {
+   "id": "rp_wall",
+   "name": "Retaining wall strip",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     21,
+     1.7,
+     -10
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     -6,
+     0,
+     -16
+    ],
+    "boxMax": [
+     56,
+     8,
+     -7
+    ],
+    "blend": 2.0,
+    "priority": 1
+   }
+  },
+  {
+   "id": "rp_bldg_n",
+   "name": "Slab block north side",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     28,
+     1.7,
+     14
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     5,
+     0,
+     9
+    ],
+    "boxMax": [
+     52,
+     16,
+     20
+    ],
+    "blend": 2.0,
+    "priority": 1
+   }
+  },
+  {
+   "id": "rp_forest",
+   "name": "Forest hill",
+   "type": "reflectionProbe",
+   "semantic": "lighting",
+   "transform": {
+    "position": [
+     40,
+     15.3834,
+     -45
+    ]
+   },
+   "probe": {
+    "boxMin": [
+     -6,
+     -2,
+     -100
+    ],
+    "boxMax": [
+     100,
+     40,
+     -16
+    ],
+    "blend": 6.0,
+    "priority": 0
+   }
+  },
+  {
    "id": "view_0",
    "name": "Road grazing (long sightline)",
    "type": "marker",

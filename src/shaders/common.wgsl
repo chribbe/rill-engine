@@ -32,6 +32,9 @@ struct Frame {
   atmo: vec4f,           // x planet radius (km), y atmosphere top (km), z camera altitude (km), w mie scale
   sky: vec4f,            // x sun TOA illuminance (lux), y horizon haze, z env mip count, w cloud sharpness
   skyTint: vec4f,        // rgb art-direction multiplier on the clear-sky atmosphere radiance
+  pvOrigin: vec4f,       // probe volume min corner (probe 0,0,0), w = enabled
+  pvInvSpacing: vec4f,   // 1 / probe spacing
+  pvDims: vec4u,         // x,y,z probe counts, w = reflection probe count
 };
 
 // debug.y flags
@@ -49,6 +52,10 @@ const F_ENV_SPEC: u32 = 1024u;
 const F_SKY_AMBIENT: u32 = 2048u;
 const F_SUN: u32 = 4096u;
 const F_A2C: u32 = 8192u;
+const F_PCF7: u32 = 0x10000u;
+const F_PROBE_VOLUME: u32 = 0x20000u;
+const F_REFL_PROBES: u32 = 0x40000u;
+const F_DIR_LIGHTMAP: u32 = 0x80000u;
 
 struct Instance {
   model: mat4x4f,

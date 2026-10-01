@@ -8,11 +8,19 @@ The bake scene is reconstructed from the engine's own map document and GLB
 assets; nothing here depends on the Blender file used to author the assets,
 and the runtime never depends on Blender.
 
-Two linear components are baked per atlas page (both in Cycles' diffuse
-"light" pass units, i.e. irradiance / PI):
-  sky        uniform white sky of radiance 1 (upper hemisphere), direct + indirect
-  sunBounce  sun of irradiance 1 from the reference direction, indirect only
+Linear components baked per atlas page (Cycles' diffuse "light" pass units,
+i.e. irradiance / PI):
+  skyRnm0..2  uniform white sky of radiance 1 (upper hemisphere), direct + indirect,
+              baked three times with the shading normal forced to the Half-Life 2
+              radiosity-normal-mapping basis (tangent space of UV0, MikkTSpace) ->
+              directional lightmaps: normal maps keep their relief in indirect light
+  sunBounce   sun of irradiance 1 from the reference direction, indirect only
 The runtime multiplies them by the live sky radiance and sun illuminance.
+
+Probe volumes (map objects of type 'probeVolume') are baked in the same passes:
+a grid of tiny invisible "ambient cubes" (6 axis-aligned irradiance samples per
+probe, Source-1 style) for dynamic/instanced objects. Probes buried inside
+geometry are detected and filled from valid neighbours.
 """
 
 import json
@@ -101,6 +109,16 @@ def get_bake_material(name):
     dif = nt.nodes.new('ShaderNodeBsdfDiffuse')
     alb = bake_albedo(name)
     dif.inputs['Color'].default_value = (*alb, 1)
+    # Constant tangent-space normal (RNM basis); strength 0 = geometric normal.
+    nmap = nt.nodes.new('ShaderNodeNormalMap')
+    nmap.name = 'rnm_normal'
+    nmap.space = 'TANGENT'
+    nmap.uv_map = 'UVMap'
+    nmap.inputs['Strength'].default_value = 0.0
+    nrgb = nt.nodes.new('ShaderNodeRGB')
+    nrgb.name = 'rnm_color'
+    nt.links.new(nrgb.outputs[0], nmap.inputs['Color'])
+    nt.links.new(nmap.outputs[0], dif.inputs['Normal'])
     if d.get('alphaMode') == 'mask' and d.get('baseColor'):
         img = bpy.data.images.load(os.path.join(PUBLIC, 'textures', d['baseColor']), check_existing=True)
         img.alpha_mode = 'STRAIGHT'
@@ -230,6 +248,102 @@ for ob, oid, _ in lightmapped:
     uv1.data.foreach_set('uv', buf)
     me.uv_layers.active = uv1
 
+# ------------------------------------------------------------------ probe volumes
+probe_volumes = []
+PROBE_HALF = 0.15
+# Engine face order +X -X +Y -Y +Z -Z expressed as Blender axes (engine Y = Blender Z, engine Z = -Blender Y).
+FACES_B = [Vector((1, 0, 0)), Vector((-1, 0, 0)), Vector((0, 0, 1)), Vector((0, 0, -1)), Vector((0, -1, 0)), Vector((0, 1, 0))]
+for o in doc['objects']:
+    if o['type'] != 'probeVolume':
+        continue
+    vol = o['volume']
+    c = o['transform']['position']
+    size, sp = vol['size'], vol['spacing']
+    dims = [max(1, int(round(size[k] / sp[k])) + 1) for k in range(3)]
+    origin = [c[k] - size[k] / 2 for k in range(3)]
+    n = dims[0] * dims[1] * dims[2]
+    pw = 1024
+    ph = int(math.ceil(n * 6 / pw))
+    import bmesh
+    bm = bmesh.new()
+    uvl = bm.loops.layers.uv.new('UVMap')
+    texel = 0
+    for iz in range(dims[2]):
+        for iy in range(dims[1]):
+            for ix in range(dims[0]):
+                pe = (origin[0] + ix * sp[0], origin[1] + iy * sp[1], origin[2] + iz * sp[2])
+                pb = Vector((pe[0], -pe[2], pe[1]))
+                for f, nrm in enumerate(FACES_B):
+                    # Quad facing `nrm`, centred PROBE_HALF away from the probe centre.
+                    a = Vector((0, 0, 1)) if abs(nrm.z) < 0.9 else Vector((1, 0, 0))
+                    t = nrm.cross(a).normalized() * PROBE_HALF
+                    b = nrm.cross(t).normalized() * PROBE_HALF
+                    cc = pb + nrm * PROBE_HALF
+                    vs = [bm.verts.new(cc - t - b), bm.verts.new(cc + t - b), bm.verts.new(cc + t + b), bm.verts.new(cc - t + b)]
+                    face = bm.faces.new(vs)
+                    if face.normal.dot(nrm) < 0:
+                        face.normal_flip()
+                    tx, ty = texel % pw, texel // pw
+                    for loop, (du, dv) in zip(face.loops, [(0.02, 0.02), (0.98, 0.02), (0.98, 0.98), (0.02, 0.98)]):
+                        loop[uvl].uv = ((tx + du) / pw, (ty + dv) / ph)
+                    texel += 1
+    me = bpy.data.meshes.new(f"probes_{o['id']}")
+    bm.to_mesh(me)
+    bm.free()
+    pob = bpy.data.objects.new(f"probes_{o['id']}", me)
+    scene.collection.objects.link(pob)
+    # Samples the scene without being part of it.
+    for attr in ('visible_diffuse', 'visible_glossy', 'visible_transmission', 'visible_volume_scatter', 'visible_shadow'):
+        setattr(pob, attr, False)
+    pmat = bpy.data.materials.new('bake_probe')
+    pmat.use_nodes = True
+    pnt = pmat.node_tree
+    for nd in list(pnt.nodes):
+        pnt.nodes.remove(nd)
+    pout = pnt.nodes.new('ShaderNodeOutputMaterial')
+    pdif = pnt.nodes.new('ShaderNodeBsdfDiffuse')
+    pnt.links.new(pdif.outputs[0], pout.inputs['Surface'])
+    ptex = pnt.nodes.new('ShaderNodeTexImage')
+    ptex.name = 'bake_target'
+    ptex.select = True
+    pnt.nodes.active = ptex
+    me.materials.append(pmat)
+    probe_volumes.append({'id': o['id'], 'obj': pob, 'mat': pmat, 'dims': dims, 'origin': origin, 'spacing': sp, 'n': n, 'pw': pw, 'ph': ph, 'result': {}})
+    print(f"[bake] probe volume {o['id']}: {dims[0]}x{dims[1]}x{dims[2]} = {n} probes")
+
+
+def probe_samples(pv, img):
+    """(n, 6, 3) face irradiance from a probe bake image."""
+    flat = img[..., :3].reshape(-1, 3)
+    return flat[: pv['n'] * 6].reshape(pv['n'], 6, 3)
+
+
+def dilate_invalid(vals, valid, dims, iterations=12):
+    """Replace probes buried in geometry by the mean of valid neighbours (no dark leaks)."""
+    nx, ny, nz = dims
+    v = vals.reshape(nz, ny, nx, *vals.shape[1:]).copy()
+    ok = valid.reshape(nz, ny, nx).copy()
+    for _ in range(iterations):
+        if ok.all():
+            break
+        acc = np.zeros_like(v)
+        cnt = np.zeros(ok.shape, dtype=np.float32)
+        for axis in range(3):
+            for s in (-1, 1):
+                sv = np.roll(v, s, axis=axis)
+                so = np.roll(ok, s, axis=axis).astype(np.float32)
+                # Do not wrap around the volume edges.
+                edge = [slice(None)] * 3
+                edge[axis] = 0 if s == 1 else -1
+                so[tuple(edge)] = 0
+                acc += sv * so[..., None, None, None]
+                cnt += so
+        fill = (~ok) & (cnt > 0)
+        v[fill] = acc[fill] / cnt[fill][..., None, None, None]
+        ok = ok | fill
+    return v.reshape(vals.shape), ok.reshape(-1)
+
+
 # ------------------------------------------------------------------ cycles setup
 scene.render.engine = 'CYCLES'
 prefs = bpy.context.preferences.addons['cycles'].preferences
@@ -277,8 +391,27 @@ sun.rotation_mode = 'QUATERNION'
 sun.rotation_quaternion = to_sun.to_track_quat('Z', 'Y')
 scene.collection.objects.link(sun)
 
-# One image target per page; every bake material gets an (active) image node.
-images = {}
+# HL2 radiosity normal mapping basis (tangent space: x = tangent, y = bitangent, z = normal).
+RNM_BASIS = [
+    (math.sqrt(2 / 3), 0.0, 1 / math.sqrt(3)),
+    (-1 / math.sqrt(6), 1 / math.sqrt(2), 1 / math.sqrt(3)),
+    (-1 / math.sqrt(6), -1 / math.sqrt(2), 1 / math.sqrt(3)),
+]
+
+
+def set_rnm(i):
+    """i = basis index, or None for the geometric normal."""
+    for m in bake_mats.values():
+        nt = m.node_tree
+        nm, rgb = nt.nodes.get('rnm_normal'), nt.nodes.get('rnm_color')
+        if nm is None:
+            continue
+        if i is None:
+            nm.inputs['Strength'].default_value = 0.0
+        else:
+            e = RNM_BASIS[i]
+            nm.inputs['Strength'].default_value = 1.0
+            rgb.outputs[0].default_value = ((e[0] + 1) / 2, (e[1] + 1) / 2, (e[2] + 1) / 2, 1.0)
 
 
 def set_target(img):
@@ -293,7 +426,7 @@ def set_target(img):
         nt.nodes.active = node
 
 
-def bake(page, kind, pass_filter, fill=None):
+def bake(page, kind, pass_filter, fill=None, with_probes=False):
     img = bpy.data.images.new(f'lm_{page}_{kind}', PAGE, PAGE, alpha=True, float_buffer=True)
     if fill is not None:
         img.pixels.foreach_set(np.tile(np.array(fill, dtype=np.float32), PAGE * PAGE))
@@ -302,6 +435,12 @@ def bake(page, kind, pass_filter, fill=None):
     objs = [ob for ob, oid, _ in lightmapped if placement[oid][0] == page]
     for ob in objs:
         ob.select_set(True)
+    if with_probes:
+        for pv in probe_volumes:
+            pv['img'] = bpy.data.images.new(f"probe_{pv['id']}_{kind}", pv['pw'], pv['ph'], alpha=True, float_buffer=True)
+            node = pv['mat'].node_tree.nodes['bake_target']
+            node.image = pv['img']
+            pv['obj'].select_set(True)
     bpy.context.view_layer.objects.active = objs[0]
     t = time.time()
     btype = kind if kind in ('POSITION', 'NORMAL') else 'DIFFUSE'
@@ -310,6 +449,11 @@ def bake(page, kind, pass_filter, fill=None):
     print(f'[bake] page {page} {kind}: {time.time() - t:.1f}s')
     px = np.empty(PAGE * PAGE * 4, dtype=np.float32)
     img.pixels.foreach_get(px)
+    if with_probes:
+        for pv in probe_volumes:
+            q = np.empty(pv['pw'] * pv['ph'] * 4, dtype=np.float32)
+            pv['img'].pixels.foreach_get(q)
+            pv['result'][kind] = q.reshape(pv['ph'], pv['pw'], 4)
     return px.reshape(PAGE, PAGE, 4)  # rows bottom-to-top
 
 
@@ -407,19 +551,29 @@ for p in range(len(pages)):
     nrm = bake(p, 'NORMAL', {'COLOR'}, fill=[0, 0, 0, 0])
     valid = pos[..., 0] < 5e4
     scene.cycles.samples = SAMPLES
-    # Sky: world on, sun off.
+    # Sky: world on, sun off. Three directional (RNM) bakes; probes ride along on the first.
     bg.mute = False
     sun.hide_render = True
     world.node_tree.nodes['Background'].inputs['Strength'].default_value = 1.0
-    sky = bake(p, 'sky', {'DIRECT', 'INDIRECT'})
+    # Flat sky (absolute level, exact for unperturbed normals) + three RNM basis
+    # bakes used only as a *direction ratio*: Cycles' tilted-normal bakes are
+    # biased low (measured 0.63 vs analytic 0.79 at the 54.7 deg basis tilt), so
+    # the runtime scales the flat bake by sum(w_i L_i) / mean(L_i).
+    set_rnm(None)
+    flat = bake(p, 'sky', {'DIRECT', 'INDIRECT'}, with_probes=(p == 0))
+    rnm = []
+    for i in range(3):
+        set_rnm(i)
+        rnm.append(bake(p, f'skyRnm{i}', {'DIRECT', 'INDIRECT'}))
+    set_rnm(None)
     # Sun bounce: world black, sun on.
     wn.links.remove(wn.links[[l.to_socket for l in wn.links].index(bg.inputs['Strength'])])
     bg.inputs['Strength'].default_value = 0.0
     sun.hide_render = False
-    sunb = bake(p, 'sunBounce', {'INDIRECT'})
+    sunb = bake(p, 'sunBounce', {'INDIRECT'}, with_probes=(p == 0))
     wn.links.new(mr.outputs['Result'], bg.inputs['Strength'])
     files = {}
-    for kind, img in (('sky', sky), ('sunBounce', sunb)):
+    for kind, img in (('sky', flat), ('skyRnm0', rnm[0]), ('skyRnm1', rnm[1]), ('skyRnm2', rnm[2]), ('sunBounce', sunb)):
         rgb = img[..., :3]
         if DENOISE:
             t = time.time()
@@ -427,7 +581,7 @@ for p in range(len(pages)):
             n = nrm[..., :3] * 2 - 1
             rgb = atrous_denoise(rgb, pos[..., :3], n, valid)
             print(f'[bake] denoise {kind}: {time.time() - t:.1f}s')
-        name = f'lm_{p}_{"sky" if kind == "sky" else "sun"}.hdr'
+        name = f'lm_{p}_{ {"sky": "sky", "skyRnm0": "rnm0", "skyRnm1": "rnm1", "skyRnm2": "rnm2", "sunBounce": "sun"}[kind] }.hdr'
         write_hdr(os.path.join(OUT_DIR, name), rgb[::-1].copy())
         files[kind] = name
         # Diagnostics: open-sky reference texel values.
@@ -440,16 +594,31 @@ for ob, oid, _ in lightmapped:
     page, X, Y, W, H = placement[oid]
     objects_out[oid] = {'page': page, 'scaleOffset': [W / PAGE, H / PAGE, X / PAGE, 1 - (H + Y) / PAGE]}
 
+probe_out = []
+for pv in probe_volumes:
+    sky = probe_samples(pv, pv['result']['sky'])
+    sunv = probe_samples(pv, pv['result']['sunBounce'])
+    valid = sky.max(axis=(1, 2)) > 0.003
+    data = np.stack([sky, sunv], axis=1)  # (n, 2, 6, 3)
+    data, ok = dilate_invalid(data, valid, pv['dims'])
+    fname = f"probes_{pv['id']}.bin"
+    data.astype(np.float16).tofile(os.path.join(OUT_DIR, fname))
+    probe_out.append({'id': pv['id'], 'origin': pv['origin'], 'spacing': pv['spacing'], 'dims': pv['dims'], 'file': fname,
+                      'layout': 'f16[z][y][x][component sky,sunBounce][face +x,-x,+y,-y,+z,-z][rgb]',
+                      'validFraction': round(float(valid.mean()), 3)})
+    print(f"[bake] probe volume {pv['id']}: {100 * valid.mean():.0f}% valid, open-sky up-face mean {sky[valid][:, 2].mean(axis=0).round(3).tolist()}")
+
 lms = {
     'format': 'rill.lightmapset',
     'version': 1,
     'backend': f'blender-cycles {bpy.app.version_string}',
     'bakedAt': time.strftime('%Y-%m-%dT%H:%M:%S'),
     'atlasSize': [PAGE, PAGE],
-    'components': ['sky', 'sunBounce'],
+    'components': ['sky', 'skyRnm0', 'skyRnm1', 'skyRnm2', 'sunBounce'],
     'referenceSun': {'azimuth': az, 'elevation': el},
     'pages': page_files,
     'objects': objects_out,
+    'probeVolumes': probe_out,
     'stats': {'samples': SAMPLES, 'denoise': DENOISE, 'bakeSeconds': round(time.time() - t_bake, 1), 'texelsUsed': used, 'objects': len(lightmapped)},
 }
 with open(os.path.join(OUT_DIR, 'lightmapset.json'), 'w') as f:

@@ -93,7 +93,21 @@ export interface MarkerObject extends MapObjectBase {
   pitch?: number;
 }
 
-export type MapObject = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject;
+/** Grid of baked ambient-cube irradiance probes (lighting for dynamic / instanced objects). */
+export interface ProbeVolumeObject extends MapObjectBase {
+  type: 'probeVolume';
+  /** transform.position = centre. */
+  volume: { size: [number, number, number]; spacing: [number, number, number] };
+}
+
+/** Box-projected reflection probe, captured in-engine. */
+export interface ReflectionProbeObject extends MapObjectBase {
+  type: 'reflectionProbe';
+  /** transform.position = capture point; box in world space (parallax + influence). */
+  probe: { boxMin: [number, number, number]; boxMax: [number, number, number]; blend?: number; priority?: number };
+}
+
+export type MapObject = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject;
 
 export interface LightmapSetDocument {
   format: 'rill.lightmapset';
@@ -102,9 +116,18 @@ export interface LightmapSetDocument {
   bakedAt?: string;
   atlasSize: [number, number];
   /** Component order per page; runtime layer = page * components.length + index. */
-  components: ('sky' | 'sunBounce')[];
+  components: ('sky' | 'skyRnm0' | 'skyRnm1' | 'skyRnm2' | 'sunBounce')[];
   referenceSun?: { azimuth: number; elevation: number };
   pages: Record<string, string>[];
   objects: Record<string, { page: number; scaleOffset: [number, number, number, number] }>;
+  probeVolumes?: {
+    id: string;
+    origin: [number, number, number];
+    spacing: [number, number, number];
+    dims: [number, number, number];
+    file: string;
+    layout: string;
+    validFraction?: number;
+  }[];
   stats?: Record<string, unknown>;
 }

@@ -8,7 +8,7 @@ import { builtinMesh } from '../assets/primitives';
 import { loadLightmapSet, type LoadedLightmaps } from '../render/lightmaps';
 import { buildDecals } from '../render/decals';
 import { CollisionWorld } from './collision';
-import type { DecalObject, MapDocument, MapObject, Transform } from './mapformat';
+import type { DecalObject, MapDocument, MapObject, ReflectionProbeObject, Transform } from './mapformat';
 
 /**
  * Runtime world built from a MapDocument. The document stays the source of
@@ -53,6 +53,7 @@ export class World {
   readonly objects = new Map<string, RuntimeObject>();
   readonly renderables: Renderable[] = [];
   readonly lights: LightData[] = [];
+  readonly reflectionProbes: ReflectionProbeObject[] = [];
   readonly collision = new CollisionWorld();
   private meshes = new Map<string, Promise<GpuMesh>>();
   lightmaps: LoadedLightmaps | null = null;
@@ -84,6 +85,7 @@ export class World {
       w.decalBytes = db.bytes;
     }
     renderer.setLights(w.lights);
+    renderer.setReflectionProbes(w.reflectionProbes);
     w.loadMs = performance.now() - t0;
     return w;
   }
@@ -172,8 +174,12 @@ export class World {
         });
         break;
       }
+      case 'reflectionProbe':
+        this.reflectionProbes.push(o);
+        break;
       case 'decal':
       case 'marker':
+      case 'probeVolume':
         break;
     }
   }
@@ -191,7 +197,8 @@ export class World {
         applied++;
       }
     }
-    this.renderer.setLightmaps(lm.view, lm.layers);
+    this.renderer.setLightmaps(lm.view, lm.layers, lm.directional);
+    if (lm.probeVolume) this.renderer.setProbeVolume(lm.probeVolume);
     console.info(`[world] lightmaps: ${applied} objects, ${lm.layers} layers, ${(lm.bytes / 1048576).toFixed(1)} MB`);
   }
 

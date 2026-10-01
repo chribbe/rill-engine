@@ -110,6 +110,11 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
   light.add(S, 'lightmapBicubic').name('Bicubic lightmap filter');
   light.add(S, 'shRatio').name('Normal detail in lightmaps');
   light.add(S, 'specOcclusion').name('Reflection normalisation');
+  light.add(S, 'directionalLightmaps').name('Directional lightmaps (RNM)');
+  light.add(S, 'probeVolume').name('Probe volume (dynamic objects)');
+  light.add(S, 'reflectionProbes').name('Reflection probes').onChange(() => env.touch());
+  light.add(S, 'showProbes').name('Show reflection probe boxes');
+  light.add({ recapture: () => env.touch() }, 'recapture').name('Recapture reflection probes');
 
   const tex = gui.addFolder('Materials / textures');
   const aniso = { a: S.anisotropy };

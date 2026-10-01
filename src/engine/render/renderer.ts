@@ -10,6 +10,10 @@ import { ShadowSystem, CASCADES, type ShadowSettings } from './shadows';
 import { InstanceStore } from './instances';
 import { GpuTimer } from './timing';
 import { ExposureController } from './exposure';
+import { ReflectionProbes, faceView, CAPTURE_PRE_EXPOSURE, PROBE_SIZE } from './reflections';
+import type { LoadedProbeVolume } from './lightmaps';
+import type { ReflectionProbeObject } from '../scene/mapformat';
+import type { EnvironmentState, DerivedEnvironment } from '../scene/environment';
 import { aabbVisible, extractPlanes, type Plane } from './culling';
 import type { Camera } from '../scene/camera';
 import { Environment, SUN_TOA_LUX } from '../scene/environment';
@@ -24,6 +28,19 @@ export interface Renderable {
   castShadow: boolean;
   visible: boolean;
   id: string;
+}
+
+/** Anything that can be rendered from: the player camera or a probe face. */
+export interface ViewParams {
+  position: ArrayLike<number>;
+  forward: ArrayLike<number>;
+  view: ArrayLike<number>;
+  proj: ArrayLike<number>;
+  viewProj: Float32Array;
+  invViewProj: ArrayLike<number>;
+  fovY: number;
+  aspect: number;
+  near: number;
 }
 
 export interface LightData {
@@ -96,6 +113,10 @@ export interface RenderSettings {
   bloom: number;
   /** Auto exposure (eye adaptation) enabled; limits come from the environment. */
   autoExposure: boolean;
+  directionalLightmaps: boolean;
+  probeVolume: boolean;
+  reflectionProbes: boolean;
+  showProbes: boolean;
 }
 
 export function defaultRenderSettings(): RenderSettings {
@@ -140,6 +161,10 @@ export function defaultRenderSettings(): RenderSettings {
     renderScale: 1,
     bloom: 0.04,
     autoExposure: true,
+    directionalLightmaps: true,
+    probeVolume: true,
+    reflectionProbes: true,
+    showProbes: false,
   };
 }
 
@@ -275,6 +300,15 @@ export class Renderer {
   private cloudNoiseView: GPUTextureView;
   private postParams: GPUBuffer;
   readonly exposure: ExposureController;
+  private captureFrame = new FrameUniforms();
+  private captureFrameBuffer: GPUBuffer;
+  private captureFrameBG?: GPUBindGroup;
+  probes: ReflectionProbes | null = null;
+  probeVolume: LoadedProbeVolume | null = null;
+  lightmapDirectional = false;
+  private dummyVolume: GPUTextureView;
+  private dummyCubeArray: GPUTextureView;
+  private dummyProbeData: GPUBuffer;
   private bloomLevels: GPUTexture[] = [];
   private bloomViews: GPUTextureView[] = [];
   private bloomDownBGs: GPUBindGroup[] = [];
@@ -332,6 +366,10 @@ export class Renderer {
     this.decalCellBuffer = d.createBuffer({ label: 'decalCells', size: 64, usage: BU.STORAGE | BU.COPY_DST });
     this.postParams = d.createBuffer({ label: 'post', size: 64, usage: BU.UNIFORM | BU.COPY_DST });
     this.exposure = new ExposureController(d);
+    this.captureFrameBuffer = d.createBuffer({ label: 'captureFrame', size: FRAME_BYTES, usage: BU.UNIFORM | BU.COPY_DST });
+    this.dummyVolume = d.createTexture({ size: [1, 1, 1], dimension: '3d', format: 'rgba16float', usage: TU.TEXTURE_BINDING }).createView({ dimension: '3d' });
+    this.dummyCubeArray = d.createTexture({ size: [1, 1, 6], format: 'rgba16float', usage: TU.TEXTURE_BINDING }).createView({ dimension: 'cube-array', arrayLayerCount: 6 });
+    this.dummyProbeData = d.createBuffer({ size: 256, usage: BU.STORAGE });
     this.linesBuffer = d.createBuffer({ label: 'lines', size: 16, usage: BU.VERTEX | BU.COPY_DST });
 
     const blackArr = d.createTexture({ size: [1, 1, 2], format: 'rgba16float', usage: TU.TEXTURE_BINDING | TU.COPY_DST });
@@ -365,6 +403,9 @@ export class Renderer {
         { binding: 16, visibility: SS.FRAGMENT, texture: { viewDimension: '2d-array' } },
         { binding: 17, visibility: SS.FRAGMENT, texture: {} },
         { binding: 18, visibility: SS.FRAGMENT, texture: {} },
+        { binding: 19, visibility: SS.FRAGMENT, texture: { viewDimension: '3d' } },
+        { binding: 20, visibility: SS.FRAGMENT, texture: { viewDimension: 'cube-array' } },
+        { binding: 21, visibility: SS.FRAGMENT, buffer: { type: 'read-only-storage' } },
       ],
     });
     this.materialLayout = d.createBindGroupLayout({
@@ -433,9 +474,22 @@ export class Renderer {
     this.createAnisoSampler(a);
   }
 
-  setLightmaps(view: GPUTextureView, layers: number) {
+  setLightmaps(view: GPUTextureView, layers: number, directional = false) {
     this.lightmapView = view;
     this.lightmapLayers = layers;
+    this.lightmapDirectional = directional;
+    this.bindingsDirty = true;
+  }
+
+  setProbeVolume(pv: LoadedProbeVolume) {
+    this.probeVolume = pv;
+    this.bindingsDirty = true;
+  }
+
+  /** Creates the reflection probe set (captured on the next frame / env change). */
+  setReflectionProbes(objects: ReflectionProbeObject[]) {
+    this.probes = objects.length ? new ReflectionProbes(this.device, this.sky, objects) : null;
+    this.lastEnvVersion = -1;
     this.bindingsDirty = true;
   }
   setDebugGrid(view: GPUTextureView) {
@@ -497,7 +551,10 @@ export class Renderer {
   // ------------------------------------------------------------------ pipelines
 
   /** Global shader features active this frame (feed the `override` constants). */
-  private features = { debug: false, decals: true, wetness: false, shadows: true, lightmap: true, localLights: false, fog: true, specAA: true, detail: true, macro: true };
+  private features = {
+    debug: false, decals: true, wetness: false, shadows: true, lightmap: true, localLights: false, fog: true, specAA: true, detail: true, macro: true,
+    dirLightmap: false, probeVolume: false, reflProbes: false,
+  };
   /** Set false to compile the full runtime uber-shader (for comparisons). */
   specialize = true;
 
@@ -519,6 +576,9 @@ export class Renderer {
       USE_FOG: on(g.fog),
       USE_FOLIAGE: on(foliage),
       USE_SPEC_AA: on(g.specAA),
+      USE_DIR_LIGHTMAP: on(g.dirLightmap && g.lightmap && !foliage),
+      USE_PROBE_VOLUME: on(g.probeVolume),
+      USE_REFL_PROBES: on(g.reflProbes),
     };
     let bits = 0;
     Object.values(constants).forEach((v, i) => (bits |= v << i));
@@ -528,8 +588,7 @@ export class Renderer {
   /** Diagnostic: replaces the opaque fragment entry point (e.g. 'fsDiagTrivial'). */
   diagFragment: string | null = null;
 
-  private stdPipeline(masked: boolean, doubleSided: boolean, mat: Material): GPURenderPipeline {
-    const msaa = this.settings.msaa;
+  private stdPipeline(masked: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa): GPURenderPipeline {
     const v = this.variant(mat);
     const key = `std:${masked}:${doubleSided}:${msaa}:${this.diagFragment}:${v.key}`;
     let p = this.pipelines.get(key);
@@ -550,8 +609,7 @@ export class Renderer {
   }
 
   /** Masked geometry: depth/coverage prepass (colour writes off) or the equal-depth lit pass. */
-  private maskedPipeline(prepass: boolean, doubleSided: boolean, mat: Material): GPURenderPipeline {
-    const msaa = this.settings.msaa;
+  private maskedPipeline(prepass: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa): GPURenderPipeline {
     // Hardware A2C when multisampled (fast path); discard-based test otherwise.
     const hwA2C = prepass && msaa && this.settings.alphaToCoverage && this.hwA2C;
     const v = this.variant(mat);
@@ -650,8 +708,7 @@ export class Renderer {
     return p;
   }
 
-  private skyPipeline(): GPURenderPipeline {
-    const msaa = this.settings.msaa;
+  private skyPipeline(msaa = this.settings.msaa): GPURenderPipeline {
     const key = `sky:${msaa}`;
     let p = this.pipelines.get(key);
     if (!p) {
@@ -850,11 +907,8 @@ export class Renderer {
 
   private rebuildBindings() {
     const d = this.device;
-    this.frameBG = d.createBindGroup({
-      label: 'frame',
-      layout: this.frameLayout,
-      entries: [
-        { binding: 0, resource: { buffer: this.frameBuffer } },
+    const frameEntries = (buf: GPUBuffer): GPUBindGroupEntry[] => [
+        { binding: 0, resource: { buffer: buf } },
         { binding: 1, resource: { buffer: this.instances.buffer } },
         { binding: 2, resource: { buffer: this.visibleBuffer } },
         { binding: 3, resource: this.sampAniso },
@@ -873,8 +927,12 @@ export class Renderer {
         { binding: 16, resource: this.decalAtlasView },
         { binding: 17, resource: this.debugGridView },
         { binding: 18, resource: this.cloudNoiseView },
-      ],
-    });
+        { binding: 19, resource: this.probeVolume?.view ?? this.dummyVolume },
+        { binding: 20, resource: this.probes?.cubeArrayView ?? this.dummyCubeArray },
+        { binding: 21, resource: { buffer: this.probes?.dataBuffer ?? this.dummyProbeData } },
+      ];
+    this.frameBG = d.createBindGroup({ label: 'frame', layout: this.frameLayout, entries: frameEntries(this.frameBuffer) });
+    this.captureFrameBG = d.createBindGroup({ label: 'captureFrame', layout: this.frameLayout, entries: frameEntries(this.captureFrameBuffer) });
     this.shadowBGs = [];
     for (let i = 0; i < CASCADES; i++) {
       this.shadowBGs.push(
@@ -917,50 +975,66 @@ export class Renderer {
 
   // ------------------------------------------------------------------ frame
 
-  render(camera: Camera, env: Environment, renderables: Renderable[], dt: number) {
-    const t0 = performance.now();
+  /** Flags + shader feature set for a view (main view or probe capture). */
+  private viewFlags(envState: EnvironmentState, de: DerivedEnvironment, capture: boolean, msaa: boolean) {
     const S = this.settings;
-    this.time += dt;
-    const d = this.device;
-    const canvas = this.gpu.canvas;
-    this.resize(canvas.width, canvas.height);
-    camera.aspect = this.width / this.height;
-    camera.update();
-
-    if (this.shadows.ensure(S.shadows.resolution)) this.bindingsDirty = true;
-
-    // ---- environment + frame uniforms
-    const envState = env.state;
-    const de = env.derive();
-    const F = this.frame;
-    F.mat(FO.viewProj, camera.viewProj);
-    F.mat(FO.view, camera.view);
-    F.mat(FO.proj, camera.proj);
-    F.mat(FO.invViewProj, camera.invViewProj);
     const shadowsOn = S.shadows.enabled && de.sunDir[1] > -0.02;
-    this.shadows.update(camera.position as Float32Array, camera.forward as Float32Array, camera.fovY, camera.aspect, camera.near, de.sunDir, S.shadows);
+    const fogOn = S.fog && envState.fog.enabled;
+    let flags = 0;
+    if (shadowsOn) flags |= RF.SHADOWS;
+    if (fogOn) flags |= RF.FOG;
+    if (S.lightmaps && this.lightmapLayers > 0) flags |= RF.LIGHTMAPS;
+    if (S.detailStrength > 0) flags |= RF.DETAIL;
+    if (S.decals) flags |= RF.DECALS;
+    if (S.specularAA > 0) flags |= RF.SPEC_AA;
+    if (S.localLights && envState.lights.intensity > 0) flags |= RF.LOCAL_LIGHTS;
+    if (S.shadows.cascadeBlend) flags |= RF.CASCADE_BLEND;
+    if (S.shRatio) flags |= RF.SH_RATIO;
+    if (S.specOcclusion) flags |= RF.SPEC_OCCLUSION;
+    if (S.envSpecular) flags |= RF.ENV_SPEC;
+    if (S.skyAmbient) flags |= RF.SKY_AMBIENT;
+    if (S.sun) flags |= RF.SUN;
+    if (S.alphaToCoverage && msaa) flags |= RF.A2C;
+    if (S.shadows.pcf7) flags |= RF.PCF7;
+    if (S.directionalLightmaps && this.lightmapDirectional) flags |= RF.DIR_LIGHTMAP;
+    if (S.probeVolume && this.probeVolume) flags |= RF.PROBE_VOLUME;
+    const reflOn = !capture && S.reflectionProbes && !!this.probes && this.probes.count > 0 && this.probes.capturedVersion >= 0;
+    if (reflOn) flags |= RF.REFL_PROBES;
+    const ft = this.features;
+    ft.debug = !capture && S.debugView !== 0;
+    ft.decals = S.decals && this.decalCount > 0;
+    ft.wetness = envState.weather.wetness > 0;
+    ft.shadows = shadowsOn;
+    ft.lightmap = S.lightmaps && this.lightmapLayers > 0;
+    ft.localLights = (flags & RF.LOCAL_LIGHTS) !== 0 && this.lightCount > 0;
+    ft.fog = fogOn;
+    ft.specAA = S.specularAA > 0;
+    ft.detail = S.detailStrength > 0;
+    ft.macro = S.macroStrength > 0;
+    ft.dirLightmap = (flags & RF.DIR_LIGHTMAP) !== 0;
+    ft.probeVolume = (flags & RF.PROBE_VOLUME) !== 0;
+    ft.reflProbes = reflOn;
+    return { flags, shadowsOn, fogOn };
+  }
+
+  private writeFrameUniforms(F: FrameUniforms, buffer: GPUBuffer, v: ViewParams, width: number, height: number, env: Environment, de: DerivedEnvironment,
+    preExposure: number, ev: number, flags: number, debugView: number) {
+    const S = this.settings;
+    const envState = env.state;
+    F.mat(FO.viewProj, v.viewProj);
+    F.mat(FO.view, v.view);
+    F.mat(FO.proj, v.proj);
+    F.mat(FO.invViewProj, v.invViewProj);
     for (let i = 0; i < CASCADES; i++) F.mat(FO.cascadeViewProj + i * 16, this.shadows.cascades[i].viewProj);
-    F.vec4(FO.cameraPos, camera.position[0], camera.position[1], camera.position[2], this.time);
-    F.vec4(FO.viewport, this.width, this.height, 1 / this.width, 1 / this.height);
+    F.vec4(FO.cameraPos, v.position[0], v.position[1], v.position[2], this.time);
+    F.vec4(FO.viewport, width, height, 1 / width, 1 / height);
     const sunCosR = Math.cos(((envState.sun.angularDiameter / 2) * Math.PI) / 180);
     F.vec4(FO.sunDir, de.sunDir[0], de.sunDir[1], de.sunDir[2], sunCosR);
     F.vec4(FO.sunColor, de.sunIlluminance[0], de.sunIlluminance[1], de.sunIlluminance[2], 1);
     const A = envState.ambient;
-    const ex = envState.exposure;
-    const ev = this.exposure.update({
-      auto: S.autoExposure && (ex.auto ?? true),
-      ev100: ex.ev100,
-      compensation: ex.compensation,
-      min: ex.min ?? ex.ev100 - 2,
-      max: ex.max ?? ex.ev100 + 1.5,
-    }, dt);
-    const preExposure = 1 / (1.2 * Math.pow(2, ev));
-    this.currentEV = ev;
-    this.currentPreExposure = preExposure;
     F.vec4(FO.exposure, preExposure, ev, envState.sky.intensity, A.indirect);
     const fog = envState.fog;
     const hazeDensity = fog.hazeVisibilityKm > 0 ? 3.912 / (fog.hazeVisibilityKm * 1000) : 0;
-    const fogOn = S.fog && fog.enabled;
     F.vec4(FO.fog0, fog.density, fog.height, fog.falloff, hazeDensity);
     F.vec4(FO.fog1, fog.anisotropy, fog.startDistance, fog.maxOpacity, 0);
     const fa = parseColor(fog.albedo, [1, 1, 1, 1]);
@@ -978,67 +1052,25 @@ export class Renderer {
     const ga = parseColor(A.groundAlbedo, [0.12, 0.12, 0.1, 1]);
     F.vec4(FO.ground, ga[0], ga[1], ga[2], envState.lights.intensity);
     F.vec4(FO.lmParams, S.lightmaps ? 1 : 0, S.lightmapBicubic ? 1 : 0, A.lightmapSky, A.lightmapSun);
-    let flags = 0;
-    if (shadowsOn) flags |= RF.SHADOWS;
-    if (fogOn) flags |= RF.FOG;
-    if (S.lightmaps && this.lightmapLayers > 0) flags |= RF.LIGHTMAPS;
-    if (S.detailStrength > 0) flags |= RF.DETAIL;
-    if (S.decals) flags |= RF.DECALS;
-    if (S.specularAA > 0) flags |= RF.SPEC_AA;
-    if (S.localLights && envState.lights.intensity > 0) flags |= RF.LOCAL_LIGHTS;
-    if (S.shadows.cascadeBlend) flags |= RF.CASCADE_BLEND;
-    if (S.shRatio) flags |= RF.SH_RATIO;
-    if (S.specOcclusion) flags |= RF.SPEC_OCCLUSION;
-    if (S.envSpecular) flags |= RF.ENV_SPEC;
-    if (S.skyAmbient) flags |= RF.SKY_AMBIENT;
-    if (S.sun) flags |= RF.SUN;
-    if (S.alphaToCoverage && S.msaa) flags |= RF.A2C;
-    if (S.shadows.pcf7) flags |= RF.PCF7;
-    F.uvec4(FO.debug, S.debugView, flags, this.lightCount, this.decalCount);
-    const ft = this.features;
-    ft.debug = S.debugView !== 0;
-    ft.decals = S.decals && this.decalCount > 0;
-    ft.wetness = envState.weather.wetness > 0;
-    ft.shadows = shadowsOn;
-    ft.lightmap = S.lightmaps && this.lightmapLayers > 0;
-    ft.localLights = (flags & RF.LOCAL_LIGHTS) !== 0 && this.lightCount > 0;
-    ft.fog = fogOn;
-    ft.specAA = S.specularAA > 0;
-    ft.detail = S.detailStrength > 0;
-    ft.macro = S.macroStrength > 0;
+    F.uvec4(FO.debug, debugView, flags, this.lightCount, this.decalCount);
     const g = this.decalGrid;
     F.vec4(FO.decalGrid, g.originX, g.originZ, g.cell, 1 / g.cell);
     F.uvec4(FO.decalGrid2, g.nx, g.nz, g.maxPer, 0);
-    F.vec4(FO.atmo, PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM, 0.1 + Math.max(0, camera.position[1]) / 1000, sk.turbidity * AEROSOL_BASE);
+    F.vec4(FO.atmo, PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM, 0.1 + Math.max(0, v.position[1]) / 1000, sk.turbidity * AEROSOL_BASE);
     F.vec4(FO.sky, SUN_TOA_LUX * envState.sun.intensity, 0, ENV_SPEC_MIPS, sk.cloudSharpness);
     const tint = parseColor(sk.tint, [1, 1, 1, 1]);
     F.vec4(FO.skyTint, tint[0], tint[1], tint[2], 0);
-    d.queue.writeBuffer(this.frameBuffer, 0, F.data);
-
-    // Post params
-    const post = new ArrayBuffer(64);
-    const pu = new Uint32Array(post);
-    const pf = new Float32Array(post);
-    pu[0] = S.tonemapper;
-    pu[2] = S.dither ? 1 : 0;
-    const pp = envState.post;
-    pf.set([envState.exposure.compensation * 0, pp.contrast, pp.saturation, pp.temperature], 4);
-    const wb = whiteBalance(pp.temperature);
-    pf.set([wb[0], wb[1], wb[2], 1], 8);
-    const bloomOn = S.bloom > 0 && S.debugView === 0;
-    pf.set([bloomOn ? S.bloom : 0, 1 / Math.max(1, this.bloomLevels.length), 0, 0], 12);
-    d.queue.writeBuffer(this.postParams, 0, post);
-
-    // ---- culling + draw lists
-    const tc = performance.now();
-    if (S.freezeCulling && !this.frozenPlanes) {
-      this.frozenPlanes = extractPlanes(camera.viewProj, { near: true, far: false, zeroToOne: true, reverseZ: true });
-      this.frozenViewProj = new Float32Array(camera.viewProj);
-    } else if (!S.freezeCulling) {
-      this.frozenPlanes = null;
-      this.frozenViewProj = null;
+    const pv = this.probeVolume;
+    if (pv) {
+      F.vec4(FO.pvOrigin, pv.origin[0], pv.origin[1], pv.origin[2], 1);
+      F.vec4(FO.pvInvSpacing, 1 / pv.spacing[0], 1 / pv.spacing[1], 1 / pv.spacing[2], 0);
     }
-    const planes = this.frozenPlanes ?? extractPlanes(camera.viewProj, { near: true, far: false, zeroToOne: true, reverseZ: true });
+    F.uvec4(FO.pvDims, pv ? pv.dims[0] : 1, pv ? pv.dims[1] : 1, pv ? pv.dims[2] : 1, this.probes?.count ?? 0);
+    this.device.queue.writeBuffer(buffer, 0, F.data);
+  }
+
+  /** Culls and buckets the main list + shadow cascades; uploads the visible list. */
+  private buildLists(planes: Plane[], renderables: Renderable[], shadowsOn: boolean) {
     const main = this.mainList;
     main.reset();
     let visibleObjects = 0;
@@ -1067,75 +1099,69 @@ export class Renderer {
         shadowTris += list.triangles;
       }
     }
-    // Upload visible list (grow GPU buffer if needed).
     if (offset * 4 > this.visibleBuffer.size) {
       this.visibleBuffer.destroy();
-      this.visibleBuffer = d.createBuffer({ label: 'visible', size: this.visible.data.byteLength, usage: BU.STORAGE | BU.COPY_DST });
+      this.visibleBuffer = this.device.createBuffer({ label: 'visible', size: this.visible.data.byteLength, usage: BU.STORAGE | BU.COPY_DST });
       this.bindingsDirty = true;
     }
-    if (offset > 0) d.queue.writeBuffer(this.visibleBuffer, 0, this.visible.data, 0, offset);
+    if (offset > 0) this.device.queue.writeBuffer(this.visibleBuffer, 0, this.visible.data, 0, offset);
     this.instances.upload();
     if (this.instances.generation !== this.instanceGen) this.bindingsDirty = true;
     if (this.bindingsDirty) this.rebuildBindings();
-    const tcEnd = performance.now();
+    return { visibleObjects, shadowDraws, shadowTris };
+  }
 
-    // ---- encode
-    const enc = d.createCommandEncoder({ label: 'frame' });
-    this.timer.beginFrame();
-    if (env.version !== this.lastEnvVersion || this.sky.dirty) {
-      this.sky.encodeUpdate(enc, this.frameBuffer, { mieScale: sk.turbidity * AEROSOL_BASE, cameraAltitudeKm: 0.1, groundAlbedo: [ga[0], ga[1], ga[2]] }, de.sunDir);
-      this.lastEnvVersion = env.version;
-    }
+  private encodeShadows(enc: GPUCommandEncoder, timestamps: boolean) {
     const arena = this.arena;
-
-    // Shadows
-    if (shadowsOn) {
-      for (let ci = 0; ci < CASCADES; ci++) {
-        const pass = enc.beginRenderPass({
-          label: `shadow${ci}`,
-          colorAttachments: [],
-          depthStencilAttachment: { view: this.shadows.layerViews[ci], depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' },
-          timestampWrites: ci === 0 ? this.timer.pass('shadow0') : ci === 3 ? this.timer.pass('shadow3') : undefined,
-        });
-        pass.setBindGroup(0, this.shadowBGs[ci]);
-        pass.setVertexBuffer(0, arena.pos.buffer);
-        pass.setVertexBuffer(1, arena.attr.buffer);
-        pass.setIndexBuffer(arena.index.buffer, 'uint32');
-        let cur: GPURenderPipeline | null = null;
-        let curMat: Material | null = null;
-        for (const dr of this.shadowLists[ci].draws) {
-          const p = this.shadowPipeline(dr.masked, dr.doubleSided);
-          if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
-          if (dr.material !== curMat) { pass.setBindGroup(1, dr.material.bindGroup); curMat = dr.material; }
-          pass.drawIndexed(dr.prim.indexCount, dr.count, dr.prim.firstIndex, dr.prim.baseVertex, dr.first);
-        }
-        pass.end();
+    for (let ci = 0; ci < CASCADES; ci++) {
+      const pass = enc.beginRenderPass({
+        label: `shadow${ci}`,
+        colorAttachments: [],
+        depthStencilAttachment: { view: this.shadows.layerViews[ci], depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' },
+        timestampWrites: !timestamps ? undefined : ci === 0 ? this.timer.pass('shadow0') : ci === 3 ? this.timer.pass('shadow3') : undefined,
+      });
+      pass.setBindGroup(0, this.shadowBGs[ci]);
+      pass.setVertexBuffer(0, arena.pos.buffer);
+      pass.setVertexBuffer(1, arena.attr.buffer);
+      pass.setIndexBuffer(arena.index.buffer, 'uint32');
+      let cur: GPURenderPipeline | null = null;
+      let curMat: Material | null = null;
+      for (const dr of this.shadowLists[ci].draws) {
+        const p = this.shadowPipeline(dr.masked, dr.doubleSided);
+        if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
+        if (dr.material !== curMat) { pass.setBindGroup(1, dr.material.bindGroup); curMat = dr.material; }
+        pass.drawIndexed(dr.prim.indexCount, dr.count, dr.prim.firstIndex, dr.prim.baseVertex, dr.first);
       }
+      pass.end();
     }
+  }
 
-    // Main forward pass
-    const overdraw = S.debugView === DEBUG_VIEWS.overdraw;
-    const colorView = S.msaa ? this.msaaColor!.createView() : this.resolved!.createView();
+  /** Opaque, masked prepass + colour, sky. Returns the open pass for overlays. */
+  private encodeMain(enc: GPUCommandEncoder, target: { color: GPUTextureView; resolve?: GPUTextureView; depth: GPUTextureView; msaa: boolean },
+    frameBG: GPUBindGroup, overdraw: boolean, timestamps: boolean): GPURenderPassEncoder {
+    const arena = this.arena;
+    const msaa = target.msaa;
     const pass = enc.beginRenderPass({
       label: 'main',
       colorAttachments: [{
-        view: colorView,
-        resolveTarget: S.msaa ? this.resolved!.createView() : undefined,
+        view: target.color,
+        resolveTarget: target.resolve,
         clearValue: overdraw ? { r: 0, g: 0, b: 0, a: -1 } : { r: 0, g: 0, b: 0, a: 1 },
         loadOp: 'clear',
-        storeOp: S.msaa ? 'discard' : 'store',
+        storeOp: target.resolve ? 'discard' : 'store',
       }],
-      depthStencilAttachment: { view: this.depth!.createView(), depthClearValue: 0, depthLoadOp: 'clear', depthStoreOp: 'discard' },
-      timestampWrites: this.timer.pass('main'),
+      depthStencilAttachment: { view: target.depth, depthClearValue: 0, depthLoadOp: 'clear', depthStoreOp: 'discard' },
+      timestampWrites: timestamps ? this.timer.pass('main') : undefined,
     });
-    pass.setBindGroup(0, this.frameBG!);
+    pass.setBindGroup(0, frameBG);
     pass.setVertexBuffer(0, arena.pos.buffer);
     pass.setVertexBuffer(1, arena.attr.buffer);
     pass.setIndexBuffer(arena.index.buffer, 'uint32');
     let cur: GPURenderPipeline | null = null;
     let curMat: Material | null = null;
+    const draws = this.mainList.draws;
     const drawList = (filter: (d: Draw) => boolean, pick: (d: Draw) => GPURenderPipeline) => {
-      for (const dr of main.draws) {
+      for (const dr of draws) {
         if (!filter(dr)) continue;
         const p = pick(dr);
         if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
@@ -1146,31 +1172,152 @@ export class Renderer {
     if (overdraw) {
       drawList(() => true, (dr) => this.overdrawPipeline(dr.doubleSided));
     } else if (this.maskedMode === 'direct') {
-      drawList(() => true, (dr) => this.stdPipeline(dr.masked, dr.doubleSided, dr.material));
+      drawList(() => true, (dr) => this.stdPipeline(dr.masked, dr.doubleSided, dr.material, msaa));
     } else {
       // Opaque first (fills depth), then masked prepass, then masked colour at equal depth.
-      drawList((d) => !d.masked, (dr) => this.stdPipeline(false, dr.doubleSided, dr.material));
-      drawList((d) => d.masked, (dr) => this.maskedPipeline(true, dr.doubleSided, dr.material));
-      if (this.maskedMode === 'prepass') drawList((d) => d.masked, (dr) => this.maskedPipeline(false, dr.doubleSided, dr.material));
+      drawList((d) => !d.masked, (dr) => this.stdPipeline(false, dr.doubleSided, dr.material, msaa));
+      drawList((d) => d.masked, (dr) => this.maskedPipeline(true, dr.doubleSided, dr.material, msaa));
+      if (this.maskedMode === 'prepass') drawList((d) => d.masked, (dr) => this.maskedPipeline(false, dr.doubleSided, dr.material, msaa));
     }
     if (!overdraw) {
-      pass.setPipeline(this.skyPipeline());
+      pass.setPipeline(this.skyPipeline(msaa));
       pass.draw(3);
     }
+    return pass;
+  }
+
+  /**
+   * Captures every reflection probe (6 faces each) from the lit scene, then
+   * decodes, prefilters and SH-projects them. Runs on environment changes.
+   */
+  captureProbes(env: Environment, renderables: Renderable[]) {
+    const P = this.probes;
+    if (!P || P.count === 0) return;
+    const t0 = performance.now();
+    const d = this.device;
+    const de = env.derive();
+    const S = this.settings;
+    for (let p = 0; p < P.count; p++) {
+      const pos = P.probes[p].transform.position;
+      for (let face = 0; face < 6; face++) {
+        const v = faceView(pos, face);
+        const { flags, shadowsOn } = this.viewFlags(env.state, de, true, false);
+        this.shadows.update(v.position, v.forward, v.fovY, v.aspect, v.near, de.sunDir, S.shadows);
+        this.writeFrameUniforms(this.captureFrame, this.captureFrameBuffer, v, PROBE_SIZE, PROBE_SIZE, env, de, CAPTURE_PRE_EXPOSURE, 10, flags, 0);
+        const planes = extractPlanes(v.viewProj, { near: true, far: false, zeroToOne: true, reverseZ: true });
+        this.buildLists(planes, renderables, shadowsOn);
+        const enc = d.createCommandEncoder({ label: `probe${p}:${face}` });
+        if (shadowsOn) this.encodeShadows(enc, false);
+        const pass = this.encodeMain(enc, { color: P.captureColor.createView(), depth: P.captureDepth.createView(), msaa: false }, this.captureFrameBG!, false, false);
+        pass.end();
+        P.encodeDecodeFace(enc, face);
+        if (face === 5) P.encodeFilter(enc, p);
+        d.queue.submit([enc.finish()]);
+      }
+    }
+    P.capturedVersion = env.version;
+    P.lastCaptureMs = performance.now() - t0;
+    console.info(`[probes] captured ${P.count} reflection probes in ${P.lastCaptureMs.toFixed(0)} ms (CPU)`);
+  }
+
+  render(camera: Camera, env: Environment, renderables: Renderable[], dt: number) {
+    const t0 = performance.now();
+    const S = this.settings;
+    this.time += dt;
+    const d = this.device;
+    const canvas = this.gpu.canvas;
+    this.resize(canvas.width, canvas.height);
+    camera.aspect = this.width / this.height;
+    camera.update();
+    if (this.shadows.ensure(S.shadows.resolution)) this.bindingsDirty = true;
+    if (this.bindingsDirty) this.rebuildBindings();
+
+    const envState = env.state;
+    const de = env.derive();
+
+    // ---- environment-dependent precomputation: sky LUTs/env map, then probes
+    if (env.version !== this.lastEnvVersion || this.sky.dirty) {
+      // The env map generation reads the main frame uniforms (sun, sky, clouds).
+      const pre = this.viewFlags(envState, de, false, S.msaa);
+      this.writeFrameUniforms(this.frame, this.frameBuffer, camera, this.width, this.height, env, de, this.currentPreExposure, this.currentEV, pre.flags, 0);
+      const enc0 = d.createCommandEncoder({ label: 'sky' });
+      const ga = parseColor(envState.ambient.groundAlbedo, [0.12, 0.12, 0.1, 1]);
+      this.sky.encodeUpdate(enc0, this.frameBuffer, { mieScale: envState.sky.turbidity * AEROSOL_BASE, cameraAltitudeKm: 0.1, groundAlbedo: [ga[0], ga[1], ga[2]] }, de.sunDir);
+      d.queue.submit([enc0.finish()]);
+      this.lastEnvVersion = env.version;
+      if (this.probes && S.reflectionProbes) this.captureProbes(env, renderables);
+    }
+
+    // ---- exposure + main view uniforms
+    const ex = envState.exposure;
+    const ev = this.exposure.update({
+      auto: S.autoExposure && (ex.auto ?? true),
+      ev100: ex.ev100,
+      compensation: ex.compensation,
+      min: ex.min ?? ex.ev100 - 2,
+      max: ex.max ?? ex.ev100 + 1.5,
+    }, dt);
+    const preExposure = 1 / (1.2 * Math.pow(2, ev));
+    this.currentEV = ev;
+    this.currentPreExposure = preExposure;
+    const { flags, shadowsOn } = this.viewFlags(envState, de, false, S.msaa);
+    this.shadows.update(camera.position as Float32Array, camera.forward as Float32Array, camera.fovY, camera.aspect, camera.near, de.sunDir, S.shadows);
+    this.writeFrameUniforms(this.frame, this.frameBuffer, camera, this.width, this.height, env, de, preExposure, ev, flags, S.debugView);
+
+    // Post params
+    const post = new ArrayBuffer(64);
+    const pu = new Uint32Array(post);
+    const pf = new Float32Array(post);
+    pu[0] = S.tonemapper;
+    pu[2] = S.dither ? 1 : 0;
+    const pp = envState.post;
+    pf.set([0, pp.contrast, pp.saturation, pp.temperature], 4);
+    const wb = whiteBalance(pp.temperature);
+    pf.set([wb[0], wb[1], wb[2], 1], 8);
+    const bloomOn = S.bloom > 0 && S.debugView === 0;
+    pf.set([bloomOn ? S.bloom : 0, 1 / Math.max(1, this.bloomLevels.length), 0, 0], 12);
+    d.queue.writeBuffer(this.postParams, 0, post);
+
+    // ---- culling + draw lists
+    const tc = performance.now();
+    if (S.freezeCulling && !this.frozenPlanes) {
+      this.frozenPlanes = extractPlanes(camera.viewProj, { near: true, far: false, zeroToOne: true, reverseZ: true });
+      this.frozenViewProj = new Float32Array(camera.viewProj);
+    } else if (!S.freezeCulling) {
+      this.frozenPlanes = null;
+      this.frozenViewProj = null;
+    }
+    const planes = this.frozenPlanes ?? extractPlanes(camera.viewProj, { near: true, far: false, zeroToOne: true, reverseZ: true });
+    const ls = this.buildLists(planes, renderables, shadowsOn);
+    const tcEnd = performance.now();
+
+    // ---- encode
+    const enc = d.createCommandEncoder({ label: 'frame' });
+    this.timer.beginFrame();
+    if (shadowsOn) this.encodeShadows(enc, true);
+    const overdraw = S.debugView === DEBUG_VIEWS.overdraw;
+    const pass = this.encodeMain(enc, {
+      color: S.msaa ? this.msaaColor!.createView() : this.resolved!.createView(),
+      resolve: S.msaa ? this.resolved!.createView() : undefined,
+      depth: this.depth!.createView(),
+      msaa: S.msaa,
+    }, this.frameBG!, overdraw, true);
+    const arena = this.arena;
     // Debug overlays
     if (S.wireframe) {
       pass.setPipeline(this.linePipeline(true));
       pass.setBindGroup(0, this.linesBG!);
       pass.setVertexBuffer(0, arena.pos.buffer);
-      for (const dr of main.draws) arena.ensureWire(dr.prim);
+      for (const dr of this.mainList.draws) arena.ensureWire(dr.prim);
       pass.setIndexBuffer(arena.wire.buffer, 'uint32');
-      for (const dr of main.draws) {
+      for (const dr of this.mainList.draws) {
         pass.drawIndexed(dr.prim.wireCount, dr.count, dr.prim.wireFirst, dr.prim.baseVertex, dr.first);
       }
     }
     this.lineVerts.length = 0;
     if (S.bounds) this.addBoundsLines(renderables, planes);
     if (this.frozenViewProj) this.addFrustumLines(this.frozenViewProj);
+    if (S.showProbes && this.probes) this.addProbeLines();
     if (this.lineVerts.length > 0) {
       const data = new Float32Array(this.lineVerts);
       if (data.byteLength > this.linesCapacity) {
@@ -1188,7 +1335,7 @@ export class Renderer {
 
     // Post
     this.exposure.encode(enc, this.resolved!.createView(), this.width, this.height, preExposure);
-    if (S.bloom > 0 && S.debugView === 0) this.encodeBloom(enc);
+    if (bloomOn) this.encodeBloom(enc);
     const swap = this.gpu.context.getCurrentTexture();
     const post2 = enc.beginRenderPass({
       label: 'post',
@@ -1219,16 +1366,27 @@ export class Renderer {
     }
 
     const st = this.stats;
-    st.drawCalls = main.draws.length;
-    st.shadowDrawCalls = shadowDraws;
-    st.triangles = main.triangles;
-    st.shadowTriangles = shadowTris;
-    st.instances = main.instances;
-    st.visibleObjects = visibleObjects;
+    st.drawCalls = this.mainList.draws.length;
+    st.shadowDrawCalls = ls.shadowDraws;
+    st.triangles = this.mainList.triangles;
+    st.shadowTriangles = ls.shadowTris;
+    st.instances = this.mainList.instances;
+    st.visibleObjects = ls.visibleObjects;
     st.totalObjects = renderables.length;
-    st.culledObjects = renderables.length - visibleObjects;
+    st.culledObjects = renderables.length - ls.visibleObjects;
     st.cpuCullMs = tcEnd - tc;
     st.cpuEncodeMs = performance.now() - t0 - (tcEnd - tc);
+  }
+
+  private addProbeLines() {
+    const P = this.probes!;
+    for (const o of P.probes) {
+      this.addBox(o.probe.boxMin, o.probe.boxMax, [0.3, 0.6, 1, 0.8]);
+      const c = o.transform.position;
+      this.addLine([c[0] - 0.3, c[1], c[2]], [c[0] + 0.3, c[1], c[2]], [1, 1, 0.2, 1]);
+      this.addLine([c[0], c[1] - 0.3, c[2]], [c[0], c[1] + 0.3, c[2]], [1, 1, 0.2, 1]);
+      this.addLine([c[0], c[1], c[2] - 0.3], [c[0], c[1], c[2] + 0.3], [1, 1, 0.2, 1]);
+    }
   }
 
   private async readCapture(buf: GPUBuffer, bpr: number, w: number, h: number, format: GPUTextureFormat): Promise<ImageData> {

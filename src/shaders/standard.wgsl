@@ -42,6 +42,72 @@ override USE_LOCAL_LIGHTS: bool = true;
 override USE_FOG: bool = true;
 override USE_FOLIAGE: bool = true;
 override USE_SPEC_AA: bool = true;
+override USE_DIR_LIGHTMAP: bool = true;
+override USE_PROBE_VOLUME: bool = true;
+override USE_REFL_PROBES: bool = true;
+
+// Half-Life 2 radiosity normal mapping basis (tangent space).
+const RNM0: vec3f = vec3f(0.81649658, 0.0, 0.57735027);
+const RNM1: vec3f = vec3f(-0.40824829, 0.70710678, 0.57735027);
+const RNM2: vec3f = vec3f(-0.40824829, -0.70710678, 0.57735027);
+
+// --- probe volume (ambient cubes, slab-packed 3D texture) ---------------------
+fn probeSlab(g: vec3f, slab: u32) -> vec3f {
+  let dims = vec3f(frame.pvDims.xyz);
+  let gz = clamp(g.z, 0.0, dims.z - 1.0);
+  let uvw = vec3f((g.x + 0.5) / dims.x, (g.y + 0.5) / dims.y, (f32(slab) * dims.z + gz + 0.5) / (dims.z * 12.0));
+  return textureSampleLevel(probeVolume, sampClamp, uvw, 0.0).rgb;
+}
+
+fn ambientCube(g: vec3f, n: vec3f, comp: u32) -> vec3f {
+  let n2 = n * n;
+  let b = comp * 6u;
+  return n2.x * probeSlab(g, b + select(1u, 0u, n.x >= 0.0))
+       + n2.y * probeSlab(g, b + select(3u, 2u, n.y >= 0.0))
+       + n2.z * probeSlab(g, b + select(5u, 4u, n.z >= 0.0));
+}
+
+/// Irradiance/PI from the probe volume (rgb) and coverage weight (a).
+fn probeVolumeIrradiance(wp: vec3f, n: vec3f, skyUp: vec3f) -> vec4f {
+  let g = (wp - frame.pvOrigin.xyz) * frame.pvInvSpacing.xyz;
+  let dims = vec3f(frame.pvDims.xyz);
+  let d = min(g + 0.5, dims - 0.5 - g);
+  let w = saturate(min(d.x, min(d.y, d.z)) * 0.5);
+  if (w <= 0.0) { return vec4f(0.0); }
+  let sky = ambientCube(g, n, 0u);
+  let sun = ambientCube(g, n, 1u);
+  return vec4f(sky * skyUp * frame.lmParams.z + sun * frame.sunColor.rgb * frame.lmParams.w, w);
+}
+
+// --- reflection probes ---------------------------------------------------------
+fn reflProbeWeight(i: u32, wp: vec3f) -> f32 {
+  let p = reflProbes[i];
+  let d = min(wp - p.bmin.xyz, p.bmax.xyz - wp);
+  return saturate(min(d.x, min(d.y, d.z)) / max(p.bmin.w, 0.05));
+}
+
+fn reflProbeDir(i: u32, wp: vec3f, R: vec3f) -> vec3f {
+  // Box projection (parallax correction) against the probe's box.
+  let p = reflProbes[i];
+  let inv = 1.0 / select(R, vec3f(1e-5), abs(R) < vec3f(1e-5));
+  let t = max((p.bmax.xyz - wp) * inv, (p.bmin.xyz - wp) * inv);
+  let tHit = max(min(t.x, min(t.y, t.z)), 0.0);
+  return wp + R * tHit - p.pos.xyz;
+}
+
+fn shEvalProbe(i: u32, n: vec3f) -> vec3f {
+  let c = reflProbes[i].sh;
+  var r = c[0].rgb * 0.282095;
+  r += c[1].rgb * 0.488603 * n.y;
+  r += c[2].rgb * 0.488603 * n.z;
+  r += c[3].rgb * 0.488603 * n.x;
+  r += c[4].rgb * 1.092548 * n.x * n.y;
+  r += c[5].rgb * 1.092548 * n.y * n.z;
+  r += c[6].rgb * 0.315392 * (3.0 * n.z * n.z - 1.0);
+  r += c[7].rgb * 1.092548 * n.x * n.z;
+  r += c[8].rgb * 0.546274 * (n.x * n.x - n.y * n.y);
+  return max(r, vec3f(0.0));
+}
 
 @group(1) @binding(0) var<uniform> material: MaterialParams;
 @group(1) @binding(1) var baseColorTex: texture_2d<f32>;
@@ -423,23 +489,51 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   let lmLayer = i32(inst.info.x) - 1;
   let useLm = USE_LIGHTMAP && lmLayer >= 0 && hasFlag(F_LIGHTMAPS);
   if (useLm) {
-    let lmSky = sampleLightmap(in.lmUv, lmLayer) * frame.lmParams.z;
-    let lmSun = sampleLightmap(in.lmUv, lmLayer + 1) * frame.lmParams.w;
     var ratio = vec3f(1.0);
     if (hasFlag(F_SH_RATIO)) {
-      // Re-introduce normal-map detail into the non-directional lightmap using
-      // the directional distribution of the current sky.
+      // Normal-map detail for non-directional terms using the live sky's
+      // directional distribution.
       ratio = clamp(shN / max(shEval(Ng), vec3f(1e-4)), vec3f(0.4), vec3f(1.8));
     }
-    // Both layers store irradiance/PI (Cycles "light" pass): sky per unit sky
+    // All layers store irradiance/PI (Cycles "light" pass): sky per unit sky
     // radiance, sun bounce per unit sun illuminance (calibrated, see docs).
-    irr = (lmSky * skyUpRadiance() + lmSun * frame.sunColor.rgb) * ratio;
+    if (USE_DIR_LIGHTMAP && hasFlag(F_DIR_LIGHTMAP)) {
+      // Directional lightmap: flat sky bake for the absolute level, the three
+      // radiosity-normal-mapping basis bakes as a direction ratio (Valve's
+      // squared, normalised weights). Exact for unperturbed normals.
+      var n = tn;
+      if (USE_TRIPLANAR && matFlag(M_TRIPLANAR)) { n = vec3f(0.0, 0.0, 1.0); }
+      var w = saturate(vec3f(dot(n, RNM0), dot(n, RNM1), dot(n, RNM2)));
+      w = w * w;
+      w = w / max(w.x + w.y + w.z, 1e-4);
+      let flat = sampleLightmap(in.lmUv, lmLayer);
+      // Basis layers are low frequency: plain bilinear is enough.
+      let l0 = textureSampleLevel(lightmaps, sampClamp, in.lmUv, lmLayer + 1, 0.0).rgb;
+      let l1 = textureSampleLevel(lightmaps, sampClamp, in.lmUv, lmLayer + 2, 0.0).rgb;
+      let l2 = textureSampleLevel(lightmaps, sampClamp, in.lmUv, lmLayer + 3, 0.0).rgb;
+      let mean = (l0 + l1 + l2) * (1.0 / 3.0);
+      let dirRatio = clamp((l0 * w.x + l1 * w.y + l2 * w.z) / max(mean, vec3f(1e-4)), vec3f(0.0), vec3f(3.0));
+      let lmSky = flat * dirRatio * frame.lmParams.z;
+      let lmSun = sampleLightmap(in.lmUv, lmLayer + 4) * frame.lmParams.w;
+      irr = lmSky * skyUpRadiance() + lmSun * frame.sunColor.rgb * ratio;
+    } else {
+      let lmSky = sampleLightmap(in.lmUv, lmLayer) * frame.lmParams.z;
+      let lmSun = sampleLightmap(in.lmUv, lmLayer + 1) * frame.lmParams.w;
+      irr = (lmSky * skyUpRadiance() + lmSun * frame.sunColor.rgb) * ratio;
+    }
   } else if (hasFlag(F_SKY_AMBIENT)) {
     irr = shN;
-    if (foliage) {
-      // Crude canopy self-occlusion until probe volumes exist: darker low in the tree.
+    var pvw = 0.0;
+    if (USE_PROBE_VOLUME && hasFlag(F_PROBE_VOLUME)) {
+      // Baked ambient cubes: occlusion and bounce for dynamic / instanced objects.
+      let pv = probeVolumeIrradiance(wp, N, skyUpRadiance());
+      pvw = pv.a;
+      irr = mix(irr, pv.rgb, pv.a);
+    }
+    if (foliage && pvw < 1.0) {
+      // Crude canopy self-occlusion where no probe data exists.
       let localY = (wp.y - inst.model[3].y) / max(length(inst.model[1].xyz), 0.01);
-      irr *= mix(0.35, 1.0, saturate(localY / 14.0));
+      irr *= mix(mix(0.35, 1.0, saturate(localY / 14.0)), 1.0, pvw);
     }
   }
   irr *= frame.exposure.w;
@@ -453,15 +547,49 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
     let R = reflect(-V, N);
     let rough = sqrt(a);
     let lod = rough * (frame.sky.z - 1.0);
-    let env = textureSampleLevel(envSpecular, sampClamp, R, lod).rgb;
+    var env = vec3f(0.0);
+    var probeIrr = vec3f(0.0);
+    var wLeft = 1.0;
+    if (USE_REFL_PROBES && hasFlag(F_REFL_PROBES)) {
+      // Two most relevant box-projected probes (priority first, then weight);
+      // the global sky probe fills whatever weight remains.
+      var b0 = -1; var b1 = -1;
+      var s0 = 0.0; var s1 = 0.0;
+      for (var i = 0u; i < frame.pvDims.w; i++) {
+        let w = reflProbeWeight(i, wp);
+        if (w <= 0.0) { continue; }
+        let score = w + reflProbes[i].bmax.w * 2.0;
+        if (score > s0) { b1 = b0; s1 = s0; b0 = i32(i); s0 = score; }
+        else if (score > s1) { b1 = i32(i); s1 = score; }
+      }
+      if (b0 >= 0) {
+        let i0 = u32(b0);
+        let w0 = reflProbeWeight(i0, wp);
+        env += textureSampleLevel(reflCubes, sampClamp, reflProbeDir(i0, wp, R), i32(reflProbes[i0].pos.w), lod).rgb * w0;
+        probeIrr += shEvalProbe(i0, N) * w0;
+        wLeft = 1.0 - w0;
+        if (b1 >= 0 && wLeft > 0.0) {
+          let i1 = u32(b1);
+          let w1 = reflProbeWeight(i1, wp) * wLeft;
+          env += textureSampleLevel(reflCubes, sampClamp, reflProbeDir(i1, wp, R), i32(reflProbes[i1].pos.w), lod).rgb * w1;
+          probeIrr += shEvalProbe(i1, N) * w1;
+          wLeft -= w1;
+        }
+      }
+    }
+    if (wLeft > 0.0) {
+      env += textureSampleLevel(envSpecular, sampClamp, R, lod).rgb * wLeft;
+      probeIrr += shN * wLeft;
+    }
     let ab = textureSampleLevel(brdfLut, sampClamp, vec2f(NoV, rough), 0.0).rg;
     var so = 1.0;
     if (hasFlag(F_SPEC_OCCLUSION)) {
-      if (useLm) {
+      if (useLm || (USE_PROBE_VOLUME && hasFlag(F_PROBE_VOLUME))) {
         // Reflection normalisation (Source 2 style): scale the probe by the ratio
-        // of local baked irradiance to the probe's own irradiance.
-        so = saturate(luminance(irr) / max(luminance(shN) * frame.exposure.w, 1e-4));
+        // of local (baked) irradiance to the irradiance the probe itself saw.
+        so = saturate(luminance(irr) / max(luminance(probeIrr) * frame.exposure.w, 1e-4));
         so = so * so * (3.0 - 2.0 * so);
+        so = min(so, specOcclusionFromAO(NoV, s.ao, a) * 1.5);
       } else {
         so = specOcclusionFromAO(NoV, s.ao, a);
       }

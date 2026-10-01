@@ -37,5 +37,16 @@ struct Decal {
 @group(0) @binding(16) var decalAtlas: texture_2d_array<f32>;
 @group(0) @binding(17) var debugGridTex: texture_2d<f32>;
 @group(0) @binding(18) var cloudNoise: texture_2d<f32>;
+@group(0) @binding(19) var probeVolume: texture_3d<f32>;
+@group(0) @binding(20) var reflCubes: texture_cube_array<f32>;
+
+struct ReflProbe {
+  sh: array<vec4f, 12>,  // irradiance/PI SH (same encoding as shSky)
+  pos: vec4f,            // capture point, w = cube array layer
+  bmin: vec4f,           // box min, w = blend distance
+  bmax: vec4f,           // box max, w = priority
+  pad: vec4f,
+};
+@group(0) @binding(21) var<storage, read> reflProbes: array<ReflProbe>;
 
 fn hasFlag(bit: u32) -> bool { return (frame.debug.y & bit) != 0u; }

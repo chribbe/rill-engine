@@ -58,12 +58,18 @@ export class SkySystem {
   private pDown: GPUComputePipeline;
   private pPrefilter: GPUComputePipeline;
   private pSh: GPUComputePipeline;
-  private envBG0!: GPUBindGroup;
+  private envBG0?: GPUBindGroup;
   private skyCubeBG: GPUBindGroup;
   private downBGs: GPUBindGroup[] = [];
   private prefilterBGs: GPUBindGroup[] = [];
   private shBG: GPUBindGroup;
-  private prefilterParams: GPUBuffer[] = [];
+  readonly prefilterParams: GPUBuffer[] = [];
+  /** Shared with ReflectionProbes (same entry points, different targets). */
+  layouts!: { down: GPUBindGroupLayout; prefilter: GPUBindGroupLayout; sh: GPUBindGroupLayout };
+  pipelines!: { down: GPUComputePipeline; prefilter: GPUComputePipeline; sh: GPUComputePipeline };
+  get envBindGroup0() {
+    return this.envBG0;
+  }
 
   dirty = true;
   /** Frames between env refreshes when clouds are animating. */
@@ -172,6 +178,8 @@ export class SkySystem {
     this.pPrefilter = mk('prefilterMain', pl(prefL), envMod);
     this.pSh = mk('shMain', pl(shL), envMod);
     const pBrdf = mk('brdfLutMain', pl(brdfL), envMod);
+    this.layouts = { down: downL, prefilter: prefL, sh: shL };
+    this.pipelines = { down: this.pDown, prefilter: this.pPrefilter, sh: this.pSh };
 
     this.skyCubeBG = d.createBindGroup({
       layout: skyCubeL,

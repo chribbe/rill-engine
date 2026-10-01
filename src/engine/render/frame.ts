@@ -2,7 +2,7 @@
  * CPU mirror of the WGSL `Frame` uniform (src/shaders/common.wgsl).
  * Offsets are in 32-bit words.
  */
-export const FRAME_WORDS = 220;
+export const FRAME_WORDS = 232;
 export const FRAME_BYTES = FRAME_WORDS * 4;
 
 export const FO = {
@@ -34,6 +34,9 @@ export const FO = {
   atmo: 208,
   sky: 212,
   skyTint: 216,
+  pvOrigin: 220,
+  pvInvSpacing: 224,
+  pvDims: 228,
 } as const;
 
 /** Render flags (Frame.debug.y). Keep in sync with common.wgsl. */
@@ -53,6 +56,9 @@ export const RF = {
   SUN: 4096,
   A2C: 8192,
   PCF7: 0x10000,
+  PROBE_VOLUME: 0x20000,
+  REFL_PROBES: 0x40000,
+  DIR_LIGHTMAP: 0x80000,
 } as const;
 
 export class FrameUniforms {

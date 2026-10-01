@@ -17,6 +17,59 @@ export interface LoadedLightmaps {
   view: GPUTextureView;
   layers: number;
   bytes: number;
+  /** Directional (radiosity normal mapping) sky components present. */
+  directional: boolean;
+  probeVolume: LoadedProbeVolume | null;
+}
+
+export interface LoadedProbeVolume {
+  texture: GPUTexture;
+  view: GPUTextureView;
+  origin: [number, number, number];
+  spacing: [number, number, number];
+  dims: [number, number, number];
+  bytes: number;
+}
+
+/**
+ * Probe volume: ambient cubes (6 faces x {sky, sunBounce} x RGB, float16) packed
+ * into one 3D rgba16float texture of size (nx, ny, nz * 12) - one z-slab per
+ * (component, face) so hardware trilinear filtering works within each slab.
+ */
+async function loadProbeVolume(device: GPUDevice, base: string, pv: NonNullable<LightmapSetDocument['probeVolumes']>[number]): Promise<LoadedProbeVolume> {
+  const r = await fetch(base + pv.file);
+  if (!r.ok) throw new Error(`Probe volume fetch failed: ${pv.file}`);
+  const src = new Uint16Array(await r.arrayBuffer());
+  const [nx, ny, nz] = pv.dims;
+  const out = new Uint16Array(nx * ny * nz * 12 * 4);
+  const ONE = 0x3c00;
+  for (let z = 0; z < nz; z++) {
+    for (let y = 0; y < ny; y++) {
+      for (let x = 0; x < nx; x++) {
+        const p = (z * ny + y) * nx + x;
+        for (let c = 0; c < 2; c++) {
+          for (let f = 0; f < 6; f++) {
+            const s = c * 6 + f;
+            const i = ((p * 2 + c) * 6 + f) * 3;
+            const o = (((s * nz + z) * ny + y) * nx + x) * 4;
+            out[o] = src[i];
+            out[o + 1] = src[i + 1];
+            out[o + 2] = src[i + 2];
+            out[o + 3] = ONE;
+          }
+        }
+      }
+    }
+  }
+  const texture = device.createTexture({
+    label: `probeVolume:${pv.id}`,
+    size: [nx, ny, nz * 12],
+    dimension: '3d',
+    format: 'rgba16float',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+  });
+  device.queue.writeTexture({ texture }, out, { bytesPerRow: nx * 8, rowsPerImage: ny }, [nx, ny, nz * 12]);
+  return { texture, view: texture.createView({ dimension: '3d' }), origin: pv.origin, spacing: pv.spacing, dims: pv.dims, bytes: out.byteLength };
 }
 
 /** Parses a Radiance .hdr (RGBE, new-style RLE or flat) into float RGB. Rows are top-to-bottom. */
@@ -129,5 +182,10 @@ export async function loadLightmapSet(device: GPUDevice, url: string): Promise<L
       device.queue.writeTexture({ texture, origin: [0, 0, layer] }, packed, { bytesPerRow: w * 4, rowsPerImage: h }, [w, h, 1]);
     }),
   );
-  return { doc, texture, view: texture.createView({ dimension: '2d-array' }), layers, bytes: w * h * 4 * layers };
+  const probeVolume = doc.probeVolumes?.length ? await loadProbeVolume(device, base, doc.probeVolumes[0]) : null;
+  return {
+    doc, texture, view: texture.createView({ dimension: '2d-array' }), layers, bytes: w * h * 4 * layers + (probeVolume?.bytes ?? 0),
+    directional: doc.components[1] === 'skyRnm0',
+    probeVolume,
+  };
 }
