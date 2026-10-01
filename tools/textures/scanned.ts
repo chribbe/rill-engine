@@ -25,7 +25,13 @@ const MATS = join(ROOT, 'public/materials');
 const CACHE = join(ROOT, '.texture-cache/polyhaven');
 const UA = { 'User-Agent': 'rill-texture-import/1.0 (offline asset tool)' };
 
-interface SetDef { name: string; id: string; albedoLuma?: number; tint?: [number, number, number]; materials?: string[] }
+interface SetDef {
+  name: string; id: string; albedoLuma?: number; tint?: [number, number, number];
+  /** Materials whose physicalSize follows the scan. */
+  materials?: string[];
+  /** Materials that switch their base maps to this set (plus physicalSize). */
+  assign?: string[];
+}
 const cfg = JSON.parse(readFileSync(join(import.meta.dirname, 'scanned.json'), 'utf8')) as { resolution: string; size: number; sets: SetDef[] };
 const only = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 
@@ -156,12 +162,11 @@ async function importSet(s: SetDef, credits: string[]) {
     source: { kind: 'scan', provider: 'Poly Haven', id: s.id, license: 'CC0', url: `https://polyhaven.com/a/${s.id}` },
   };
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 1));
-  for (const m of s.materials ?? []) {
+  for (const m of [...(s.materials ?? []), ...(s.assign ?? [])]) {
     const p = join(MATS, `${m}.json`);
     const d = JSON.parse(readFileSync(p, 'utf8'));
     d.physicalSize = dims[0] === dims[1] ? dims[0] : dims;
-    if (m === 'concrete_wall') {
-      // concrete_wall switches from the smooth cast texture to the board-formed scan.
+    if (s.assign?.includes(m)) {
       d.baseColor = `${s.name}_albedo.png`; d.normal = `${s.name}_normal.png`; d.orm = `${s.name}_orm.png`;
     }
     writeFileSync(p, JSON.stringify(d, null, 1) + '\n');

@@ -162,7 +162,8 @@ def forest_weight(x, y):
     """Soft lawn -> forest-floor mask (vertex colour R on the terrain blend material)."""
     plateau = smoothstep(WALL_Y1 + 0.5, WALL_Y1 + 7, y) * smoothstep(WALL_X0 - 4, WALL_X0 + 4, x)
     w = max(plateau, smoothstep(34, 46, y), smoothstep(64, 78, abs(x)), smoothstep(-40, -50, y))
-    w += 0.35 * noise.noise(Vector((x / 9.0, y / 9.0, 2.3)))
+    # Noise only breaks up transitions; open lawn stays lawn (it used to seed litter patches).
+    w += 0.35 * noise.noise(Vector((x / 9.0, y / 9.0, 2.3))) * smoothstep(0.02, 0.3, w) * smoothstep(1.0, 0.7, w)
     return min(1.0, max(0.0, w))
 
 

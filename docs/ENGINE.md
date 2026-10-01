@@ -195,17 +195,20 @@ World (runtime, derived) ───────────────┐       
     from the real tree models) placed where the mask is forest, and distant miljonprogram blocks
     on the hills with clearings around them. ~11 k triangles total; fog/aerial perspective does
     the rest.
-25. **Scanned CC0 materials, imported into engine conventions.** 14 Poly Haven sets (road
+25. **Scanned CC0 materials, imported into engine conventions.** 15 Poly Haven sets (road
     asphalt with sealed cracks, board-formed and brushed concrete, exposed aggregate, plaster,
-    brick, slabs, lawn, pine-forest floor, gravel, lichen granite, pine bark, moss, dirt) are
-    fetched at 2K by `tools/textures/scanned.ts` into a gitignored cache (~165 MB) and written
+    brick, slabs, lawn, pine-forest floor, gravel, lichen granite bedrock, clean granite kerbs,
+    pine bark, moss, dirt) are fetched at 2K by `tools/textures/scanned.ts` into a gitignored
+    cache (~175 MB, JPG only) and written
     as 1K PNGs: albedo averaged in linear light and **recalibrated to a target mean luminance**
     (scans range 0.09–0.41; e.g. asphalt 0.10, concrete 0.26, lawn 0.12), optional linear tint
     (every grass scan was dry-season brown → summer green), OpenGL normals renormalised with
     the downsampling variance in alpha, AO/rough/metal + normalised height packed into ORM.
     Real-world sizes come from Poly Haven's metadata and are written into the materials'
-    `physicalSize`. The procedural generator skips scanned names (`--procedural` to force).
-    Credits in `public/textures/CREDITS.md`.
+    `physicalSize` (`assign` also switches a material's maps to the set). The procedural
+    generator skips scanned names (`--procedural` to force). Repo cost ≈ 7 MB per set (1K
+    PNGs; photographic detail compresses worse than procedural noise). Credits in
+    `public/textures/CREDITS.md`.
 26. **Dithered LOD crossfade.** Within ±10 % of each switch distance both neighbouring LODs are
     drawn with complementary screen-space masks (IGN dither vs fade t), so every pixel shows
     exactly one LOD and nothing pops. The fade rides in the visible-list entry

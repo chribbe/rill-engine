@@ -5,7 +5,7 @@
   "sets": [
     { "name": "asphalt", "id": "asphalt_02", "albedoLuma": 0.10, "materials": ["asphalt"] },
     { "name": "concrete_cast", "id": "brushed_concrete", "albedoLuma": 0.26, "materials": ["concrete_cast"] },
-    { "name": "concrete_formwork", "id": "concrete_slab_wall_02", "albedoLuma": 0.24, "materials": ["concrete_wall"] },
+    { "name": "concrete_formwork", "id": "concrete_slab_wall_02", "albedoLuma": 0.24, "assign": ["concrete_wall"] },
     { "name": "concrete_aggregate", "id": "gravel_embedded_concrete", "albedoLuma": 0.24, "materials": ["concrete_aggregate"] },
     { "name": "plaster", "id": "plastered_wall", "albedoLuma": 0.62, "materials": ["plaster"] },
     { "name": "brick_red", "id": "brick_wall_09", "albedoLuma": 0.17, "materials": ["brick_red"] },
@@ -16,6 +16,7 @@
     { "name": "rock_granite", "id": "mossy_rock", "albedoLuma": 0.2, "materials": ["rock_granite"] },
     { "name": "bark_pine", "id": "pine_bark", "albedoLuma": 0.11, "materials": ["bark_pine"] },
     { "name": "moss", "id": "concrete_moss", "albedoLuma": 0.1, "materials": ["moss"] },
-    { "name": "dirt", "id": "dirt", "albedoLuma": 0.12, "materials": ["dirt"] }
+    { "name": "dirt", "id": "dirt", "albedoLuma": 0.12, "materials": ["dirt"] },
+    { "name": "granite_kerb", "id": "granite_tile_03", "albedoLuma": 0.2, "assign": ["granite_curb"] }
   ]
 }
