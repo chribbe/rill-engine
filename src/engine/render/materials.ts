@@ -62,6 +62,13 @@ export interface MaterialDef {
     /** Macro-noise perturbation of the weight. */
     noise?: number;
   };
+  /** Alpha-masked coverage far away: 'boost' (dense foliage, default) or 'average' (sparse twigs fade to a haze). */
+  alphaDistance?: 'boost' | 'average';
+  /** Snow accumulation affinity on upward-facing surfaces (0 = never, 1 = full). Default by surface type. */
+  snow?: number;
+  /** Dormant-season albedo multiplier (dry grass, winter moss) and how strongly the season applies. */
+  dryTint?: Color;
+  dryStrength?: number;
   /** Offline bake hints (average albedo for bounce light). */
   bake?: { albedo?: Color; exclude?: boolean };
   /** Free-form notes for authors / tools. */
@@ -83,7 +90,15 @@ export const MF = {
   BLEND: 8192,
 } as const;
 
-export const MATERIAL_PARAM_BYTES = 208;
+export const MATERIAL_PARAM_BYTES = 240;
+
+/** Snow affinity when a material doesn't say: none on foliage/emissive/metal, full on ground-like surfaces. */
+function defaultSnow(d: MaterialDef): number {
+  if (d.shader === 'unlit' || d.emissive) return 0;
+  if (d.shader === 'foliage') return 0.6;
+  if ((d.metallic ?? 0) > 0.5) return 0.3;
+  return 0.8;
+}
 
 export function parseColor(c: Color | undefined, fallback: [number, number, number, number]): [number, number, number, number] {
   if (c === undefined) return fallback;
@@ -203,6 +218,9 @@ export class Material {
       f.set([b.roughness ?? 1, b.metallic ?? 0, b.normalStrength ?? 1, b.aoStrength ?? 1], 44);
       f.set([d.blend?.contrast ?? 6, d.blend?.height ?? 0.6, d.blend?.noise ?? 0.3, brr[1] - brr[0]], 48);
     }
+    const dry = parseColor(d.dryTint, [1, 1, 1, 1]);
+    f.set([d.alphaDistance === 'average' ? 1 : 0, d.snow ?? defaultSnow(d), d.dryStrength ?? (d.dryTint ? 1 : 0), 0], 52);
+    f.set([dry[0], dry[1], dry[2], 1], 56);
     this.device.queue.writeBuffer(this.params, 0, f);
   }
 

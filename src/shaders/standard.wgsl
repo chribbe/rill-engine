@@ -18,6 +18,8 @@ struct MaterialParams {
   bUvTransform: vec4f,
   bPbr: vec4f,             // x roughness, y metallic, z normal strength, w ao strength
   blendParams: vec4f,      // x contrast, y height influence, z noise, w roughness range
+  misc: vec4f,             // x alpha: averaged coverage at distance (sparse twigs), y snow affinity, z season (dry) tint strength, w spare
+  dryTint: vec4f,          // rgb albedo multiplier for the dry/dormant season look
 };
 
 const M_DETAIL_ALBEDO: u32 = 8u;
@@ -178,6 +180,22 @@ fn vsMain(v: VSIn) -> VSOut {
   let q = f32((e >> 24u) & 63u) / 63.0;
   o.lodFade = select(select(0.0, -q, mode == 1u), q, mode == 2u);
   return o;
+}
+
+/**
+ * Alpha-mask coverage. Near/magnified: a sharp alpha test with a ~1 px antialiased
+ * edge (plus a little coverage-preserving boost over the first mips). Once the
+ * texture's features are sub-pixel, the mip's averaged alpha *is* the coverage, so
+ * sparse twigs fade to a see-through haze instead of thickening into a solid crown.
+ */
+fn maskCoverage(alphaRaw: f32, mip: f32, cutoff: f32) -> f32 {
+  // Dense sprays (needles, leaves) overlap into solid crowns: keep the Golus-style
+  // coverage boost. Sparse twig cards (misc.x) switch to averaged coverage instead.
+  let avg = material.misc.x;
+  let a = alphaRaw * (1.0 + mip * 0.25 * (1.0 - avg) + min(mip, 1.5) * 0.25 * avg);
+  let sharp = saturate((a - cutoff) / max(fwidth(a), 1e-4) + 0.5);
+  let far = saturate((mip - 1.5) * 0.5) * avg;
+  return mix(sharp, saturate(alphaRaw * 1.15), far);
 }
 
 /** Complementary screen-space dither for LOD crossfades: each pixel shows exactly one LOD. */
@@ -361,7 +379,8 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   s.alpha = bc.a;
   s.roughness = mix(material.extra.x, material.extra.y, orm.g) * material.pbr.x;
   s.metallic = orm.b * material.pbr.y;
-  s.ao = mix(1.0, orm.r, material.pbr.w);
+  // Texture AO x baked vertex AO (vertex colour G; 1 for meshes without colours).
+  s.ao = mix(1.0, orm.r, material.pbr.w) * in.color.g;
   // Emission (lamp lenses) follows the environment's local-light switch.
   s.emissive = material.emissive.rgb * frame.ground.w;
   s.Ng = Ng;
@@ -538,6 +557,8 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
       // Thin-leaf transmission: light through the card from behind.
       let back = saturate(dot(-N, L)) * 0.6 + 0.4 * saturate(dot(-V, L));
       direct += diffuseColor * material.pbr2.w * back * INV_PI;
+      // Inner-crown occlusion finer than the shadow map resolves (baked vertex AO).
+      direct *= mix(0.3, 1.0, in.color.g);
     }
     direct *= frame.sunColor.rgb * shadowTerm;
   }
@@ -582,23 +603,16 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
     }
   } else if (hasFlag(F_SKY_AMBIENT)) {
     irr = shN;
-    var pvw = 0.0;
     if (USE_PROBE_VOLUME && hasFlag(F_PROBE_VOLUME)) {
       // Baked ambient cubes: occlusion and bounce for dynamic / instanced objects.
       let pv = probeVolumeIrradiance(wp, N, skyUpRadiance());
-      pvw = pv.a;
       irr = mix(irr, pv.rgb, pv.a);
-    }
-    if (foliage && pvw < 1.0) {
-      // Crude canopy self-occlusion where no probe data exists.
-      let localY = (wp.y - inst.model[3].y) / max(length(inst.model[1].xyz), 0.01);
-      irr *= mix(mix(0.35, 1.0, saturate(localY / 14.0)), 1.0, pvw);
     }
   }
   irr *= frame.exposure.w;
   let Fenv = f0 + (max(vec3f(1.0 - s.roughness), f0) - f0) * pow(1.0 - NoV, 5.0);
   var indirectDiffuse = diffuseColor * irr * s.ao * (1.0 - Fenv * 0.5);
-  if (foliage) { indirectDiffuse += diffuseColor * irr * material.pbr2.w * 0.35; }
+  if (foliage) { indirectDiffuse += diffuseColor * irr * s.ao * material.pbr2.w * 0.35; }
 
   // Indirect specular: prefiltered environment probe with split-sum BRDF.
   var indirectSpec = vec3f(0.0);
@@ -746,16 +760,12 @@ fn fsMasked(in: VSOut, @builtin(front_facing) front: bool) -> MaskedOut {
   let texSize = vec2f(textureDimensions(baseColorTex));
   let dUv = max(length(dpdx(uv) * texSize), length(dpdy(uv) * texSize));
   let mip = max(log2(dUv), 0.0);
-  var alpha = texGrad(baseColorTex, uv, dpdx(uv), dpdy(uv)).a * material.baseColor.a;
-  // Preserve coverage in distant mips (Golus), then sharpen to a ~1px edge.
-  alpha *= 1.0 + mip * 0.25;
-  let cutoff = material.pbr2.y;
-  let sharpened = (alpha - cutoff) / max(fwidth(alpha), 1e-4) + 0.5;
+  let alpha = texGrad(baseColorTex, uv, dpdx(uv), dpdy(uv)).a * material.baseColor.a;
+  let cov = maskCoverage(alpha, mip, material.pbr2.y);
   let o = shade(in, front);
   var out: MaskedOut;
   out.color = finalize(o);
   if (hasFlag(F_A2C)) {
-    let cov = saturate(sharpened);
     let dither = ign(in.pos.xy) - 0.5;
     let n = u32(clamp(round(cov * 4.0 + dither * 0.9), 0.0, 4.0));
     if (n == 0u) { discard; }
@@ -763,7 +773,7 @@ fn fsMasked(in: VSOut, @builtin(front_facing) front: bool) -> MaskedOut {
     let m = (0xFu >> (4u - n));
     out.mask = ((m << rot) | (m >> (4u - rot))) & 0xFu;
   } else {
-    if (alpha < cutoff) { discard; }
+    if (cov <= ign(in.pos.xy)) { discard; }
     out.mask = 0xFFFFFFFFu;
   }
   return out;
@@ -784,13 +794,10 @@ fn fsDepthMasked(in: VSOut) -> DepthOut {
   let texSize = vec2f(textureDimensions(baseColorTex));
   let dUv = max(length(dpdx(uv) * texSize), length(dpdy(uv) * texSize));
   let mip = max(log2(dUv), 0.0);
-  var alpha = texGrad(baseColorTex, uv, dpdx(uv), dpdy(uv)).a * material.baseColor.a;
-  alpha *= 1.0 + mip * 0.25;
-  let cutoff = material.pbr2.y;
+  let alpha = texGrad(baseColorTex, uv, dpdx(uv), dpdy(uv)).a * material.baseColor.a;
+  let cov = maskCoverage(alpha, mip, material.pbr2.y);
   var out: DepthOut;
   if (hasFlag(F_A2C)) {
-    let sharpened = (alpha - cutoff) / max(fwidth(alpha), 1e-4) + 0.5;
-    let cov = saturate(sharpened);
     let dither = ign(in.pos.xy) - 0.5;
     let n = u32(clamp(round(cov * 4.0 + dither * 0.9), 0.0, 4.0));
     if (n == 0u) { discard; }
@@ -798,7 +805,7 @@ fn fsDepthMasked(in: VSOut) -> DepthOut {
     let m = (0xFu >> (4u - n));
     out.mask = ((m << rot) | (m >> (4u - rot))) & 0xFu;
   } else {
-    if (alpha < cutoff) { discard; }
+    if (cov <= ign(in.pos.xy)) { discard; }
     out.mask = 0xFFFFFFFFu;
   }
   return out;
@@ -814,10 +821,8 @@ fn fsDepthA2C(in: VSOut) -> @location(0) vec4f {
   let texSize = vec2f(textureDimensions(baseColorTex));
   let dUv = max(length(dpdx(uv) * texSize), length(dpdy(uv) * texSize));
   let mip = max(log2(dUv), 0.0);
-  var alpha = texGrad(baseColorTex, uv, dpdx(uv), dpdy(uv)).a * material.baseColor.a;
-  alpha *= 1.0 + mip * 0.25;
-  let sharpened = (alpha - material.pbr2.y) / max(fwidth(alpha), 1e-4) + 0.5;
-  return vec4f(0.0, 0.0, 0.0, saturate(sharpened));
+  let alpha = texGrad(baseColorTex, uv, dpdx(uv), dpdy(uv)).a * material.baseColor.a;
+  return vec4f(0.0, 0.0, 0.0, maskCoverage(alpha, mip, material.pbr2.y));
 }
 
 // Lit colour pass for masked geometry after the prepass (no discard).

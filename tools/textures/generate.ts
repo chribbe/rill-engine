@@ -567,10 +567,10 @@ recipes.dirt = () => {
  * dilated into transparent texels so mips never bleed dark fringes. AO darkens
  * the inner/older parts of the spray.
  */
-function sprayCard(name: string, kind: 'pine' | 'spruce' | 'birch') {
+function sprayCard(name: string, kind: 'pine' | 'spruce' | 'birch' | 'birch_bare' | 'dead') {
   const S = 1024;
   const cov = new Field(S, S), shade = new Field(S, S), age = new Field(S, S);
-  const seeds = { pine: 161, spruce: 191, birch: 171 };
+  const seeds = { pine: 161, spruce: 191, birch: 171, birch_bare: 173, dead: 197 };
   const rng = mulberry32(seeds[kind]);
   // Anti-aliased capsule stroke; `val` = colour variation, `ag` = 0 young .. 1 old/inner.
   const seg = (x0: number, y0: number, x1: number, y1: number, w: number, val: number, ag: number) => {
@@ -670,6 +670,47 @@ function sprayCard(name: string, kind: 'pine' | 'spruce' | 'birch') {
       // terminal bud
       seg(ex, ey, ex + Math.cos(ang) * 14, ey + Math.sin(ang) * 14, 4, -1, 0);
     }
+  } else if (kind === 'birch_bare') {
+    // Winter birch: dense, fine, pendulous red-brown twigs (reads as a purple haze at distance).
+    for (let b = 0; b < 10; b++) {
+      const x0 = S / 2 + (rng() - 0.5) * 220;
+      const ang = UP + (b - 4.5) * 0.16 + (rng() - 0.5) * 0.25;
+      twig(x0, S - 6, ang, S * (0.62 + rng() * 0.32), 2.6, 0.8, (rng() - 0.5) * 0.7, 46, (x, y, a, t) => {
+        if (t > 0.05 && rng() < 0.32) {
+          const side = rng() < 0.5 ? -1 : 1;
+          const sl = S * (0.1 + rng() * 0.2) * (1 - t * 0.5);
+          twig(x, y, a + side * (0.35 + rng() * 0.5), sl, 1.3, 0.55, -side * 0.25, 14, (x2, y2, a2, t2) => {
+            if (rng() < 0.18) {
+              const s2 = rng() < 0.5 ? -1 : 1;
+              twig(x2, y2, a2 + s2 * 0.5, sl * 0.4, 0.9, 0.5, 0, 6, () => {}, 0.3, 0.1);
+            }
+            if (t2 > 0.95) seg(x2, y2, x2 + Math.cos(a2) * 4, y2 + Math.sin(a2) * 4, 1.4, 0.05, 0.9);
+          }, 0.5, 0.15);
+        }
+      }, 0.8, 0.2);
+    }
+  } else if (kind === 'dead') {
+    // Dead lower spruce twigs: grey, brittle, herring-bone side twigs without needles,
+    // with pale beard-lichen flecks.
+    twig(S / 2, S - 8, UP + 0.03, S * 0.9, 4, 1.4, -0.12, 60, (x, y, a, t) => {
+      if (t > 0.04 && t < 0.9 && Math.round(t * 60) % 3 === 0) {
+        const side = Math.round(t * 60) % 6 === 0 ? 1 : -1;
+        const sl = (S * 0.36 * (1 - t) ** 0.6 + 30) * (rng() < 0.25 ? 0.35 : 1); // some broken short
+        twig(x, y, a + side * (0.9 + rng() * 0.3), sl, 2.0, 0.8, -side * 0.35, 18, (x2, y2, a2, t2) => {
+          if (rng() < 0.12) {
+            const s2 = rng() < 0.5 ? -1 : 1;
+            twig(x2, y2, a2 + s2 * 0.8, sl * 0.3, 1.0, 0.6, 0, 7, () => {}, 0.6, 0.3);
+          }
+          if (rng() < 0.05) {
+            // lichen tuft
+            for (let k = 0; k < 6; k++) {
+              const la = rng() * Math.PI * 2, ll = 6 + rng() * 10;
+              seg(x2, y2, x2 + Math.cos(la) * ll, y2 + Math.sin(la) * ll, 1.2, 0.95, 0.0);
+            }
+          }
+        }, 0.7, 0.4);
+      }
+    }, 0.9, 0.4);
   } else {
     // Silver birch: fine pendulous twigs with petioled rhombic leaves (texture "up" hangs down in the tree).
     for (let b = 0; b < 7; b++) {
@@ -705,7 +746,10 @@ function sprayCard(name: string, kind: 'pine' | 'spruce' | 'birch') {
     spruce: { a: lin('#1d3019'), b: lin('#3c5a2a'), young: lin('#6d8a3c'), twig: lin('#5a3f2a') },
     pine: { a: lin('#2d4128'), b: lin('#506a3c'), young: lin('#5f7a44'), twig: lin('#8a5a36') },
     birch: { a: lin('#44612a'), b: lin('#6a8834'), young: lin('#84a042'), twig: lin('#4a3a30') },
+    birch_bare: { a: lin('#3b2f2c'), b: lin('#5c4c47'), young: lin('#6a5650'), twig: lin('#3e322f') },
+    dead: { a: lin('#4d463f'), b: lin('#7b7367'), young: lin('#a3a68e'), twig: lin('#5a5249') },
   }[kind];
+  const twigOnly = kind === 'birch_bare' || kind === 'dead';
   const albedo = new Img(S, S), rough = new Field(S, S), ao = new Field(S, S);
   // Dilate colours into empty texels (nearest-ish fill in a few passes).
   const col = new Float32Array(S * S * 3);
@@ -715,8 +759,12 @@ function sprayCard(name: string, kind: 'pine' | 'spruce' | 'birch') {
     if (cov.data[i] <= 0.01) continue;
     const sv = shade.data[i];
     let c: number[];
-    if (sv < 0) c = pal.twig;
-    else {
+    if (sv < 0) {
+      // Twig bark: plain for leafy sprays; for bare twigs, older (inner) wood darker.
+      c = twigOnly ? pal.a.map((v, k) => lerp(v, pal.b[k], 0.25 + 0.75 * clamp01(1 - age.data[i]))) : pal.twig;
+    } else if (twigOnly) {
+      c = sv > 0.9 ? pal.young : pal.a.map((v) => v * 0.8); // lichen flecks / buds
+    } else {
       c = pal.a.map((v, k) => lerp(v, pal.b[k], sv));
       // Young growth (shoot tips) lighter and yellower.
       const yg = clamp01(1 - age.data[i] * 2.2) * (kind === 'birch' ? 0.25 : 0.55);
@@ -756,6 +804,8 @@ function sprayCard(name: string, kind: 'pine' | 'spruce' | 'birch') {
 recipes.foliage_pine = () => sprayCard('foliage_pine', 'pine');
 recipes.foliage_spruce = () => sprayCard('foliage_spruce', 'spruce');
 recipes.foliage_birch = () => sprayCard('foliage_birch', 'birch');
+recipes.twigs_birch = () => sprayCard('twigs_birch', 'birch_bare');
+recipes.twigs_dead = () => sprayCard('twigs_dead', 'dead');
 
 recipes.forest_canopy = () => {
   // Forest seen from far away / above: irregular 3-6 m crowns (two sizes), soft gaps, mixed tones.

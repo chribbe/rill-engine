@@ -1,0 +1,17 @@
+{
+ "shader": "foliage",
+ "alphaMode": "mask",
+ "alphaCutoff": 0.4,
+ "doubleSided": true,
+ "baseColor": "twigs_birch_albedo.png",
+ "orm": "twigs_birch_orm.png",
+ "physicalSize": 1,
+ "roughness": 1,
+ "translucency": 0.05,
+ "porosity": 0.2,
+ "bake": {
+  "exclude": true
+ },
+ "notes": "Winter (leafless) birch / shrub twig spray card.",
+ "alphaDistance": "average"
+}

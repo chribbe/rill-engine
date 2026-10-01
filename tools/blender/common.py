@@ -190,7 +190,8 @@ class MeshBuilder:
             for f in bm.faces:
                 mname = self.mats[f.material_index]
                 for loop in f.loops:
-                    c = vertex_color(loop.vert.co, mname)
+                    c = (vertex_color(loop.vert.co, mname, loop.vert.normal) if getattr(vertex_color, 'wants_normal', False)
+                         else vertex_color(loop.vert.co, mname))
                     loop[col] = c
                     lo, hi = rng.get(mname, (9.0, -9.0))
                     rng[mname] = (min(lo, c[0]), max(hi, c[0]))

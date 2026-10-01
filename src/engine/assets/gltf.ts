@@ -167,7 +167,7 @@ export function parseGlb(buf: ArrayBuffer, name = 'glb'): GltfAsset {
           grp.uv0.push(U0 ? U0[v * 2] : 0, U0 ? U0[v * 2 + 1] : 0);
           grp.uv1.push(U1 ? U1[v * 2] : 0, U1 ? U1[v * 2 + 1] : 0);
           if (C0) grp.col.push(C0[v * cN], C0[v * cN + 1], C0[v * cN + 2], cN > 3 ? C0[v * cN + 3] : 1);
-          else grp.col.push(0, 0, 0, 0);
+          else grp.col.push(0, 1, 0, 1);
         }
         if (prim.indices !== undefined) {
           const I = read(prim.indices);

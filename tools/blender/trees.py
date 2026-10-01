@@ -18,6 +18,7 @@ import json
 import math
 import os
 import random
+import time
 
 import bpy
 import numpy as np
@@ -31,6 +32,8 @@ FOLIAGE = {'pine': 'foliage_pine', 'spruce': 'foliage_spruce', 'birch': 'foliage
 BARK = {'pine': 'bark_pine_blend', 'spruce': 'bark_pine', 'birch': 'bark_birch_blend'}
 # LOD switch distances (metres at instance scale 1).
 LOD_DISTANCES = [0.0, 30.0, 95.0]
+# Every alpha-card material a tree may use (crown occlusion treats them as semi-transparent).
+FOLIAGE_MATS = set(FOLIAGE.values()) | {'twigs_birch', 'twigs_dead'}
 
 
 class Limb:
@@ -41,10 +44,11 @@ class Limb:
 
 
 class Card:
-    __slots__ = ('base', 'axis', 'side', 'length', 'width', 'flip')
+    __slots__ = ('base', 'axis', 'side', 'length', 'width', 'flip', 'mat')
 
-    def __init__(self, base, axis, side, length, width, flip):
+    def __init__(self, base, axis, side, length, width, flip, mat=None):
         self.base, self.axis, self.side, self.length, self.width, self.flip = base, axis, side, length, width, flip
+        self.mat = mat  # None = the skeleton's foliage material
 
 
 class Skeleton:
@@ -56,6 +60,9 @@ class Skeleton:
         self.cards = []
         self.crown_center = 0.0
         self.crown_squash = 0.6
+        self.foliage = FOLIAGE.get(species)
+        self.bark = BARK.get(species)
+        self.lod = LOD_DISTANCES
 
 
 def _rand_perp(rnd, v):
@@ -117,7 +124,7 @@ def _trunk_at(sk, z):
     return pts[-1], radii[-1]
 
 
-def _card(rnd, sk, base, axis, length, width, roll=None, side=None):
+def _card(rnd, sk, base, axis, length, width, roll=None, side=None, mat=None):
     axis = axis.normalized()
     if side is None:
         side = axis.cross(UP)
@@ -125,7 +132,7 @@ def _card(rnd, sk, base, axis, length, width, roll=None, side=None):
             side = _rand_perp(rnd, axis)
         side = side.normalized()
         side = _rotate(side, axis, roll if roll is not None else rnd.uniform(-0.5, 0.5))
-    sk.cards.append(Card(base - axis * 0.06 * length, axis, side.normalized(), length, width, rnd.random() < 0.5))
+    sk.cards.append(Card(base - axis * 0.06 * length, axis, side.normalized(), length, width, rnd.random() < 0.5, mat))
 
 
 # ------------------------------------------------------------ species
@@ -159,6 +166,13 @@ def spruce(seed, height=17.5):
             r0 = 0.010 + 0.024 * L / 3.4
             sk.limbs.append(Limb(pts, [r0, r0 * 0.7, r0 * 0.45, 0.004], 1, dead))
             if dead:
+                # Brittle grey twigs on the dead lower whorls (the branches that cross
+                # the foreground in a Nordic spruce forest).
+                for _ in range(rnd.randint(1, 2)):
+                    p, tan = _sample(pts, rnd.uniform(0.25, 0.85))
+                    ax = (tan + Vector((rnd.uniform(-0.3, 0.3), rnd.uniform(-0.3, 0.3), rnd.uniform(-0.2, 0.1)))).normalized()
+                    ln = min(1.2, max(0.4, L * rnd.uniform(0.6, 0.9)))
+                    _card(rnd, sk, p, ax, ln, ln * 0.8, roll=rnd.uniform(-1.0, 1.0), mat='twigs_dead')
                 continue
             step = 0.36
             t = 0.18
@@ -249,9 +263,11 @@ def pine(seed, height=19.5):
     return sk
 
 
-def birch(seed, height=15.0):
+def birch(seed, height=15.0, bare=False):
     rnd = random.Random(seed)
     sk = Skeleton('birch', height * rnd.uniform(0.9, 1.1))
+    if bare:
+        sk.foliage = 'twigs_birch'  # winter: leafless pendulous twigs on the same skeleton
     H = sk.height
     _trunk(rnd, sk, 0.17, 0.02, rnd.uniform(0.1, 0.22), seed)
     cb = rnd.uniform(0.3, 0.4) * H
@@ -303,7 +319,39 @@ def birch(seed, height=15.0):
     return sk
 
 
-SPECIES = {'pine': pine, 'spruce': spruce, 'birch': birch}
+def shrub(seed, height=2.2):
+    """Leafless deciduous bush (willow/rowan/hazel undergrowth): stems from the ground
+    fanning out, twig cards on their upper parts."""
+    rnd = random.Random(seed)
+    sk = Skeleton('shrub', height * rnd.uniform(0.8, 1.2))
+    sk.foliage, sk.bark, sk.lod = 'twigs_birch', 'bark_birch_base', [0.0, 12.0, 35.0]
+    H = sk.height
+    sk.trunk = Limb([Vector((0, 0, -0.1)), Vector((0, 0, 0.12))], [0.07, 0.05], 0)
+    for _ in range(rnd.randint(6, 11)):
+        az = rnd.uniform(0, 2 * math.pi)
+        lean = rnd.uniform(0.15, 0.65)
+        out = Vector((math.cos(az), math.sin(az), 0))
+        d = (out * math.sin(lean) + UP * math.cos(lean)).normalized()
+        L = H * rnd.uniform(0.6, 1.05) / max(0.5, math.cos(lean))
+        start = out * rnd.uniform(0.0, 0.15)
+
+        def at(t, d=d, L=L, start=start, out=out):
+            return start + d * (L * t) + out * (0.25 * L * t * t)
+        pts = _poly(at, 4)
+        sk.limbs.append(Limb(pts, [0.02, 0.014, 0.009, 0.004], 1))
+        u = 0.35
+        while u <= 1.0:
+            p, tan = _sample(pts, u)
+            ax = (tan + Vector((rnd.uniform(-0.5, 0.5), rnd.uniform(-0.5, 0.5), 0.2))).normalized()
+            ln = rnd.uniform(0.55, 0.85)
+            _card(rnd, sk, p, ax, ln, ln * 0.85, roll=rnd.uniform(-1.2, 1.2))
+            u += 0.3 / max(0.5, L)
+    sk.crown_center = H * 0.6
+    sk.crown_squash = 0.8
+    return sk
+
+
+SPECIES = {'pine': pine, 'spruce': spruce, 'birch': birch, 'birch_bare': lambda seed: birch(seed, bare=True), 'shrub': shrub}
 
 
 # ------------------------------------------------------------ geometry
@@ -332,7 +380,7 @@ def path_tube(b, pts, radii, mat, sides, repeats=None):
 
 def emit(sk, name, lod):
     b = MeshBuilder(name)
-    bark, leaf = BARK[sk.species], FOLIAGE[sk.species]
+    bark, leaf = sk.bark, sk.foliage
     tr = sk.trunk
     if lod == 0:
         path_tube(b, tr.pts, tr.radii, bark, 12)
@@ -357,7 +405,7 @@ def emit(sk, name, lod):
         a = c.axis * (c.length * scale)
         q = [c.base - s, c.base + s, c.base + s + a, c.base - s + a]
         uvs = [(1, 0), (0, 0), (0, 1), (1, 1)] if c.flip else [(0, 0), (1, 0), (1, 1), (0, 1)]
-        b.face(q, leaf, uvs=uvs, smooth=True)
+        b.face(q, c.mat or leaf, uvs=uvs, smooth=True)
     return b
 
 
@@ -385,6 +433,79 @@ def bark_weight_fn(sk):
             w = 0.0
         return (min(1.0, max(0.0, w)), 0.0, 0.0, 1.0)
     return fn
+
+
+# ------------------------------------------------------------ crown occlusion (vertex AO)
+def _sky_dirs(n=20):
+    """Fibonacci directions over the upper hemisphere (+ a little below the horizon),
+    weighted like an overcast sky (zenith brighter than the horizon)."""
+    out = []
+    golden = math.pi * (3 - math.sqrt(5))
+    for i in range(n):
+        z = 1 - (i + 0.5) / n * 1.1
+        r = math.sqrt(max(0.0, 1 - z * z))
+        a = golden * i
+        out.append((Vector((math.cos(a) * r, math.sin(a) * r, z)), max(0.05, 0.4 + 0.6 * z)))
+    return out
+
+
+_coverage = {}
+
+
+def card_coverage(mat):
+    """Fraction of a foliage card's texture that is opaque (alpha above the cutoff)."""
+    if mat not in _coverage:
+        d = material_def(mat)
+        img = bpy.data.images.load(os.path.join(PUBLIC, 'textures', d['baseColor']), check_existing=True)
+        px = np.empty(img.size[0] * img.size[1] * 4, dtype=np.float32)
+        img.pixels.foreach_get(px)
+        _coverage[mat] = float((px[3::4] > d.get('alphaCutoff', 0.5)).mean())
+    return _coverage[mat]
+
+
+def crown_visibility_fn(bm, mat_names):
+    """Sky visibility through the tree's own geometry, baked per vertex into vertex
+    colour G (Source-style vertex AO) so inner crowns go dark. A ray crossing a
+    foliage card keeps (1 - coverage) of its light (cards are mostly transparent);
+    bark blocks. Bark/solid vertices integrate their own hemisphere (cosine-weighted,
+    offset off the surface); thin cards see all directions."""
+    from mathutils.bvhtree import BVHTree
+    bm.faces.ensure_lookup_table()
+    trans = {i: 1.0 - card_coverage(m) for i, m in enumerate(mat_names) if m in FOLIAGE_MATS}
+    mats = [f.material_index for f in bm.faces]  # snapshot: finish() re-indexes faces later
+    bvh = BVHTree.FromBMesh(bm)
+    dirs = _sky_dirs(24)
+    cache = {}
+
+    def vis(p, mat, n):
+        solid = mat not in FOLIAGE_MATS
+        key = (round(p.x, 3), round(p.y, 3), round(p.z, 3), solid)
+        v = cache.get(key)
+        if v is not None:
+            return v
+        acc = wsum = 0.0
+        for d, w in dirs:
+            if solid:
+                c = d.dot(n)
+                if c <= 0.0:
+                    continue
+                w *= c
+            wsum += w
+            t = 1.0
+            o = p + (n * 0.02 if solid else Vector()) + d * 0.03
+            for _ in range(6):
+                hit, _, idx, dist = bvh.ray_cast(o, d, 40.0)
+                if hit is None:
+                    break
+                t *= trans.get(mats[idx], 0.0)
+                if t < 0.03:
+                    break
+                o = hit + d * 0.02
+            acc += t * w
+        v = acc / wsum if wsum > 0 else 1.0
+        cache[key] = v
+        return v
+    return vis
 
 
 # ------------------------------------------------------------ impostor rendering
@@ -461,10 +582,29 @@ def _render_material(mname, mode):
         if col is not None:
             nt.links.new(col, emit_n.inputs['Color'])
     else:
-        ao = nt.nodes.new('ShaderNodeAmbientOcclusion')
-        ao.samples = 16
-        ao.inputs['Distance'].default_value = 1.6
-        nt.links.new(ao.outputs['AO'], emit_n.inputs['Color'])
+        # Same occlusion the engine uses: baked vertex AO (Col.G) x the texture's AO.
+        vattr = nt.nodes.new('ShaderNodeAttribute')
+        vattr.attribute_name = 'Col'
+        vsep = nt.nodes.new('ShaderNodeSeparateColor')
+        nt.links.new(vattr.outputs['Color'], vsep.inputs[0])
+        aoval = vsep.outputs[1]
+        if d.get('orm'):
+            mp = nt.nodes.new('ShaderNodeMapping')
+            ps = d.get('physicalSize', 1)
+            ps = ps if isinstance(ps, list) else [ps, ps]
+            mp.inputs['Scale'].default_value = (1 / ps[0], 1 / ps[1], 1)
+            nt.links.new(uv.outputs['UV'], mp.inputs['Vector'])
+            otx = nt.nodes.new('ShaderNodeTexImage')
+            otx.image = _image(os.path.join(PUBLIC, 'textures', d['orm']), non_color=True)
+            nt.links.new(mp.outputs['Vector'], otx.inputs['Vector'])
+            osep = nt.nodes.new('ShaderNodeSeparateColor')
+            nt.links.new(otx.outputs['Color'], osep.inputs[0])
+            mul = nt.nodes.new('ShaderNodeMath')
+            mul.operation = 'MULTIPLY'
+            nt.links.new(vsep.outputs[1], mul.inputs[0])
+            nt.links.new(osep.outputs[0], mul.inputs[1])
+            aoval = mul.outputs[0]
+        nt.links.new(aoval, emit_n.inputs['Color'])
     shader = emit_n.outputs[0]
     if d.get('alphaMode') == 'mask' and alpha is not None:
         cmp = nt.nodes.new('ShaderNodeMath')
@@ -654,12 +794,13 @@ def impostor_mesh(sk, name, frame):
     return b
 
 
-def write_impostor_material(name, species):
-    src = material_def(FOLIAGE[species])
+def write_impostor_material(name, foliage):
+    src = material_def(foliage)
     d = {
         'shader': 'foliage', 'alphaMode': 'mask', 'alphaCutoff': 0.45, 'doubleSided': True,
         'baseColor': f'impostor_{name}_albedo.png', 'orm': f'impostor_{name}_orm.png', 'physicalSize': 1,
         'roughness': 1, 'translucency': src.get('translucency', 0.3), 'porosity': 0,
+        'alphaDistance': src.get('alphaDistance', 'boost'),
         'bake': {'exclude': True}, 'notes': f'Generated by tools/blender/trees.py (LOD2 impostor of {name}).',
     }
     with open(os.path.join(PUBLIC, 'materials', f'impostor_{name}.json'), 'w') as f:
@@ -669,31 +810,39 @@ def write_impostor_material(name, species):
 def build_tree(name, species, seed, asset_dir, tmp_dir):
     """Builds <name>.glb (LOD0), <name>_lod1.glb, <name>_lod2.glb, impostor textures and <name>.model.json."""
     sk = SPECIES[species](seed)
-    fol = ({FOLIAGE[species]}, bent_normal_fn(sk))
-    vc = bark_weight_fn(sk) if BARK[species].endswith('_blend') else None
+    fol = (FOLIAGE_MATS, bent_normal_fn(sk))
+    bark_w = bark_weight_fn(sk) if sk.bark.endswith('_blend') else None
     tris = []
     lod0 = None
+    ao_total = 0.0
     for lod in (0, 1):
         b = emit(sk, name if lod == 0 else f'{name}_lod1', lod)
+        t0 = time.time()
+        vis = crown_visibility_fn(b.bm, b.mats)
+
+        def vc(co, mat, nrm, vis=vis):
+            return (bark_w(co, mat)[0] if bark_w else 0.0, vis(co, mat, nrm), 0.0, 1.0)
+        vc.wants_normal = True
         obj, _ = b.finish(None, weld=True, vertex_color=vc, foliage_normals=fol)
+        ao_total += time.time() - t0
         export_glb(obj, os.path.join(asset_dir, b.name + '.glb'))
         tris.append(sum(len(p.vertices) - 2 for p in obj.data.polygons))
         if lod == 0:
             lod0 = obj
     frame = render_impostor(lod0, name, tmp_dir)
-    write_impostor_material(name, species)
+    write_impostor_material(name, sk.foliage)
     b = impostor_mesh(sk, name, frame)
     obj, _ = b.finish(None, weld=False, foliage_normals=({f'impostor_{name}'}, bent_normal_fn(sk)))
     export_glb(obj, os.path.join(asset_dir, b.name + '.glb'))
     tris.append(len(obj.data.polygons) * 2)
     model = {
         'format': 'rill.model', 'version': 1, 'name': name, 'semantic': 'vegetation',
-        'lods': [{'mesh': f'{name}.glb', 'distance': LOD_DISTANCES[0]},
-                 {'mesh': f'{name}_lod1.glb', 'distance': LOD_DISTANCES[1]},
-                 {'mesh': f'{name}_lod2.glb', 'distance': LOD_DISTANCES[2]}],
+        'lods': [{'mesh': f'{name}.glb', 'distance': sk.lod[0]},
+                 {'mesh': f'{name}_lod1.glb', 'distance': sk.lod[1]},
+                 {'mesh': f'{name}_lod2.glb', 'distance': sk.lod[2]}],
         'notes': f'{species} (seed {seed}); LOD distances in metres at scale 1, scaled by instance size.',
     }
     with open(os.path.join(asset_dir, f'{name}.model.json'), 'w') as f:
         json.dump(model, f, indent=1)
-    print(f'  {name:24s} {species:6s} LOD tris {tris}  height {sk.height:.1f} m  cards {len(sk.cards)}')
+    print(f'  {name:24s} {species:6s} LOD tris {tris}  height {sk.height:.1f} m  cards {len(sk.cards)}  crown AO {ao_total:.1f}s')
     return model, lod0

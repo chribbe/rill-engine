@@ -451,5 +451,29 @@
    "license": "CC0",
    "url": "https://polyhaven.com/a/granite_tile_03"
   }
+ },
+ "twigs_birch": {
+  "averageAlbedo": [
+   0.0889,
+   0.0597,
+   0.0522
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "twigs_dead": {
+  "averageAlbedo": [
+   0.1652,
+   0.1482,
+   0.1147
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
  }
 }

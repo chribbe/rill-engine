@@ -1,0 +1,17 @@
+{
+ "shader": "foliage",
+ "alphaMode": "mask",
+ "alphaCutoff": 0.4,
+ "doubleSided": true,
+ "baseColor": "twigs_dead_albedo.png",
+ "orm": "twigs_dead_orm.png",
+ "physicalSize": 1,
+ "roughness": 1,
+ "translucency": 0.0,
+ "porosity": 0.3,
+ "bake": {
+  "exclude": true
+ },
+ "notes": "Dead lower spruce twigs with lichen flecks.",
+ "alphaDistance": "average"
+}

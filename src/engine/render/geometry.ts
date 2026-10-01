@@ -160,9 +160,13 @@ export class GeometryArena {
         f32[o32 + 5] = p.uv0 ? p.uv0[v * 2 + 1] : 0;
         u16[o16 + 12] = p.uv1 ? unorm16(p.uv1[v * 2]) : 0;
         u16[o16 + 13] = p.uv1 ? unorm16(p.uv1[v * 2 + 1]) : 0;
+        // Vertex colour: R = blend-layer weight, G = baked vertex AO, A = spare.
+        // Meshes without COLOR_0 get (0, 1, 0, 1): layer A, unoccluded.
+        const o8 = v * 32 + 28;
         if (p.colors) {
-          const o8 = v * 32 + 28;
           for (let c = 0; c < 4; c++) u8[o8 + c] = Math.max(0, Math.min(255, Math.round(p.colors[v * 4 + c] * 255)));
+        } else {
+          u8[o8] = 0; u8[o8 + 1] = 255; u8[o8 + 2] = 0; u8[o8 + 3] = 255;
         }
       }
       const posOff = this.pos.alloc(vc * POS_STRIDE);

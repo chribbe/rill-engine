@@ -1,0 +1,21 @@
+{
+ "format": "rill.model",
+ "version": 1,
+ "name": "shrub_a",
+ "semantic": "vegetation",
+ "lods": [
+  {
+   "mesh": "shrub_a.glb",
+   "distance": 0.0
+  },
+  {
+   "mesh": "shrub_a_lod1.glb",
+   "distance": 12.0
+  },
+  {
+   "mesh": "shrub_a_lod2.glb",
+   "distance": 35.0
+  }
+ ],
+ "notes": "shrub (seed 41); LOD distances in metres at scale 1, scaled by instance size."
+}

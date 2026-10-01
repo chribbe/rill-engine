@@ -168,7 +168,7 @@ def forest_weight(x, y):
 
 
 def terrain_color(co, mat):
-    return (forest_weight(co.x, co.y), 0.0, 0.0, 1.0)
+    return (forest_weight(co.x, co.y), 1.0, 0.0, 1.0)  # G = vertex AO (unoccluded)
 
 
 print('Building terrain...')
@@ -434,7 +434,7 @@ def wall_moss(co, mat):
     base = 1.0 - smoothstep(0.0, 0.9, co.z)
     crest = smoothstep(top(co.x) - 0.25, top(co.x), co.z) * 0.8
     n = 0.3 * noise.noise(Vector((co.x / 3.0, co.z / 1.5, 7.1)))
-    return (min(1.0, max(0.0, max(base, crest) + n)), 0.0, 0.0, 1.0)
+    return (min(1.0, max(0.0, max(base, crest) + n)), 1.0, 0.0, 1.0)
 
 
 res = build(b, TPM_ARCH, vertex_color=wall_moss, color_max_edge=0.4)
@@ -536,7 +536,7 @@ def underpass_grime(co, mat):
     fz = floor_z(co.y)
     w = 1.0 - smoothstep(fz + 0.05, fz + 0.7, co.z)
     w += 0.25 * noise.noise(Vector((co.y / 2.0, co.z, 3.3)))
-    return (min(1.0, max(0.0, w)), 0.0, 0.0, 1.0)
+    return (min(1.0, max(0.0, w)), 1.0, 0.0, 1.0)
 
 
 res = build(b, TPM_ARCH, vertex_color=underpass_grime, color_max_edge=0.4)
@@ -673,13 +673,15 @@ for vi, (sx, sy, sz, seed) in enumerate([(3.2, 2.4, 1.3, 1), (5.5, 3.8, 1.8, 2),
 # Trees: procedural Scots pine / Norway spruce / silver birch with LODs + impostors (tools/blender/trees.py).
 import tempfile  # noqa: E402
 from trees import build_tree  # noqa: E402
-TREE_VARIANTS = {'tree_pine': [('pine', 11), ('pine', 12)], 'tree_spruce': [('spruce', 21), ('spruce', 22)], 'tree_birch': [('birch', 31), ('birch', 32)]}
+# Late-winter content: leafless birches and bushes, young spruces in the undergrowth.
+TREE_VARIANTS = {'tree_pine': [('pine', 11), ('pine', 12)], 'tree_spruce': [('spruce', 21), ('spruce', 22)],
+                 'tree_birch': [('birch_bare', 31), ('birch_bare', 32)], 'shrub': [('shrub', 41), ('shrub', 42)]}
 _imp_tmp = tempfile.mkdtemp(prefix='rill_impostor_')
-_lod0 = {'pine': [], 'spruce': [], 'birch': []}
+_lod0 = {'pine': [], 'spruce': [], 'birch': [], 'shrub': []}
 for base, variants in TREE_VARIANTS.items():
     for k, (species, seed) in enumerate(variants):
         _, ob0 = build_tree(f'{base}_{"ab"[k]}', species, seed, ASSET_DIR, _imp_tmp)
-        _lod0[species].append(ob0)
+        _lod0[species.replace('_bare', '')].append(ob0)
 
 # =============================================================== far scenery
 # Source-style backdrop beyond the playable area: masked fields/forest on the far
@@ -724,7 +726,7 @@ def in_lake(x, y, margin=1.0):
 
 
 def far_color(co, mat):
-    return (far_forest(co.x, co.y), 0.0, 0.0, 1.0)
+    return (far_forest(co.x, co.y), 1.0, 0.0, 1.0)
 
 
 def graded(limit=2600.0, first=12.0, growth=1.13):
@@ -900,7 +902,7 @@ for name, inst in rock_inst.items():
     objects.append({'id': f'rocks_{name}', 'name': f'Bedrock outcrops ({name})', 'type': 'instances', 'semantic': 'rock', 'asset': f'{ASSET_REL}/{name}.glb', 'castShadow': True, 'instances': inst})
 
 # Trees (Poisson-ish rejection sampling)
-trees = {'tree_pine': [], 'tree_spruce': [], 'tree_birch': []}
+trees = {'tree_pine': [], 'tree_spruce': [], 'tree_birch': [], 'shrub': []}
 placed = []
 rnd = random.Random(5)
 regions = [((-6, 100, 17, 100), 420, (0.5, 0.4, 0.1)), ((-100, -45, 16, 100), 170, (0.45, 0.45, 0.1)),
@@ -926,6 +928,27 @@ for (x0, x1, y0, y1), count, mix in regions:
 # Birches by the buildings
 for (x, y) in [(-33, 16), (-35, 20), (-14, 18), (2, -26), (53, -24), (-46, -4), (-48, -33), (-20, -35)]:
     trees['tree_birch'].append([*to_engine((x, y, H(x, y) - 0.1)), round(rnd.uniform(0, 360), 1), round(rnd.uniform(0.8, 1.1), 2)])
+# Undergrowth: young spruces inside the forest, leafless bushes along forest edges.
+n_young = n_shrub = 0
+for _ in range(9000):
+    if n_young >= 230 and n_shrub >= 170:
+        break
+    x, y = rnd.uniform(-98, 98), rnd.uniform(-98, 98)
+    if in_paved(x, y) or near_path(x, y, 1.8):
+        continue
+    if WALL_Y0 - 1.5 < y < WALL_Y1 + 1.5 and WALL_X0 - 2 < x < WALL_X1 + 2:
+        continue
+    fw = forest_weight(x, y)
+    if any((px - x) ** 2 + (py - y) ** 2 < 1.6 ** 2 for (px, py) in placed):
+        continue
+    if fw > 0.75 and n_young < 230:
+        placed.append((x, y))
+        trees['tree_spruce'].append([*to_engine((x, y, H(x, y) - 0.05)), round(rnd.uniform(0, 360), 1), round(rnd.uniform(0.1, 0.32), 2)])
+        n_young += 1
+    elif 0.2 < fw < 0.75 and n_shrub < 170:
+        placed.append((x, y))
+        trees['shrub'].append([*to_engine((x, y, H(x, y) - 0.05)), round(rnd.uniform(0, 360), 1), round(rnd.uniform(0.7, 1.3), 2)])
+        n_shrub += 1
 for name, inst in trees.items():
     for k in range(len(TREE_VARIANTS[name])):
         part = inst[k::len(TREE_VARIANTS[name])]
