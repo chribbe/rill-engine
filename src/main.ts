@@ -39,6 +39,7 @@ async function main() {
   // Retina/HiDPI: render at one pixel per CSS pixel by default (exact 2x nearest upscale),
   // ~4x cheaper than native; ?scale=1 (or the Render scale slider) restores full density.
   const scaleParam = params.get('scale');
+  if (params.has('clutter')) renderer.settings.clutter = params.get('clutter') !== '0';
   renderer.settings.renderScale = scaleParam ? Math.min(1, Math.max(0.25, +scaleParam || 1)) : (window.devicePixelRatio || 1) >= 2 ? 0.5 : 1;
 
   // Exact device-pixel sizing: no CSS scaling blur.
@@ -214,6 +215,8 @@ async function main() {
         frame(performance.now(), true);
         await renderer.device.queue.onSubmittedWorkDone();
         await new Promise((r) => setTimeout(r, 0));
+        // Variants compile asynchronously: let them land before the captured frames.
+        if (i === 1) await renderer.pipelinesSettled();
       }
       const p = renderer.captureRaw();
       frame(performance.now(), true);
@@ -243,7 +246,7 @@ async function main() {
       const tick = () => new Promise<void>((res) => { ch.port1.onmessage = () => res(); ch.port2.postMessage(0); });
       const cpu: number[] = [];
       // Warm up, then measure from a clean timer history.
-      for (let i = 0; i < 8; i++) { frame(performance.now(), true); await renderer.device.queue.onSubmittedWorkDone(); }
+      for (let i = 0; i < 8; i++) { frame(performance.now(), true); await renderer.device.queue.onSubmittedWorkDone(); if (i === 1) await renderer.pipelinesSettled(); }
       renderer.timer.reset();
       const t0 = performance.now();
       for (let i = 0; i < frames; i++) {
@@ -266,6 +269,17 @@ async function main() {
   };
   (window as unknown as { rill: typeof api }).rill = api;
 
+  // Two frames compile what the first view needs (sync, behind the loading screen;
+  // the second sees captured probes), then every other variant compiles in parallel
+  // off the main thread. From here on, a missing variant never stalls a frame.
+  loading.textContent = 'Compiling shaders…';
+  applySize();
+  player.update(0);
+  renderer.render(camera, env, renderables, 1 / 60);
+  renderer.render(camera, env, renderables, 1 / 60);
+  await renderer.prewarm(renderables);
+  renderer.syncPipelines = false;
+
   loading.remove();
   let last = performance.now();
   let lastFrameMs = 16;
@@ -275,6 +289,7 @@ async function main() {
     last = now;
     const c0 = performance.now();
     applySize();
+    if (renderer.settings.clutter) world.ensureClutter();
     player.update(dt);
     sandbox.update(dt);
     env.advance(dt);

@@ -59,6 +59,14 @@ export class InstanceStore {
     this.dirtyMax = Math.max(this.dirtyMax, slot);
   }
 
+  /** Per-object reflection probes: up to three probe indices packed in flag bits 8..31 (index + 1, 0 = none). */
+  setProbes(slot: number, packed: number) {
+    const o = slot * INSTANCE_FLOATS;
+    this.u32[o + 21] = ((this.u32[o + 21] & 0xff) | (packed & 0xffffff00)) >>> 0;
+    this.dirtyMin = Math.min(this.dirtyMin, slot);
+    this.dirtyMax = Math.max(this.dirtyMax, slot);
+  }
+
   model(slot: number): Float32Array {
     return this.cpu.subarray(slot * INSTANCE_FLOATS, slot * INSTANCE_FLOATS + 16);
   }

@@ -112,8 +112,11 @@ export class World {
     }
     renderer.setLights(w.lights);
     renderer.setReflectionProbes(w.reflectionProbes);
-    onProgress?.('Scattering ground clutter');
-    await w.buildClutter();
+    renderer.assignReflectionProbes(w.renderables);
+    if (renderer.settings.clutter) {
+      onProgress?.('Scattering ground clutter');
+      await w.buildClutter();
+    }
     w.loadMs = performance.now() - t0;
     return w;
   }
@@ -154,6 +157,12 @@ export class World {
   }
 
   clutter: ClutterSystem | null = null;
+  private clutterPending: Promise<void> | null = null;
+
+  /** Builds the ground clutter the first time it is enabled (parked by default). */
+  ensureClutter() {
+    if (!this.clutter && !this.clutterPending) this.clutterPending = this.buildClutter();
+  }
 
   /** Scatters material-driven ground clutter over static meshes (see render/clutter.ts). */
   async buildClutter() {

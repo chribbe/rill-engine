@@ -136,8 +136,8 @@ export class Sandbox {
     if (!vm) return;
     vm.visible = this.weapon;
     if (!vm.visible) return;
-    this.renderer.instances.set(vm.slot, this.weaponMatrix, null, -1, 2 | 4, 1, 0x5eed);
     transformAabb(this.weaponMatrix, vm.mesh.aabb.min, vm.mesh.aabb.max, vm.worldMin, vm.worldMax);
+    this.renderer.instances.set(vm.slot, this.weaponMatrix, null, -1, 2 | 4 | this.renderer.probeBits(vm.worldMin, vm.worldMax), 1, 0x5eed);
   }
 
   private fire() {

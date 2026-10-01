@@ -6,6 +6,7 @@
  "orm": "tuft_dwarf_orm.png",
  "physicalSize": 1,
  "roughness": 1,
+ "specular": 0.15,
  "porosity": 0.3,
  "snow": 0.0,
  "bake": {

@@ -35,6 +35,26 @@ fn pcf5(coord: vec2f, depth: f32, layer: i32, size: f32, spread: f32) -> f32 {
   return sum / 144.0;
 }
 
+// 3x3 PCF footprint with 4 bilinear-compare taps (far cascades: their texels
+// are decimetres wide, so a wider kernel adds cost, not visible softness).
+fn pcf3(coord: vec2f, depth: f32, layer: i32, size: f32) -> f32 {
+  let invSize = 1.0 / size;
+  let uv = coord * size;
+  var base = floor(uv + 0.5);
+  let s = uv.x + 0.5 - base.x;
+  let t = uv.y + 0.5 - base.y;
+  base = (base - 0.5) * invSize;
+  let uw0 = 3.0 - 2.0 * s; let uw1 = 1.0 + 2.0 * s;
+  let u0 = (2.0 - s) / uw0 - 1.0; let u1 = s / uw1 + 1.0;
+  let vw0 = 3.0 - 2.0 * t; let vw1 = 1.0 + 2.0 * t;
+  let v0 = (2.0 - t) / vw0 - 1.0; let v1 = t / vw1 + 1.0;
+  var sum = uw0 * vw0 * shadowTap(base, vec2f(u0, v0), invSize, depth, layer);
+  sum += uw1 * vw0 * shadowTap(base, vec2f(u1, v0), invSize, depth, layer);
+  sum += uw0 * vw1 * shadowTap(base, vec2f(u0, v1), invSize, depth, layer);
+  sum += uw1 * vw1 * shadowTap(base, vec2f(u1, v1), invSize, depth, layer);
+  return sum / 16.0;
+}
+
 // 7x7 PCF footprint with 16 taps (higher quality setting).
 fn pcf7(coord: vec2f, depth: f32, layer: i32, size: f32, spread: f32) -> f32 {
   let invSize = 1.0 / size;
@@ -70,6 +90,11 @@ fn sampleCascade(c: i32, worldPos: vec3f, Ng: vec3f, NoL: f32) -> f32 {
   // Softness is expressed in world metres, converted to texels per cascade so
   // penumbrae stay consistent across cascade transitions.
   let spread = max(1.0, frame.shadow0.z / texel);
+  // Far cascades: 4 taps instead of 9 (a blend band uses the same filter as the
+  // cascade it fades into, so there is no visible step at the split).
+  if (c >= 2 && spread < 1.5) {
+    return pcf3(uv, depth, c, size);
+  }
   if ((frame.debug.y & 0x10000u) != 0u) {
     return pcf7(uv, depth, c, size, min(spread, 6.0));
   }

@@ -4,6 +4,11 @@
  "alphaCutoff": 0.45,
  "doubleSided": true,
  "baseColor": "impostor_tree_birch_a_albedo.png",
+ "baseColorFactor": [
+  0.7,
+  0.7,
+  0.7
+ ],
  "orm": "impostor_tree_birch_a_orm.png",
  "physicalSize": 1,
  "roughness": 1,

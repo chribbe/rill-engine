@@ -841,6 +841,9 @@ def write_impostor_material(name, foliage):
     d = {
         'shader': 'foliage', 'alphaMode': 'mask', 'alphaCutoff': 0.45, 'doubleSided': True,
         'baseColor': f'impostor_{name}_albedo.png', 'orm': f'impostor_{name}_orm.png', 'physicalSize': 1,
+        # Planes light ~25 % brighter than the card crown they replace (normal spread / flipped
+        # back-facing cards); calibrated at ground level against LOD1 with tools' masked means.
+        'baseColorFactor': [0.7, 0.7, 0.7],
         'roughness': 1, 'translucency': src.get('translucency', 0.3), 'porosity': 0,
         'alphaDistance': src.get('alphaDistance', 'boost'),
         'snow': 0.3,  # distant crowns: a hint of snow, not white cards

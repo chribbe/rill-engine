@@ -6,6 +6,7 @@
  "orm": "tuft_grass_orm.png",
  "physicalSize": 1,
  "roughness": 1,
+ "specular": 0.15,
  "porosity": 0.3,
  "dryTint": [
   1.35,

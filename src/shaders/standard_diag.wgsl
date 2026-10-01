@@ -119,3 +119,22 @@ fn fsDiagS3(in: VSOut) -> @location(0) vec4f {
   let orm = texGrad(ormTex, uv, uvDx, uvDy);
   return encodeResolve(bc.rgb * (nt.z + orm.g) * 0.1);
 }
+
+// Per-sample shading detector: the full shade() (keeps the compiled shader real)
+// but outputs the distance of the fragment position from the pixel centre:
+// black = pixel-rate execution, bright = sample-rate execution.
+@fragment
+fn fsDiagSampleRate(in: VSOut, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+  let o = shade(in, front);
+  let f = abs(fract(in.pos.xy) - 0.5);
+  return vec4f(vec3f(f.x + f.y) * 100.0 + o.color.rgb * 1e-7, -1.0);
+}
+
+// Same detector on the cheap texturing path only.
+@fragment
+fn fsDiagSampleRateCheap(in: VSOut) -> @location(0) vec4f {
+  let uv = in.uv0 * material.uvTransform.xy + material.uvTransform.zw;
+  let c = textureSample(baseColorTex, sampAniso, uv);
+  let f = abs(fract(in.pos.xy) - 0.5);
+  return vec4f(vec3f(f.x + f.y) * 100.0 + c.rgb * 1e-7, -1.0);
+}

@@ -138,7 +138,7 @@ export interface RenderSettings {
   lodBias: number;
   /** LOD crossfade band, ± fraction of each switch distance (0 = hard switches). */
   lodFade: number;
-  /** Ground clutter (detail props) on/off and distance multiplier. */
+  /** Ground clutter (detail props) on/off and distance multiplier. Parked (off) by default; built on first enable. */
   clutter: boolean;
   /** Realtime shadows for dynamic spot lights (flashlight). */
   spotShadows: boolean;
@@ -164,6 +164,7 @@ export function defaultRenderSettings(): RenderSettings {
       pcf7: false,
       cascadeBlend: true,
       casterExtension: 60,
+      staggerFar: true,
     },
     anisotropy: 16,
     mipBias: 0,
@@ -193,7 +194,7 @@ export function defaultRenderSettings(): RenderSettings {
     showProbes: false,
     lodBias: 1,
     lodFade: 0.1,
-    clutter: true,
+    clutter: false,
     spotShadows: true,
     clutterDistance: 1,
   };
@@ -579,6 +580,39 @@ export class Renderer {
     this.lastEnvVersion = -1;
     this.bindingsDirty = true;
   }
+  /**
+   * Per-object reflection probe selection (Source-style env_cubemap assignment):
+   * the up-to-three probes whose influence boxes overlap the object most, ranked
+   * like the shader ranks them (priority first). The shader then blends the best
+   * two per pixel among those instead of scanning every probe.
+   * Returns the packed instance flag bits.
+   */
+  probeBits(min: ArrayLike<number>, max: ArrayLike<number>): number {
+    const P = this.probes?.probes;
+    if (!P) return 0;
+    const cand: { i: number; score: number }[] = [];
+    for (let i = 0; i < P.length && i < 255; i++) {
+      const p = P[i].probe, b = p.blend ?? 1.5;
+      let inter = 1, vol = 1;
+      for (let k = 0; k < 3; k++) {
+        const lo = Math.max(min[k], p.boxMin[k] - b), hi = Math.min(max[k], p.boxMax[k] + b);
+        inter *= Math.max(0, hi - lo);
+        vol *= Math.max(1e-3, max[k] - min[k]);
+      }
+      if (inter <= 0) continue;
+      cand.push({ i, score: (p.priority ?? 0) * 2 + inter / vol });
+    }
+    cand.sort((a, b) => b.score - a.score);
+    let bits = 0;
+    for (let k = 0; k < Math.min(3, cand.length); k++) bits |= (cand[k].i + 1) << (8 + 8 * k);
+    return bits >>> 0;
+  }
+
+  /** Assigns reflection probes to static renderables (after `setReflectionProbes`). */
+  assignReflectionProbes(renderables: Renderable[]) {
+    for (const r of renderables) this.instances.setProbes(r.slot, this.probeBits(r.worldMin, r.worldMax));
+  }
+
   setDebugGrid(view: GPUTextureView) {
     this.debugGridView = view;
     this.bindingsDirty = true;
@@ -700,13 +734,80 @@ export class Renderer {
   /** Diagnostic: replaces the opaque fragment entry point (e.g. 'fsDiagTrivial'). */
   diagFragment: string | null = null;
 
-  private stdPipeline(masked: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa, fade = false): GPURenderPipeline {
+  private pendingPipelines = new Map<string, Promise<void>>();
+  /**
+   * Synchronous pipeline compilation: complete frames, but a first-use compile
+   * stalls the frame. On during load (until `prewarm`) and for probe captures;
+   * otherwise misses compile on Dawn's worker threads and those draws are
+   * skipped for the few frames until the pipeline is ready (no hitch).
+   */
+  syncPipelines = true;
+
+  private cached(key: string, make: () => GPURenderPipelineDescriptor): GPURenderPipeline | null {
+    const p = this.pipelines.get(key);
+    if (p) return p;
+    if (this.syncPipelines) {
+      const q = this.device.createRenderPipeline(make());
+      this.pipelines.set(key, q);
+      return q;
+    }
+    if (!this.pendingPipelines.has(key)) {
+      const desc = make();
+      this.pendingPipelines.set(key, this.device.createRenderPipelineAsync(desc).then(
+        (q) => { this.pipelines.set(key, q); },
+        // Validation failure: keep the (invalid) sync object so the error surfaces once.
+        () => { this.pipelines.set(key, this.device.createRenderPipeline(desc)); },
+      ).finally(() => this.pendingPipelines.delete(key)));
+    }
+    return null;
+  }
+
+  /** Resolves when no pipeline compilation is in flight (tools: screenshots, benchmarks). */
+  async pipelinesSettled() {
+    while (this.pendingPipelines.size) await Promise.all([...this.pendingPipelines.values()]);
+  }
+
+  /**
+   * Compiles (in parallel, off the main thread) every pipeline variant the scene
+   * can need for the current features: each material with and without the LOD
+   * crossfade, masked prepass/colour pairs, shadow casters, particles. Run after
+   * the first frame so the feature set matches what is drawn.
+   */
+  async prewarm(renderables: Renderable[]) {
+    const t0 = performance.now();
+    const mats = new Set<Material>();
+    for (const r of renderables) {
+      for (const m of r.materials) mats.add(m);
+      if (r.lods) for (const l of r.lods) for (const m of l.materials) mats.add(m);
+    }
+    const msaa = this.settings.msaa;
+    const prev = this.syncPipelines;
+    this.syncPipelines = false;
+    for (const m of mats) {
+      for (const fade of [false, true]) {
+        if (m.masked && this.maskedMode !== 'direct') {
+          this.maskedPipeline(true, m.doubleSided, m, msaa, fade);
+          this.maskedPipeline(false, m.doubleSided, m, msaa, fade);
+        } else {
+          this.stdPipeline(m.masked, m.doubleSided, m, msaa, fade);
+        }
+      }
+      this.shadowPipeline(m.masked, m.doubleSided);
+    }
+    this.particlePipeline(false, msaa);
+    this.particlePipeline(true, msaa);
+    const n = this.pendingPipelines.size;
+    await Promise.all([...this.pendingPipelines.values()]);
+    this.syncPipelines = prev;
+    console.info(`[pipelines] prewarmed ${n} new variants in ${(performance.now() - t0).toFixed(0)} ms (${this.pipelines.size} total)`);
+  }
+
+  private stdPipeline(masked: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa, fade = false): GPURenderPipeline | null {
     const v = this.variant(mat);
     const key = `std:${masked}:${doubleSided}:${msaa}:${this.diagFragment}:${v.key}:${fade}`;
-    let p = this.pipelines.get(key);
-    if (!p) {
+    return this.cached(key, () => {
       const mod = shaderModule(this.device, this.diagFragment ? 'standard_diag' : 'standard');
-      p = this.device.createRenderPipeline({
+      return {
         label: key,
         layout: this.stdPipelineLayout,
         vertex: { module: mod, entryPoint: 'vsMain', buffers: VERTEX_LAYOUT_FULL },
@@ -714,14 +815,12 @@ export class Renderer {
         primitive: { topology: 'triangle-list', cullMode: doubleSided ? 'none' : 'back', frontFace: 'ccw' },
         depthStencil: { format: this.depthFormat, depthWriteEnabled: true, depthCompare: 'greater' },
         multisample: { count: msaa ? 4 : 1 },
-      });
-      this.pipelines.set(key, p);
-    }
-    return p;
+      };
+    });
   }
 
   /** Masked geometry: depth/coverage prepass (colour writes off) or the equal-depth lit pass. */
-  private maskedPipeline(prepass: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa, fade = false, clutter = false): GPURenderPipeline {
+  private maskedPipeline(prepass: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa, fade = false, clutter = false): GPURenderPipeline | null {
     // Hardware A2C when multisampled (fast path); discard-based test otherwise.
     const hwA2C = prepass && msaa && this.settings.alphaToCoverage && this.hwA2C;
     const v = this.variant(mat);
@@ -729,10 +828,9 @@ export class Renderer {
     // Clutter always fades with distance.
     const fadeV = prepass && (fade || clutter);
     const key = `masked:${prepass}:${doubleSided}:${msaa}:${hwA2C}:${prepass ? '' : v.key}:${fadeV}:${clutter}`;
-    let p = this.pipelines.get(key);
-    if (!p) {
+    return this.cached(key, () => {
       const mod = shaderModule(this.device, 'standard');
-      p = this.device.createRenderPipeline({
+      return {
         label: key,
         layout: clutter ? this.clutterPipelineLayout : this.stdPipelineLayout,
         vertex: { module: mod, entryPoint: clutter ? 'vsClutter' : 'vsMain', buffers: VERTEX_LAYOUT_FULL },
@@ -747,10 +845,8 @@ export class Renderer {
           ? { format: this.depthFormat, depthWriteEnabled: true, depthCompare: 'greater' }
           : { format: this.depthFormat, depthWriteEnabled: false, depthCompare: 'equal' },
         multisample: { count: msaa ? 4 : 1, alphaToCoverageEnabled: hwA2C },
-      });
-      this.pipelines.set(key, p);
-    }
-    return p;
+      };
+    });
   }
   hwA2C = true;
   hdrFormat: GPUTextureFormat = 'rgba16float';
@@ -795,13 +891,12 @@ export class Renderer {
     return p;
   }
 
-  private shadowPipeline(masked: boolean, doubleSided: boolean): GPURenderPipeline {
+  private shadowPipeline(masked: boolean, doubleSided: boolean): GPURenderPipeline | null {
     const s = this.settings.shadows;
     const key = `shadow:${masked}:${doubleSided}:${s.slopeBias}`;
-    let p = this.pipelines.get(key);
-    if (!p) {
+    return this.cached(key, () => {
       const mod = shaderModule(this.device, 'shadow_depth');
-      p = this.device.createRenderPipeline({
+      return {
         label: key,
         layout: this.shadowPipelineLayout,
         vertex: masked
@@ -817,10 +912,8 @@ export class Renderer {
           format: 'depth32float', depthWriteEnabled: true, depthCompare: 'less',
           depthBias: 0, depthBiasSlopeScale: s.slopeBias, depthBiasClamp: 0.01,
         },
-      });
-      this.pipelines.set(key, p);
-    }
-    return p;
+      };
+    });
   }
 
   private skyPipeline(msaa = this.settings.msaa): GPURenderPipeline {
@@ -847,12 +940,11 @@ export class Renderer {
    * by the destination weight and the weight itself is left untouched, which
    * keeps the resolved rgb/w exactly "over" (alpha) or "add" (additive).
    */
-  private particlePipeline(additive: boolean, msaa = this.settings.msaa): GPURenderPipeline {
+  private particlePipeline(additive: boolean, msaa = this.settings.msaa): GPURenderPipeline | null {
     const key = `particles:${additive}:${msaa}`;
-    let p = this.pipelines.get(key);
-    if (!p) {
+    return this.cached(key, () => {
       const mod = shaderModule(this.device, 'particles');
-      p = this.device.createRenderPipeline({
+      return {
         label: key,
         layout: this.particlePipelineLayout,
         vertex: { module: mod, entryPoint: 'vsMain' },
@@ -869,10 +961,8 @@ export class Renderer {
         primitive: { topology: 'triangle-list' },
         depthStencil: { format: this.depthFormat, depthWriteEnabled: false, depthCompare: 'greater' },
         multisample: { count: msaa ? 4 : 1 },
-      });
-      this.pipelines.set(key, p);
-    }
-    return p;
+      };
+    });
   }
 
   private linePipeline(wire: boolean): GPURenderPipeline {
@@ -1309,6 +1399,7 @@ export class Renderer {
         const list = this.shadowLists[ci];
         list.reset();
         const cp = this.shadows.cascades[ci].planes;
+        if (!(this.shadows.updatedMask & (1 << ci))) continue; // stale far cascade keeps last frame's map
         for (const r of renderables) {
           if (!r.visible || !r.castShadow) continue;
           if (!aabbVisible(cp, r.worldMin, r.worldMax)) continue;
@@ -1354,13 +1445,17 @@ export class Renderer {
 
   private encodeShadows(enc: GPUCommandEncoder, timestamps: boolean) {
     const arena = this.arena;
+    let first = true;
     for (let ci = 0; ci < CASCADES; ci++) {
+      if (!(this.shadows.updatedMask & (1 << ci))) continue;
+      const last = !(this.shadows.updatedMask >> (ci + 1));
       const pass = enc.beginRenderPass({
         label: `shadow${ci}`,
         colorAttachments: [],
         depthStencilAttachment: { view: this.shadows.layerViews[ci], depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' },
-        timestampWrites: !timestamps ? undefined : ci === 0 ? this.timer.pass('shadow0') : ci === 3 ? this.timer.pass('shadow3') : undefined,
+        timestampWrites: !timestamps ? undefined : first ? this.timer.pass('shadowNear') : last ? this.timer.pass('shadowFar') : undefined,
       });
+      first = false;
       pass.setBindGroup(0, this.shadowBGs[ci]);
       pass.setVertexBuffer(0, arena.pos.buffer);
       pass.setVertexBuffer(1, arena.attr.buffer);
@@ -1369,6 +1464,7 @@ export class Renderer {
       let curMat: Material | null = null;
       for (const dr of this.shadowLists[ci].draws) {
         const p = this.shadowPipeline(dr.masked, dr.doubleSided);
+        if (!p) continue;
         if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
         if (dr.material !== curMat) { pass.setBindGroup(1, dr.material.bindGroup); curMat = dr.material; }
         pass.drawIndexed(dr.prim.indexCount, dr.count, dr.prim.firstIndex, dr.prim.baseVertex, dr.first);
@@ -1394,6 +1490,7 @@ export class Renderer {
       let curMat: Material | null = null;
       for (const dr of this.spotLists[si].draws) {
         const p = this.shadowPipeline(dr.masked, dr.doubleSided);
+        if (!p) continue;
         if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
         if (dr.material !== curMat) { pass.setBindGroup(1, dr.material.bindGroup); curMat = dr.material; }
         pass.drawIndexed(dr.prim.indexCount, dr.count, dr.prim.firstIndex, dr.prim.baseVertex, dr.first);
@@ -1426,10 +1523,11 @@ export class Renderer {
     let cur: GPURenderPipeline | null = null;
     let curMat: Material | null = null;
     const draws = this.mainList.draws;
-    const drawList = (filter: (d: Draw) => boolean, pick: (d: Draw) => GPURenderPipeline) => {
+    const drawList = (filter: (d: Draw) => boolean, pick: (d: Draw) => GPURenderPipeline | null) => {
       for (const dr of draws) {
         if (!filter(dr)) continue;
         const p = pick(dr);
+        if (!p) continue; // still compiling (async): skip this frame
         if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
         if (dr.material !== curMat) { pass.setBindGroup(1, dr.material.bindGroup); curMat = dr.material; }
         pass.drawIndexed(dr.prim.indexCount, dr.count, dr.prim.firstIndex, dr.prim.baseVertex, dr.first);
@@ -1442,7 +1540,8 @@ export class Renderer {
     } else {
       // Opaque first (fills depth), then masked prepass, then masked colour at equal depth.
       drawList((d) => !d.masked, (dr) => this.stdPipeline(false, dr.doubleSided, dr.material, msaa, dr.fade));
-      drawList((d) => d.masked, (dr) => this.maskedPipeline(true, dr.doubleSided, dr.material, msaa, dr.fade));
+      // A prepass without its colour pass would punch holes: draw only when both are compiled.
+      drawList((d) => d.masked, (dr) => this.maskedPipeline(false, dr.doubleSided, dr.material, msaa) ? this.maskedPipeline(true, dr.doubleSided, dr.material, msaa, dr.fade) : null);
       const clutterPass = (prepassStage: boolean) => {
         for (const c of clutter) {
           const prims = c.type.mesh.primitives;
@@ -1450,6 +1549,7 @@ export class Renderer {
             const m = c.type.materials[k];
             if (!m.masked) continue; // clutter is alpha-tested cards
             const p = this.maskedPipeline(prepassStage, true, m, msaa, false, true);
+            if (!p || !this.maskedPipeline(!prepassStage, true, m, msaa, false, true)) continue;
             if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
             if (m !== curMat) { pass.setBindGroup(1, m.bindGroup); curMat = m; }
             pass.setBindGroup(2, c.type.bindGroup);
@@ -1470,12 +1570,13 @@ export class Renderer {
     const P = this.particles;
     if (particles && !overdraw && P.alphaCount + P.addCount > 0) {
       pass.setBindGroup(1, this.particleBG);
-      if (P.alphaCount > 0) {
-        pass.setPipeline(this.particlePipeline(false, msaa));
+      const pa = this.particlePipeline(false, msaa), pd = this.particlePipeline(true, msaa);
+      if (P.alphaCount > 0 && pa) {
+        pass.setPipeline(pa);
         pass.draw(6, P.alphaCount, 0, 0);
       }
-      if (P.addCount > 0) {
-        pass.setPipeline(this.particlePipeline(true, msaa));
+      if (P.addCount > 0 && pd) {
+        pass.setPipeline(pd);
         pass.draw(6, P.addCount, 0, P.alphaCount);
       }
     }
@@ -1489,6 +1590,13 @@ export class Renderer {
   captureProbes(env: Environment, renderables: Renderable[]) {
     const P = this.probes;
     if (!P || P.count === 0) return;
+    // Captures must be complete: compile any missing variant synchronously.
+    const sync = this.syncPipelines;
+    this.syncPipelines = true;
+    try { this.captureProbesImpl(env, renderables, P); } finally { this.syncPipelines = sync; }
+  }
+
+  private captureProbesImpl(env: Environment, renderables: Renderable[], P: ReflectionProbes) {
     const t0 = performance.now();
     const d = this.device;
     const de = env.derive();
@@ -1498,7 +1606,7 @@ export class Renderer {
       for (let face = 0; face < 6; face++) {
         const v = faceView(pos, face);
         const { flags, shadowsOn } = this.viewFlags(env.state, de, true, false);
-        this.shadows.update(v.position, v.forward, v.fovY, v.aspect, v.near, de.sunDir, S.shadows);
+        this.shadows.update(v.position, v.forward, v.fovY, v.aspect, v.near, de.sunDir, S.shadows, true);
         this.writeFrameUniforms(this.captureFrame, this.captureFrameBuffer, v, PROBE_SIZE, PROBE_SIZE, env, de, CAPTURE_PRE_EXPOSURE, 10, flags, 0);
         const planes = extractPlanes(v.viewProj, { near: true, far: false, zeroToOne: true, reverseZ: true });
         this.buildLists(planes, renderables, shadowsOn, v.position, v.fovY);

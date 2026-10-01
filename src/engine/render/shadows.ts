@@ -18,6 +18,12 @@ export interface ShadowSettings {
   cascadeBlend: boolean;
   /** Metres casters may extend toward the sun beyond the cascade sphere. */
   casterExtension: number;
+  /**
+   * Render the two far cascades on alternating frames (each keeps the matrix it
+   * was rendered with, so sampling stays exact; only their placement and dynamic
+   * casters lag one frame). Near cascades always render.
+   */
+  staggerFar: boolean;
 }
 
 export interface Cascade {
@@ -72,7 +78,37 @@ export class ShadowSystem {
    * slice (rotation invariant, so no size changes as the camera turns), and the
    * light-space origin is snapped to whole shadow texels (no crawling when moving).
    */
-  update(camPos: Float32Array, camForward: Float32Array, fovY: number, aspect: number, near: number, sunDir: [number, number, number], s: ShadowSettings) {
+  /** Cascades refreshed by the last `update` (bit i = cascade i); the others keep last frame's map. */
+  updatedMask = 0;
+  private frame = 0;
+  private lastKey = '';
+  private pendingFull = false;
+  private lastPos = vec3.create();
+  private lastSun = vec3.create();
+
+  /**
+   * Picks the cascades to refresh this frame: all of them after a settings change,
+   * a teleport or a sun jump (or when staggering is off / `force`), otherwise the
+   * near two plus one far cascade, alternating.
+   */
+  private chooseMask(camPos: Float32Array, sunDir: [number, number, number], s: ShadowSettings, force: boolean): number {
+    const key = `${this.size}:${s.distance}:${s.splitLambda}:${s.casterExtension}`;
+    const moved = vec3.distance(camPos, this.lastPos);
+    const sunJump = vec3.dot(vec3.normalize(vec3.fromValues(...sunDir)), this.lastSun) < 0.99995;
+    // A forced update (probe capture from another viewpoint) also invalidates the next frame.
+    const full = force || this.pendingFull || !s.staggerFar || key !== this.lastKey || moved > 4 || sunJump;
+    this.pendingFull = force;
+    this.lastKey = key;
+    vec3.copy(camPos, this.lastPos);
+    vec3.normalize(vec3.fromValues(...sunDir), this.lastSun);
+    this.frame++;
+    if (full) return (1 << CASCADES) - 1;
+    return 0b0011 | (this.frame & 1 ? 0b1000 : 0b0100);
+  }
+
+  update(camPos: Float32Array, camForward: Float32Array, fovY: number, aspect: number, near: number, sunDir: [number, number, number], s: ShadowSettings, force = false) {
+    const mask = this.chooseMask(camPos, sunDir, s, force);
+    this.updatedMask = mask;
     const far = s.distance;
     const k = Math.tan(fovY / 2) * Math.sqrt(1 + aspect * aspect);
     const k2 = k * k;
@@ -110,6 +146,7 @@ export class ShadowSystem {
       const proj = mat4.ortho(-r, r, -r, r, 0, 2 * r + ext);
       const vp = mat4.multiply(proj, view);
       const c = this.cascades[i];
+      if (!(mask & (1 << i))) { prev = split; continue; }
       c.viewProj = vp;
       c.splitFar = split;
       c.texelWorld = texel;

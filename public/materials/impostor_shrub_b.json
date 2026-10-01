@@ -4,6 +4,11 @@
  "alphaCutoff": 0.45,
  "doubleSided": true,
  "baseColor": "impostor_shrub_b_albedo.png",
+ "baseColorFactor": [
+  0.7,
+  0.7,
+  0.7
+ ],
  "orm": "impostor_shrub_b_orm.png",
  "physicalSize": 1,
  "roughness": 1,

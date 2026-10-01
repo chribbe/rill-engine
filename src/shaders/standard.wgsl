@@ -269,25 +269,47 @@ fn cubicBSplineWeights(f: vec2f) -> array<vec4f, 2> {
   return array<vec4f, 2>(vec4f(w0.x, w1.x, w2.x, w3.x), vec4f(w0.y, w1.y, w2.y, w3.y));
 }
 
-// Bicubic B-spline lightmap filtering with 4 bilinear taps (Sigg & Hadwiger).
-fn sampleLightmap(uv: vec2f, layer: i32) -> vec3f {
-  if (frame.lmParams.y < 0.5) {
-    return textureSampleLevel(lightmaps, sampClamp, uv, layer, 0.0).rgb;
+// Lightmap filtering. Bicubic B-spline (4 bilinear taps, Sigg & Hadwiger) only
+// where a texel spans more than ~2 pixels; minified lightmaps look identical with
+// one bilinear tap, which matters because every tap is ~4x dearer under MSAA.
+// Tap positions/weights are shared by all layers of a page.
+struct LmTaps {
+  uv: vec2f,
+  h0: vec2f,
+  h1: vec2f,
+  g0: vec2f,
+  g1: vec2f,
+  cubic: f32,  // 0 = bilinear, 1 = bicubic, between = blend band
+};
+
+fn lightmapTaps(uv: vec2f, footprint: f32) -> LmTaps {
+  var t: LmTaps;
+  t.uv = uv;
+  // footprint 0 = constant lightmap UV over the primitive (clutter): one tap is exact.
+  t.cubic = select(0.0, smoothstep(0.6, 0.35, footprint), frame.lmParams.y > 0.5 && footprint > 0.0);
+  if (t.cubic > 0.0) {
+    let size = vec2f(textureDimensions(lightmaps).xy);
+    let p = uv * size - 0.5;
+    let i = floor(p);
+    let w = cubicBSplineWeights(p - i);
+    t.g0 = vec2f(w[0].x + w[0].y, w[1].x + w[1].y);
+    t.g1 = vec2f(w[0].z + w[0].w, w[1].z + w[1].w);
+    t.h0 = (vec2f(w[0].y, w[1].y) / t.g0 - 1.0 + i + 0.5) / size;
+    t.h1 = (vec2f(w[0].w, w[1].w) / t.g1 + 1.0 + i + 0.5) / size;
   }
-  let size = vec2f(textureDimensions(lightmaps).xy);
-  let p = uv * size - 0.5;
-  let i = floor(p);
-  let f = p - i;
-  let w = cubicBSplineWeights(f);
-  let g0 = vec2f(w[0].x + w[0].y, w[1].x + w[1].y);
-  let g1 = vec2f(w[0].z + w[0].w, w[1].z + w[1].w);
-  let h0 = (vec2f(w[0].y, w[1].y) / g0 - 1.0 + i + 0.5) / size;
-  let h1 = (vec2f(w[0].w, w[1].w) / g1 + 1.0 + i + 0.5) / size;
-  let a = textureSampleLevel(lightmaps, sampClamp, vec2f(h0.x, h0.y), layer, 0.0).rgb;
-  let b = textureSampleLevel(lightmaps, sampClamp, vec2f(h1.x, h0.y), layer, 0.0).rgb;
-  let c = textureSampleLevel(lightmaps, sampClamp, vec2f(h0.x, h1.y), layer, 0.0).rgb;
-  let d = textureSampleLevel(lightmaps, sampClamp, vec2f(h1.x, h1.y), layer, 0.0).rgb;
-  return g0.y * (g0.x * a + g1.x * b) + g1.y * (g0.x * c + g1.x * d);
+  return t;
+}
+
+fn sampleLightmap(t: LmTaps, layer: i32) -> vec3f {
+  var lin = vec3f(0.0);
+  if (t.cubic < 1.0) { lin = textureSampleLevel(lightmaps, sampClamp, t.uv, layer, 0.0).rgb; }
+  if (t.cubic <= 0.0) { return lin; }
+  let a = textureSampleLevel(lightmaps, sampClamp, vec2f(t.h0.x, t.h0.y), layer, 0.0).rgb;
+  let b = textureSampleLevel(lightmaps, sampClamp, vec2f(t.h1.x, t.h0.y), layer, 0.0).rgb;
+  let c = textureSampleLevel(lightmaps, sampClamp, vec2f(t.h0.x, t.h1.y), layer, 0.0).rgb;
+  let d = textureSampleLevel(lightmaps, sampClamp, vec2f(t.h1.x, t.h1.y), layer, 0.0).rgb;
+  let cub = t.g0.y * (t.g0.x * a + t.g1.x * b) + t.g1.y * (t.g0.x * c + t.g1.x * d);
+  return mix(lin, cub, t.cubic);
 }
 
 struct Surface {
@@ -375,6 +397,8 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   // All derivatives up front: later branches are not in uniform control flow.
   let uv0Dx = dpdx(in.uv0);
   let uv0Dy = dpdy(in.uv0);
+  let lmSize = f32(textureDimensions(lightmaps).x);
+  let lmFootprint = max(length(dpdx(in.lmUv)), length(dpdy(in.lmUv))) * lmSize;
 
   var Ng = normalize(in.normal);
   var T = in.tangent.xyz;
@@ -621,7 +645,9 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   if (hasFlag(F_SUN)) {
     let L = frame.sunDir.xyz;
     let NoLg = dot(Ng, L);
-    if (USE_SHADOWS) {
+    // Faces turned away from the sun get no direct light (geoMask), so skip the
+    // shadow lookups there; foliage keeps them for its transmission term.
+    if (USE_SHADOWS && (foliage || NoLg > -0.04)) {
       let sh = sunShadow(wp, Ng, NoLg, in.viewDepth);
       shadowTerm = sh.x;
       cascade = sh.y;
@@ -670,7 +696,8 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
       var w = saturate(vec3f(dot(n, RNM0), dot(n, RNM1), dot(n, RNM2)));
       w = w * w;
       w = w / max(w.x + w.y + w.z, 1e-4);
-      let flat = sampleLightmap(in.lmUv, lmLayer);
+      let taps = lightmapTaps(in.lmUv, lmFootprint);
+      let flat = sampleLightmap(taps, lmLayer);
       // Basis layers are low frequency: plain bilinear is enough.
       let l0 = textureSampleLevel(lightmaps, sampClamp, in.lmUv, lmLayer + 1, 0.0).rgb;
       let l1 = textureSampleLevel(lightmaps, sampClamp, in.lmUv, lmLayer + 2, 0.0).rgb;
@@ -678,11 +705,12 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
       let mean = (l0 + l1 + l2) * (1.0 / 3.0);
       let dirRatio = clamp((l0 * w.x + l1 * w.y + l2 * w.z) / max(mean, vec3f(1e-4)), vec3f(0.0), vec3f(3.0));
       let lmSky = flat * dirRatio * frame.lmParams.z;
-      let lmSun = sampleLightmap(in.lmUv, lmLayer + 4) * frame.lmParams.w;
+      let lmSun = sampleLightmap(taps, lmLayer + 4) * frame.lmParams.w;
       irr = lmSky * skyUpRadiance() + lmSun * frame.sunColor.rgb * ratio;
     } else {
-      let lmSky = sampleLightmap(in.lmUv, lmLayer) * frame.lmParams.z;
-      let lmSun = sampleLightmap(in.lmUv, lmLayer + 1) * frame.lmParams.w;
+      let taps = lightmapTaps(in.lmUv, lmFootprint);
+      let lmSky = sampleLightmap(taps, lmLayer) * frame.lmParams.z;
+      let lmSun = sampleLightmap(taps, lmLayer + 1) * frame.lmParams.w;
       irr = (lmSky * skyUpRadiance() + lmSun * frame.sunColor.rgb) * ratio;
     }
   } else if (hasFlag(F_SKY_AMBIENT)) {
@@ -708,11 +736,15 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
     var probeIrr = vec3f(0.0);
     var wLeft = 1.0;
     if (USE_REFL_PROBES && hasFlag(F_REFL_PROBES)) {
-      // Two most relevant box-projected probes (priority first, then weight);
+      // Two most relevant box-projected probes (priority first, then weight) among
+      // the up to three chosen per object on the CPU (instance flag bits 8..31);
       // the global sky probe fills whatever weight remains.
       var b0 = -1; var b1 = -1;
       var s0 = 0.0; var s1 = 0.0;
-      for (var i = 0u; i < frame.pvDims.w; i++) {
+      for (var k = 0u; k < 3u; k++) {
+        let id = (inst.info.y >> (8u + 8u * k)) & 0xFFu;
+        if (id == 0u) { break; }
+        let i = id - 1u;
         let w = reflProbeWeight(i, wp);
         if (w <= 0.0) { continue; }
         let score = w + reflProbes[i].bmax.w * 2.0;

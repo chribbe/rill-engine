@@ -41,7 +41,8 @@ World (runtime, derived) ───────────────┐       
    (6 mips), L2 SH irradiance, BRDF LUT (once).
 4. **Shadow passes** — 4 cascades into a `depth32float` 2D array (default 2048²), depth clamp
    ("pancaking") via `unclippedDepth`; then up to 2 dynamic spot-light layers (1024²) for
-   gameplay lights (flashlight).
+   gameplay lights (flashlight). The near two cascades render every frame, the far two on
+   alternating frames (each keeps the matrix it was rendered with).
 5. **Main forward pass** — 4× MSAA `rgba16float` + `depth32float` (transient attachments),
    reverse-Z infinite projection. Order: opaque → masked depth prepass → clutter prepass →
    masked colour (`depth == equal`) → clutter colour → sky (fullscreen at depth 0) →
@@ -265,6 +266,39 @@ World (runtime, derived) ───────────────┐       
       depth remapped into [0.75, 1] of reverse-Z (`I_VIEWMODEL` instance flag), so it never
       clips into walls; no shadow casting, no decals, excluded from probe capture.
 
+33. **Impostors calibrated to the LOD they replace.** Card crowns use bent (crown-volume)
+    normals that flip with each double-sided card's winding, so roughly half the visible cards
+    face into the crown; the three impostor planes do not reproduce that distribution and lit
+    ~20–25 % brighter (linear) than LOD1 at ground level, which read as distant trees "going
+    white" at the LOD switch, and fog then lifted them further. Lighting both orientations
+    analytically made it worse; the fix is an albedo factor (0.7) on impostor materials
+    (`trees.py`), measured with tree-only masks against forced-LOD1 renders: ±5 % at ground
+    level, −10 % seen from 45 m up. Grass tufts lost their white sheen with `specular: 0.15`.
+34. **No pipeline compiles on the frame path.** Variant pipelines (standard, masked, shadow,
+    particles) go through one cache: misses compile with `createRenderPipelineAsync` on Dawn's
+    worker threads and those draws are skipped for the frames until ready (a masked prepass
+    only draws when its colour pass is ready too). At load, two sync frames plus `prewarm()`
+    (every material × LOD-fade × prepass/colour × shadow, particles) compile everything the
+    scene can use; probe captures force sync compilation so captures are complete. First
+    shot / flashlight / LOD crossfade no longer stall a frame.
+35. **Per-pixel memory work is the MSAA cost on Apple GPUs.** At 1080p the road view is ~2.4 ms
+    without MSAA and 2–3× that with 4× MSAA. It is not per-sample shading (a position-fraction
+    detector shows pixel rate; note that atomics *do* force per-sample on Metal), not target
+    format, resolve or dead code, and simple shaders show no penalty; the same texture /
+    storage reads cost ~3–7× more inside the big lit shader under MSAA (working theory:
+    occupancy / latency hiding). So the lit shader is tuned for fewer fetches:
+    - reflection probes are chosen per object on the CPU (≤ 3, packed in instance flag bits
+      8–31, Source-style env_cubemap assignment); the shader ranks only those instead of
+      scanning every probe;
+    - lightmaps use bicubic only where a texel spans more than ~2 pixels (blend band
+      0.35–0.6 texels/pixel), one shared tap set for all layers of a page;
+    - sun-shadow lookups are skipped on faces turned away from the sun (non-foliage), and
+      cascades 2–3 use a 4-tap 3×3 PCF instead of 9 taps;
+    - far cascades render on alternating frames (`shadows.staggerFar`), full refresh after
+      teleports, sun jumps, setting changes and probe captures.
+    Interleaved A/B against the old paths: 5–10 % less GPU time per view. Ground clutter is
+    parked (off by default, built on first enable, `?clutter=1`).
+
 ## 5. Content pipeline
 
 ```
@@ -332,6 +366,11 @@ flashlight + ~70 live particles + bullet decals add ≈ 0.5 ms (8.7 → 9.2 ms).
 **Measurement note:** in the desktop app's browser pane, a hidden pane throttles presentation,
 so wall-clock frame time is meaningless there, and per-pass timestamps overlap on TBDR (their
 sum double-counts). `rill.bench()` now warms up, resets the timer and reports `gpuSpanMs`.
+Absolute numbers on a laptop drift 2–3× within minutes (thermal limits, and any other tab
+rendering the engine shares the GPU), and light passes run at low GPU clocks. Compare
+changes **interleaved in one session** (A/B alternation, minimum of several short runs), e.g.
+by compiling the old path as a temporary pipeline variant; and keep a no-MSAA frame of the
+same view as a reference for the machine's current state.
 
 Stress (1080p, MSAA 4×, road / overview):
 
@@ -415,8 +454,11 @@ Findings:
 - Lightmaps are rgb9e5 raw (32 MB for one page with two components) — consider BC6H.
 - Brute-force local light loop (fine for ~20 lights); clustered lighting when needed.
 - CPU culling is flat (no BVH / sectors); no GPU-driven path yet.
-- Pipelines are created synchronously on first use (hitch when toggling features) → use
-  `createRenderPipelineAsync` + warm-up.
+- Non-variant pipelines (sky, post, bloom, lines, overdraw) are still created synchronously
+  (once, at load). A feature toggle (debug view, preset with new features) shows missing
+  geometry for a few frames while its variants compile.
+- The MSAA premium on Apple GPUs (decision 35) is not root-caused; register pressure is the
+  main suspect (next: f16 shading math, splitting rarely used paths into variants).
 - `standard.wgsl` is still one large source; variants are specialised but the source should be
   split into smaller chunks as features grow.
 - Collision is a simple sphere/ray controller over a uniform grid (no proper capsule sweep).
@@ -451,11 +493,14 @@ Findings:
 
 Done: directional lightmaps, reflection probes, probe volume, blend materials, BC7, LOD
 vegetation with impostors, far scenery, scanned materials, LOD crossfade, Nordic conifers,
-season layer, ground clutter, graded mood presets, BC5 + card trimming, action rendering
-(decisions 18–32).
+season layer, ground clutter, graded mood presets, BC5 + card trimming, action rendering,
+impostor calibration, async pipelines, MSAA fetch budget (decisions 18–35).
 
-1. **GPU-driven culling + Hi-Z occlusion** and cached far shadow cascades (the forest and the
-   overview are the budget limits).
+1. **Lit-shader register pressure** (decision 35): f16 for colour/lighting math (`shader-f16`
+   is available), more paths as compiled variants (decals, local lights, probe blending only
+   where present), then re-measure the MSAA premium on a quiet machine.
+   GPU-driven culling / Hi-Z occlusion matter once levels have real occluders (draw count and
+   CPU culling are not limits here: 0.5–0.7 ms CPU per frame).
 2. **Soft particles** (depth fade; needs a depth copy or a resolved depth before the particle
    draw) and a smoke texture atlas with lit normals.
 3. **Anti-tiling for large scanned surfaces** (stochastic/texture-bombing or a second scan blended
