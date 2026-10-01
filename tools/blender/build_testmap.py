@@ -683,6 +683,11 @@ for base, variants in TREE_VARIANTS.items():
         _, ob0 = build_tree(f'{base}_{"ab"[k]}', species, seed, ASSET_DIR, _imp_tmp)
         _lod0[species.replace('_bare', '')].append(ob0)
 
+# Ground clutter models (scattered at runtime by the material 'clutter' lists).
+from clutter import KINDS as CLUTTER_KINDS, build_clutter  # noqa: E402
+for _cn in CLUTTER_KINDS:
+    build_clutter(_cn, ASSET_DIR)
+
 # =============================================================== far scenery
 # Source-style backdrop beyond the playable area: masked fields/forest on the far
 # terrain, lakes, rings of tree-line silhouette strips and distant tower blocks.

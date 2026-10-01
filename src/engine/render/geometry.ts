@@ -68,9 +68,12 @@ export interface GpuPrimitive {
   vertexCount: number;
   material: string;
   aabb: Aabb;
-  /** CPU copies kept for collision, picking and on-demand wireframe generation. */
+  /** CPU copies kept for collision, picking, clutter scattering and on-demand wireframe generation. */
   positions: Float32Array;
   indices: Uint32Array;
+  normals?: Float32Array;
+  colors?: Float32Array;
+  uv1?: Float32Array;
   wireFirst: number;
   wireCount: number;
 }
@@ -190,6 +193,9 @@ export class GeometryArena {
         aabb: pa,
         positions: p.positions,
         indices: p.indices,
+        normals: p.normals,
+        colors: p.colors,
+        uv1: p.uv1,
         wireFirst: 0,
         wireCount: 0,
       };

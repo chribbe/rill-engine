@@ -1,4 +1,23 @@
-{ "inherits": "ground_grass", "physicalSize": 6, "baseColorFactor": [0.9, 1.0, 0.85],
-  "macro": { "texture": "macro_variation.png", "physicalSize": 420, "albedoStrength": 0.45, "roughnessStrength": 0.0 },
-  "blend": { "material": "forest_canopy", "contrast": 3, "height": 0.3, "noise": 0.5 },
-  "notes": "Distant fields (layer A) and forest canopy (layer B, vertex colour R) beyond the playable area." }
+{
+ "inherits": "ground_grass",
+ "physicalSize": 6,
+ "baseColorFactor": [
+  0.9,
+  1.0,
+  0.85
+ ],
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 420,
+  "albedoStrength": 0.45,
+  "roughnessStrength": 0.0
+ },
+ "blend": {
+  "material": "forest_canopy",
+  "contrast": 3,
+  "height": 0.3,
+  "noise": 0.5
+ },
+ "notes": "Distant fields (layer A) and forest canopy (layer B, vertex colour R) beyond the playable area.",
+ "clutter": []
+}

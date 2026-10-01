@@ -7,6 +7,7 @@ import { loadGlb } from '../assets/gltf';
 import { builtinMesh } from '../assets/primitives';
 import { loadLightmapSet, type LoadedLightmaps } from '../render/lightmaps';
 import { buildDecals } from '../render/decals';
+import { ClutterSystem, type ClutterSource } from '../render/clutter';
 import { CollisionWorld } from './collision';
 import type { DecalObject, MapDocument, MapObject, ReflectionProbeObject, Transform } from './mapformat';
 
@@ -95,6 +96,8 @@ export class World {
     }
     renderer.setLights(w.lights);
     renderer.setReflectionProbes(w.reflectionProbes);
+    onProgress?.('Scattering ground clutter');
+    await w.buildClutter();
     w.loadMs = performance.now() - t0;
     return w;
   }
@@ -132,6 +135,70 @@ export class World {
       this.models.set(ref, p);
     }
     return p;
+  }
+
+  clutter: ClutterSystem | null = null;
+
+  /** Scatters material-driven ground clutter over static meshes (see render/clutter.ts). */
+  async buildClutter() {
+    const sources: ClutterSource[] = [];
+    for (const rt of this.objects.values()) {
+      const o = rt.doc;
+      if (o.type !== 'mesh' || rt.renderables.length === 0) continue;
+      const r = rt.renderables[0];
+      const model = transformMatrix(o.transform);
+      r.mesh.primitives.forEach((p, k) => {
+        const m = r.materials[k];
+        const A = m.def.clutter ?? [], B = m.blendDef?.clutter ?? [];
+        if (A.length === 0 && B.length === 0) return;
+        const n = p.positions.length / 3;
+        const P = new Float32Array(n * 3), N = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) {
+          const x = p.positions[i * 3], y = p.positions[i * 3 + 1], z = p.positions[i * 3 + 2];
+          P[i * 3] = model[0] * x + model[4] * y + model[8] * z + model[12];
+          P[i * 3 + 1] = model[1] * x + model[5] * y + model[9] * z + model[13];
+          P[i * 3 + 2] = model[2] * x + model[6] * y + model[10] * z + model[14];
+          if (p.normals) {
+            const a = p.normals[i * 3], b = p.normals[i * 3 + 1], c = p.normals[i * 3 + 2];
+            N[i * 3] = model[0] * a + model[4] * b + model[8] * c;
+            N[i * 3 + 1] = model[1] * a + model[5] * b + model[9] * c;
+            N[i * 3 + 2] = model[2] * a + model[6] * b + model[10] * c;
+          }
+        }
+        let W: Float32Array | null = null;
+        if (p.colors && m.blendDef) {
+          W = new Float32Array(n);
+          for (let i = 0; i < n; i++) W[i] = p.colors[i * 4];
+        }
+        const lmEntry = this.lightmaps?.doc.objects[o.id];
+        sources.push({
+          positions: P, normals: N, indices: p.indices, weights: W, layerA: A, layerB: B, seed: fnv1a(o.id + ':' + k),
+          uv1: lmEntry ? p.uv1 ?? null : null, lmST: lmEntry?.scaleOffset ?? null, lmPage: lmEntry ? lmEntry.page : -1,
+        });
+      });
+    }
+    if (sources.length === 0) return;
+    const sys = new ClutterSystem();
+    // One neutral instance slot per lightmap page (clutter reads the ground's lightmap).
+    const inst = this.renderer.instances;
+    const pages = this.lightmaps ? this.lightmaps.doc.pages.length : 0;
+    const nComp = this.lightmaps ? this.lightmaps.doc.components.length : 1;
+    let pageSlot0 = this.renderer.clutterSlot;
+    for (let pg = 0; pg < pages; pg++) {
+      const slot = inst.alloc();
+      if (pg === 0) pageSlot0 = slot;
+      else if (slot !== pageSlot0 + pg) throw new Error('clutter page slots must be contiguous');
+      inst.set(slot, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], [1, 1, 0, 0], pg * nComp, 2, 0, 0);
+    }
+    // Rejects points under roads, paths, kerbs and buildings (anything walkable above the surface).
+    const covered = (x: number, y: number, z: number) => this.collision.groundHeight(x, y + 3, z, 3) > y + 0.008;
+    await sys.build(this.renderer.device, this.renderer.clutterLayout, sources, this.renderer.clutterSlot, pageSlot0, covered, async (ref) => {
+      const l = await this.loadModel(ref);
+      return { mesh: l[0].mesh, materials: l[0].materials };
+    });
+    this.clutter = sys;
+    this.renderer.clutter = sys;
+    console.info(`[world] clutter: ${sys.instances} instances in ${sys.types.length} types, ${(sys.bytes / 1048576).toFixed(1)} MB, ${sys.buildMs.toFixed(0)} ms`);
   }
 
   /** Loads a mesh or model reference with materials, for tools/stress tests spawning outside the map. */

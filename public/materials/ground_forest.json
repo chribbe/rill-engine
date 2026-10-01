@@ -18,5 +18,34 @@
   0.82,
   0.88
  ],
- "dryStrength": 1
+ "dryStrength": 1,
+ "clutter": [
+  {
+   "model": "assets/testmap/clutter_dwarf.glb",
+   "density": 2.2,
+   "scale": [
+    0.7,
+    1.35
+   ],
+   "maxDistance": 28
+  },
+  {
+   "model": "assets/testmap/clutter_grass.glb",
+   "density": 0.4,
+   "scale": [
+    0.6,
+    1.1
+   ],
+   "maxDistance": 28
+  },
+  {
+   "model": "assets/testmap/clutter_fern.glb",
+   "density": 0.12,
+   "scale": [
+    0.8,
+    1.5
+   ],
+   "maxDistance": 40
+  }
+ ]
 }

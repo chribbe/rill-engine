@@ -18,5 +18,16 @@
   0.95,
   0.62
  ],
- "dryStrength": 1.0
+ "dryStrength": 1.0,
+ "clutter": [
+  {
+   "model": "assets/testmap/clutter_grass.glb",
+   "density": 6.0,
+   "scale": [
+    0.4,
+    0.95
+   ],
+   "maxDistance": 28
+  }
+ ]
 }

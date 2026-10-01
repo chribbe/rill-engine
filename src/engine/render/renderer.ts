@@ -8,6 +8,7 @@ import { MaterialLibrary, type Material } from './materials';
 import { SkySystem, ENV_SPEC_MIPS, PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM, AEROSOL_BASE } from './sky';
 import { ShadowSystem, CASCADES, type ShadowSettings } from './shadows';
 import { InstanceStore } from './instances';
+import { ClutterSystem, type ClutterDraw } from './clutter';
 import { GpuTimer } from './timing';
 import { ExposureController } from './exposure';
 import { ReflectionProbes, faceView, CAPTURE_PRE_EXPOSURE, PROBE_SIZE } from './reflections';
@@ -131,6 +132,9 @@ export interface RenderSettings {
   lodBias: number;
   /** LOD crossfade band, ± fraction of each switch distance (0 = hard switches). */
   lodFade: number;
+  /** Ground clutter (detail props) on/off and distance multiplier. */
+  clutter: boolean;
+  clutterDistance: number;
 }
 
 export function defaultRenderSettings(): RenderSettings {
@@ -181,6 +185,8 @@ export function defaultRenderSettings(): RenderSettings {
     showProbes: false,
     lodBias: 1,
     lodFade: 0.1,
+    clutter: true,
+    clutterDistance: 1,
   };
 }
 
@@ -309,6 +315,13 @@ export class Renderer {
   private linesLayout: GPUBindGroupLayout;
   private postLayout: GPUBindGroupLayout;
   private stdPipelineLayout: GPUPipelineLayout;
+  /** Ground clutter: group 2 = compact instances + params. */
+  readonly clutterLayout: GPUBindGroupLayout;
+  private clutterPipelineLayout: GPUPipelineLayout;
+  clutter: ClutterSystem | null = null;
+  private clutterDraws: ClutterDraw[] = [];
+  /** Instance slot with neutral per-object data used by clutter shading. */
+  readonly clutterSlot: number;
   private shadowPipelineLayout: GPUPipelineLayout;
   private pipelines = new Map<string, GPURenderPipeline>();
 
@@ -415,14 +428,14 @@ export class Renderer {
         { binding: 0, visibility: FV, buffer: { type: 'uniform' } },
         { binding: 1, visibility: FV, buffer: { type: 'read-only-storage' } },
         { binding: 2, visibility: FV, buffer: { type: 'read-only-storage' } },
-        { binding: 3, visibility: SS.FRAGMENT, sampler: {} },
-        { binding: 4, visibility: SS.FRAGMENT, sampler: {} },
+        { binding: 3, visibility: FV, sampler: {} },
+        { binding: 4, visibility: FV, sampler: {} },
         { binding: 5, visibility: SS.FRAGMENT, sampler: { type: 'comparison' } },
         { binding: 6, visibility: SS.FRAGMENT, texture: { sampleType: 'depth', viewDimension: '2d-array' } },
         { binding: 7, visibility: SS.FRAGMENT, texture: { viewDimension: 'cube' } },
         { binding: 8, visibility: SS.FRAGMENT, buffer: { type: 'read-only-storage' } },
         { binding: 9, visibility: SS.FRAGMENT, texture: {} },
-        { binding: 10, visibility: SS.FRAGMENT, texture: { viewDimension: '2d-array' } },
+        { binding: 10, visibility: FV, texture: { viewDimension: '2d-array' } },
         { binding: 11, visibility: SS.FRAGMENT, buffer: { type: 'read-only-storage' } },
         { binding: 12, visibility: SS.FRAGMENT, texture: {} },
         { binding: 13, visibility: SS.FRAGMENT, texture: {} },
@@ -430,7 +443,7 @@ export class Renderer {
         { binding: 15, visibility: SS.FRAGMENT, buffer: { type: 'read-only-storage' } },
         { binding: 16, visibility: SS.FRAGMENT, texture: { viewDimension: '2d-array' } },
         { binding: 17, visibility: SS.FRAGMENT, texture: {} },
-        { binding: 18, visibility: SS.FRAGMENT, texture: {} },
+        { binding: 18, visibility: FV, texture: {} },
         { binding: 19, visibility: SS.FRAGMENT, texture: { viewDimension: '3d' } },
         { binding: 20, visibility: SS.FRAGMENT, texture: { viewDimension: 'cube-array' } },
         { binding: 21, visibility: SS.FRAGMENT, buffer: { type: 'read-only-storage' } },
@@ -452,7 +465,7 @@ export class Renderer {
         { binding: 0, visibility: SS.VERTEX, buffer: { type: 'uniform' } },
         { binding: 1, visibility: SS.VERTEX, buffer: { type: 'read-only-storage' } },
         { binding: 2, visibility: SS.VERTEX, buffer: { type: 'read-only-storage' } },
-        { binding: 3, visibility: SS.FRAGMENT, sampler: {} },
+        { binding: 3, visibility: FV, sampler: {} },
       ],
     });
     this.linesLayout = d.createBindGroupLayout({
@@ -469,7 +482,7 @@ export class Renderer {
         { binding: 0, visibility: SS.FRAGMENT, buffer: { type: 'uniform' } },
         { binding: 1, visibility: SS.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
         { binding: 2, visibility: SS.FRAGMENT, texture: {} },
-        { binding: 3, visibility: SS.FRAGMENT, sampler: {} },
+        { binding: 3, visibility: FV, sampler: {} },
       ],
     });
     this.bloomLayout = d.createBindGroupLayout({
@@ -481,6 +494,16 @@ export class Renderer {
       ],
     });
     this.stdPipelineLayout = d.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, this.materialLayout] });
+    this.clutterLayout = d.createBindGroupLayout({
+      label: 'clutter',
+      entries: [
+        { binding: 0, visibility: SS.VERTEX, buffer: { type: 'read-only-storage' } },
+        { binding: 1, visibility: SS.VERTEX, buffer: { type: 'uniform' } },
+      ],
+    });
+    this.clutterPipelineLayout = d.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, this.materialLayout, this.clutterLayout] });
+    this.clutterSlot = this.instances.alloc();
+    this.instances.set(this.clutterSlot, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], null, -1, 2, 0, 0);
     this.shadowPipelineLayout = d.createPipelineLayout({ bindGroupLayouts: [this.shadowLayout, this.materialLayout] });
 
     this.materials = new MaterialLibrary(d, this.textures, this.materialLayout);
@@ -646,20 +669,21 @@ export class Renderer {
   }
 
   /** Masked geometry: depth/coverage prepass (colour writes off) or the equal-depth lit pass. */
-  private maskedPipeline(prepass: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa, fade = false): GPURenderPipeline {
+  private maskedPipeline(prepass: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa, fade = false, clutter = false): GPURenderPipeline {
     // Hardware A2C when multisampled (fast path); discard-based test otherwise.
     const hwA2C = prepass && msaa && this.settings.alphaToCoverage && this.hwA2C;
     const v = this.variant(mat);
     // Only the prepass needs the fade variant: the equal-depth colour pass inherits its coverage.
-    const fadeV = prepass && fade;
-    const key = `masked:${prepass}:${doubleSided}:${msaa}:${hwA2C}:${prepass ? '' : v.key}:${fadeV}`;
+    // Clutter always fades with distance.
+    const fadeV = prepass && (fade || clutter);
+    const key = `masked:${prepass}:${doubleSided}:${msaa}:${hwA2C}:${prepass ? '' : v.key}:${fadeV}:${clutter}`;
     let p = this.pipelines.get(key);
     if (!p) {
       const mod = shaderModule(this.device, 'standard');
       p = this.device.createRenderPipeline({
         label: key,
-        layout: this.stdPipelineLayout,
-        vertex: { module: mod, entryPoint: 'vsMain', buffers: VERTEX_LAYOUT_FULL },
+        layout: clutter ? this.clutterPipelineLayout : this.stdPipelineLayout,
+        vertex: { module: mod, entryPoint: clutter ? 'vsClutter' : 'vsMain', buffers: VERTEX_LAYOUT_FULL },
         fragment: {
           module: mod,
           entryPoint: prepass ? (hwA2C ? 'fsDepthA2C' : 'fsDepthMasked') : 'fsMaskedColor',
@@ -1240,7 +1264,7 @@ export class Renderer {
 
   /** Opaque, masked prepass + colour, sky. Returns the open pass for overlays. */
   private encodeMain(enc: GPUCommandEncoder, target: { color: GPUTextureView; resolve?: GPUTextureView; depth: GPUTextureView; msaa: boolean },
-    frameBG: GPUBindGroup, overdraw: boolean, timestamps: boolean): GPURenderPassEncoder {
+    frameBG: GPUBindGroup, overdraw: boolean, timestamps: boolean, clutter: ClutterDraw[] = []): GPURenderPassEncoder {
     const arena = this.arena;
     const msaa = target.msaa;
     const pass = enc.beginRenderPass({
@@ -1279,7 +1303,25 @@ export class Renderer {
       // Opaque first (fills depth), then masked prepass, then masked colour at equal depth.
       drawList((d) => !d.masked, (dr) => this.stdPipeline(false, dr.doubleSided, dr.material, msaa, dr.fade));
       drawList((d) => d.masked, (dr) => this.maskedPipeline(true, dr.doubleSided, dr.material, msaa, dr.fade));
-      if (this.maskedMode === 'prepass') drawList((d) => d.masked, (dr) => this.maskedPipeline(false, dr.doubleSided, dr.material, msaa));
+      const clutterPass = (prepassStage: boolean) => {
+        for (const c of clutter) {
+          const prims = c.type.mesh.primitives;
+          for (let k = 0; k < prims.length; k++) {
+            const m = c.type.materials[k];
+            if (!m.masked) continue; // clutter is alpha-tested cards
+            const p = this.maskedPipeline(prepassStage, true, m, msaa, false, true);
+            if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
+            if (m !== curMat) { pass.setBindGroup(1, m.bindGroup); curMat = m; }
+            pass.setBindGroup(2, c.type.bindGroup);
+            pass.drawIndexed(prims[k].indexCount, c.count, prims[k].firstIndex, prims[k].baseVertex, c.first);
+          }
+        }
+      };
+      if (this.maskedMode === 'prepass') {
+        clutterPass(true);
+        drawList((d) => d.masked, (dr) => this.maskedPipeline(false, dr.doubleSided, dr.material, msaa));
+        clutterPass(false);
+      }
     }
     if (!overdraw) {
       pass.setPipeline(this.skyPipeline(msaa));
@@ -1391,6 +1433,8 @@ export class Renderer {
     }
     const planes = this.frozenPlanes ?? extractPlanes(camera.viewProj, { near: true, far: false, zeroToOne: true, reverseZ: true });
     const ls = this.buildLists(planes, renderables, shadowsOn, camera.position, camera.fovY);
+    if (this.clutter && S.clutter) this.clutter.collect(camera.position, planes, S.clutterDistance, this.clutterDraws);
+    else this.clutterDraws.length = 0;
     const tcEnd = performance.now();
 
     // ---- encode
@@ -1403,7 +1447,7 @@ export class Renderer {
       resolve: S.msaa ? this.resolved!.createView() : undefined,
       depth: this.depth!.createView(),
       msaa: S.msaa,
-    }, this.frameBG!, overdraw, true);
+    }, this.frameBG!, overdraw, true, this.clutterDraws);
     const arena = this.arena;
     // Debug overlays
     if (S.wireframe) {

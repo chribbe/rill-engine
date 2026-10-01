@@ -494,5 +494,41 @@
    "license": "CC0",
    "url": "https://polyhaven.com/a/snow_02"
   }
+ },
+ "tuft_grass": {
+  "averageAlbedo": [
+   0.203,
+   0.2022,
+   0.0773
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "tuft_dwarf": {
+  "averageAlbedo": [
+   0.0888,
+   0.0506,
+   0.0214
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
+ },
+ "tuft_fern": {
+  "averageAlbedo": [
+   0.1469,
+   0.0688,
+   0.027
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1,
+   1
+  ]
  }
 }

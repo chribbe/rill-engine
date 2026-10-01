@@ -1,0 +1,24 @@
+{
+ "alphaMode": "mask",
+ "alphaCutoff": 0.4,
+ "doubleSided": true,
+ "baseColor": "tuft_fern_albedo.png",
+ "orm": "tuft_fern_orm.png",
+ "physicalSize": 1,
+ "roughness": 1,
+ "porosity": 0.3,
+ "snow": 0.0,
+ "bake": {
+  "exclude": true
+ },
+ "notes": "Dead bracken clutter card (late winter). Standard shader: lit by the ground lightmap at its root (see render/clutter.ts).",
+ "baseColorFactor": [
+  0.9,
+  0.9,
+  0.9
+ ],
+ "roughnessRange": [
+  0.85,
+  1.0
+ ]
+}

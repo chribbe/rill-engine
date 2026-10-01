@@ -1,4 +1,5 @@
 import type { TextureHandle, TextureManager } from './textures';
+import type { ClutterDef } from './clutter';
 
 /**
  * Runtime material model. Materials are JSON documents (public/materials/*.json)
@@ -69,6 +70,8 @@ export interface MaterialDef {
   /** Dormant-season albedo multiplier (dry grass, winter moss) and how strongly the season applies. */
   dryTint?: Color;
   dryStrength?: number;
+  /** Ground clutter scattered over surfaces with this material (detail props). */
+  clutter?: ClutterDef[];
   /** Offline bake hints (average albedo for bounce light). */
   bake?: { albedo?: Color; exclude?: boolean };
   /** Free-form notes for authors / tools. */

@@ -183,6 +183,62 @@ fn vsMain(v: VSIn) -> VSOut {
   return o;
 }
 
+// ------------------------------------------------------------------ ground clutter
+struct ClutterInst {
+  posYaw: vec4f,   // xyz ground position, w yaw (rad)
+  scale: vec4f,    // x uniform scale, yz the ground's lightmap UV (atlas), w lightmap page + 1 (0 = none)
+};
+struct ClutterParams {
+  slot: u32,       // instance slot with neutral per-object data (no lightmap, no decals)
+  pageSlot0: u32,  // first of one slot per lightmap page (lightmap layer set, no decals)
+  fadeStart: f32,
+  maxDist: f32,
+};
+@group(2) @binding(0) var<storage, read> clutterInst: array<ClutterInst>;
+@group(2) @binding(1) var<uniform> clutterParams: ClutterParams;
+
+/** Detail-prop vertex stage: compact per-instance transform, dithered fade with distance. */
+@vertex
+fn vsClutter(v: VSIn) -> VSOut {
+  let ci = clutterInst[v.instance];
+  let c = cos(ci.posYaw.w);
+  let sn = sin(ci.posYaw.w);
+  var k = ci.scale.x;
+  let page = u32(ci.scale.w + 0.5);
+  var slot = clutterParams.slot;
+  // Lit like the ground it grows from: sample the ground's lightmap at the root.
+  var expo = 1.0;
+  if (page > 0u) {
+    slot = clutterParams.pageSlot0 + page - 1u;
+    let layer = i32(instances[slot].info.x) - 1;
+    expo = saturate(textureSampleLevel(lightmaps, sampClamp, ci.scale.yz, layer, 0.0).g * 1.4);
+  }
+  // Same snow-cover estimate as the ground: tufts sink under thick snow.
+  if (frame.season.x > 0.0) {
+    let patchy = saturate((textureSampleLevel(cloudNoise, sampAniso, ci.posYaw.xz * (1.0 / 29.0), 0.0).r - 0.5) * 2.6 + 0.5);
+    let cov = saturate((patchy - (1.0 - frame.season.x * expo)) * 7.0 + 0.5);
+    k *= 1.0 - smoothstep(0.3, 0.85, cov);
+  }
+  let lp = v.position * k;
+  let wp = ci.posYaw.xyz + vec3f(c * lp.x + sn * lp.z, lp.y, -sn * lp.x + c * lp.z);
+  let rot = mat3x3f(vec3f(c, 0.0, -sn), vec3f(0.0, 1.0, 0.0), vec3f(sn, 0.0, c));
+  var o: VSOut;
+  o.pos = frame.viewProj * vec4f(wp, 1.0);
+  let d = distance(frame.cameraPos.xyz, ci.posYaw.xyz);
+  let t = saturate((d - clutterParams.fadeStart) / max(clutterParams.maxDist - clutterParams.fadeStart, 0.01));
+  if (t >= 1.0) { o.pos = vec4f(0.0, 0.0, -1.0, 1.0); } // beyond range: outside the clip volume
+  o.worldPos = wp;
+  o.normal = rot * v.normal.xyz;
+  o.tangent = vec4f(rot * v.tangent.xyz, select(-1.0, 1.0, v.tangent.w >= 0.0));
+  o.uv0 = v.uv0;
+  o.lmUv = ci.scale.yz;
+  o.viewDepth = -(frame.view * vec4f(wp, 1.0)).z;
+  o.slot = slot;
+  o.color = v.color;
+  o.lodFade = select(0.0, -t, t > 0.0);
+  return o;
+}
+
 /**
  * Alpha-mask coverage. Near/magnified: a sharp alpha test with a ~1 px antialiased
  * edge (plus a little coverage-preserving boost over the first mips). Once the

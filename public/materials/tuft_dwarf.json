@@ -1,0 +1,24 @@
+{
+ "alphaMode": "mask",
+ "alphaCutoff": 0.4,
+ "doubleSided": true,
+ "baseColor": "tuft_dwarf_albedo.png",
+ "orm": "tuft_dwarf_orm.png",
+ "physicalSize": 1,
+ "roughness": 1,
+ "porosity": 0.3,
+ "snow": 0.0,
+ "bake": {
+  "exclude": true
+ },
+ "notes": "Blueberry / lingonberry dwarf shrub clutter card. Standard shader: lit by the ground lightmap at its root (see render/clutter.ts).",
+ "roughnessRange": [
+  0.8,
+  1.0
+ ],
+ "baseColorFactor": [
+  1.35,
+  1.35,
+  1.3
+ ]
+}

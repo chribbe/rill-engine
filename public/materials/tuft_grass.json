@@ -1,0 +1,30 @@
+{
+ "alphaMode": "mask",
+ "alphaCutoff": 0.4,
+ "doubleSided": true,
+ "baseColor": "tuft_grass_albedo.png",
+ "orm": "tuft_grass_orm.png",
+ "physicalSize": 1,
+ "roughness": 1,
+ "porosity": 0.3,
+ "dryTint": [
+  1.35,
+  0.98,
+  0.7
+ ],
+ "dryStrength": 1,
+ "snow": 0.0,
+ "bake": {
+  "exclude": true
+ },
+ "notes": "Grass tuft clutter card (mixed live and dead blades). Standard shader: lit by the ground lightmap at its root (see render/clutter.ts).",
+ "baseColorFactor": [
+  0.62,
+  0.7,
+  0.55
+ ],
+ "roughnessRange": [
+  0.85,
+  1.0
+ ]
+}
