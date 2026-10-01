@@ -1,8 +1,32 @@
 {
-  "baseColor": "concrete_cast_albedo.png", "normal": "concrete_cast_normal.png", "orm": "concrete_cast_orm.png",
-  "physicalSize": 2, "roughness": 1, "specular": 0.5, "porosity": 0.7,
-  "detail": { "albedo": "detail_aggregate_albedo.png", "normal": "detail_aggregate_normal.png", "physicalSize": 0.2, "albedoStrength": 0.35, "normalStrength": 0.7, "fadeDistance": 30 },
-  "macro": { "texture": "macro_variation.png", "physicalSize": 23, "albedoStrength": 0.16, "roughnessStrength": 0.08, "stainStrength": 0.12 },
-  "bake": { "albedo": [0.27, 0.26, 0.24] },
-  "notes": "Smooth cast-in-place concrete: base + macro variation + staining + fine aggregate detail."
+ "baseColor": "concrete_cast_albedo.png",
+ "normal": "concrete_cast_normal.png",
+ "orm": "concrete_cast_orm.png",
+ "physicalSize": 2.5,
+ "roughness": 1,
+ "specular": 0.5,
+ "porosity": 0.7,
+ "detail": {
+  "albedo": "detail_aggregate_albedo.png",
+  "normal": "detail_aggregate_normal.png",
+  "physicalSize": 0.2,
+  "albedoStrength": 0.35,
+  "normalStrength": 0.7,
+  "fadeDistance": 30
+ },
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 23,
+  "albedoStrength": 0.16,
+  "roughnessStrength": 0.08,
+  "stainStrength": 0.12
+ },
+ "bake": {
+  "albedo": [
+   0.27,
+   0.26,
+   0.24
+  ]
+ },
+ "notes": "Smooth cast-in-place concrete: base + macro variation + staining + fine aggregate detail."
 }

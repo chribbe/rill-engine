@@ -1,3 +1,12 @@
-{ "baseColor": "rock_granite_albedo.png", "normal": "rock_granite_normal.png", "orm": "rock_granite_orm.png", "physicalSize": 3, "roughness": 1, "porosity": 0.3,
-  "mapping": "triplanar", "triplanarSharpness": 6, "normalStrength": 1.2,
-  "notes": "Stockholm bedrock (granite/gneiss with lichen); world-space triplanar." }
+{
+ "baseColor": "rock_granite_albedo.png",
+ "normal": "rock_granite_normal.png",
+ "orm": "rock_granite_orm.png",
+ "physicalSize": 3,
+ "roughness": 1,
+ "porosity": 0.3,
+ "mapping": "triplanar",
+ "triplanarSharpness": 6,
+ "normalStrength": 1.2,
+ "notes": "Stockholm bedrock (granite/gneiss with lichen); world-space triplanar."
+}

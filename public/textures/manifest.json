@@ -25,75 +25,117 @@
  },
  "concrete_cast": {
   "averageAlbedo": [
-   0.273,
-   0.2593,
-   0.2345
+   0.2956,
+   0.2557,
+   0.1981
   ],
   "size": 1024,
   "physicalSize": [
-   2,
-   2
-  ]
+   2.5,
+   2.5
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "brushed_concrete",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/brushed_concrete"
+  }
  },
  "concrete_aggregate": {
   "averageAlbedo": [
-   0.3205,
-   0.2812,
-   0.2426
+   0.2594,
+   0.2381,
+   0.2011
   ],
   "size": 1024,
   "physicalSize": [
-   1,
-   1
-  ]
+   2,
+   2
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "gravel_embedded_concrete",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/gravel_embedded_concrete"
+  }
  },
  "asphalt": {
   "averageAlbedo": [
-   0.0485,
-   0.0485,
-   0.046
+   0.1019,
+   0.1005,
+   0.0892
   ],
   "size": 1024,
   "physicalSize": [
-   2,
-   2
-  ]
+   3,
+   3
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "asphalt_02",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/asphalt_02"
+  }
  },
  "plaster": {
   "averageAlbedo": [
-   0.7695,
-   0.7657,
-   0.758
+   0.6785,
+   0.6127,
+   0.5203
   ],
   "size": 1024,
   "physicalSize": [
    2,
    2
-  ]
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "plastered_wall",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/plastered_wall"
+  }
  },
  "brick_red": {
   "averageAlbedo": [
-   0.2705,
-   0.0944,
-   0.0673
+   0.237,
+   0.1561,
+   0.1105
   ],
   "size": 1024,
   "physicalSize": [
-   1.04,
-   1.008
-  ]
+   2.01,
+   2.01
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "brick_wall_09",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/brick_wall_09"
+  }
  },
  "paving_slabs": {
   "averageAlbedo": [
-   0.2505,
-   0.2386,
-   0.2174
+   0.2819,
+   0.2339,
+   0.1773
   ],
   "size": 1024,
   "physicalSize": [
-   1.4,
-   1.4
-  ]
+   1.8,
+   1.8
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "concrete_pavement",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/concrete_pavement"
+  }
  },
  "tiles_white": {
   "averageAlbedo": [
@@ -109,51 +151,79 @@
  },
  "ground_grass": {
   "averageAlbedo": [
-   0.1222,
-   0.1521,
-   0.044
+   0.0842,
+   0.1385,
+   0.0417
   ],
   "size": 1024,
   "physicalSize": [
    2,
    2
-  ]
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "forrest_ground_01",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/forrest_ground_01"
+  }
  },
  "ground_forest": {
   "averageAlbedo": [
-   0.0727,
-   0.0682,
-   0.0242
+   0.1119,
+   0.0831,
+   0.0243
   ],
   "size": 1024,
   "physicalSize": [
-   2,
-   2
-  ]
+   3.001,
+   3.001
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "forest_leaves_02",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/forest_leaves_02"
+  }
  },
  "gravel": {
   "averageAlbedo": [
-   0.1695,
-   0.1528,
-   0.1317
-  ],
-  "size": 1024,
-  "physicalSize": [
-   1,
-   1
-  ]
- },
- "rock_granite": {
-  "averageAlbedo": [
-   0.197,
-   0.1769,
-   0.1601
+   0.2936,
+   0.2799,
+   0.2408
   ],
   "size": 1024,
   "physicalSize": [
    2,
    2
-  ]
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "gravel_floor_02",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/gravel_floor_02"
+  }
+ },
+ "rock_granite": {
+  "averageAlbedo": [
+   0.2116,
+   0.2034,
+   0.132
+  ],
+  "size": 1024,
+  "physicalSize": [
+   3,
+   3
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "mossy_rock",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/mossy_rock"
+  }
  },
  "metal_painted": {
   "averageAlbedo": [
@@ -181,15 +251,22 @@
  },
  "bark_pine": {
   "averageAlbedo": [
-   0.1511,
-   0.0711,
-   0.0378
+   0.1564,
+   0.1012,
+   0.0609
   ],
-  "size": 512,
+  "size": 1024,
   "physicalSize": [
-   1,
-   1
-  ]
+   2,
+   2
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "pine_bark",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/pine_bark"
+  }
  },
  "bark_birch": {
   "averageAlbedo": [
@@ -241,27 +318,41 @@
  },
  "moss": {
   "averageAlbedo": [
-   0.1054,
-   0.1343,
-   0.0288
+   0.1072,
+   0.1064,
+   0.0151
   ],
   "size": 1024,
   "physicalSize": [
-   1,
-   1
-  ]
+   3,
+   3
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "concrete_moss",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/concrete_moss"
+  }
  },
  "dirt": {
   "averageAlbedo": [
-   0.0951,
-   0.0787,
-   0.0638
+   0.1639,
+   0.1126,
+   0.0639
   ],
   "size": 1024,
   "physicalSize": [
-   1,
-   1
-  ]
+   2,
+   2
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "dirt",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/dirt"
+  }
  },
  "foliage_spruce": {
   "averageAlbedo": [
@@ -322,5 +413,43 @@
    10.8,
    11.2
   ]
+ },
+ "concrete_formwork": {
+  "averageAlbedo": [
+   0.2601,
+   0.2376,
+   0.2043
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2.102,
+   2.102
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "concrete_slab_wall_02",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/concrete_slab_wall_02"
+  }
+ },
+ "granite_kerb": {
+  "averageAlbedo": [
+   0.2368,
+   0.1935,
+   0.1562
+  ],
+  "size": 1024,
+  "physicalSize": [
+   1.802,
+   1.802
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "granite_tile_03",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/granite_tile_03"
+  }
  }
 }

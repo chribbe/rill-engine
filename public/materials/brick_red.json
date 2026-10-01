@@ -1,7 +1,24 @@
 {
-  "baseColor": "brick_red_albedo.png", "normal": "brick_red_normal.png", "orm": "brick_red_orm.png",
-  "physicalSize": [1.04, 1.008], "roughness": 1, "porosity": 0.7,
-  "detail": { "albedo": "detail_grain_albedo.png", "normal": "detail_grain_normal.png", "physicalSize": 0.25, "albedoStrength": 0.3, "normalStrength": 0.5, "fadeDistance": 20 },
-  "macro": { "texture": "macro_variation.png", "physicalSize": 17, "albedoStrength": 0.14, "roughnessStrength": 0.05, "stainStrength": 0.15 },
-  "notes": "Swedish 250x62 mm brick, 10 mm joints, running bond."
+ "baseColor": "brick_red_albedo.png",
+ "normal": "brick_red_normal.png",
+ "orm": "brick_red_orm.png",
+ "physicalSize": 2.01,
+ "roughness": 1,
+ "porosity": 0.7,
+ "detail": {
+  "albedo": "detail_grain_albedo.png",
+  "normal": "detail_grain_normal.png",
+  "physicalSize": 0.25,
+  "albedoStrength": 0.3,
+  "normalStrength": 0.5,
+  "fadeDistance": 20
+ },
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 17,
+  "albedoStrength": 0.14,
+  "roughnessStrength": 0.05,
+  "stainStrength": 0.15
+ },
+ "notes": "Swedish 250x62 mm brick, 10 mm joints, running bond."
 }

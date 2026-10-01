@@ -1,2 +1,15 @@
-{ "baseColor": "ground_grass_albedo.png", "normal": "ground_grass_normal.png", "orm": "ground_grass_orm.png", "physicalSize": 2, "roughness": 1, "porosity": 0.4,
-  "macro": { "texture": "macro_variation.png", "physicalSize": 31, "albedoStrength": 0.3, "roughnessStrength": 0.02, "stainStrength": 0.2 } }
+{
+ "baseColor": "ground_grass_albedo.png",
+ "normal": "ground_grass_normal.png",
+ "orm": "ground_grass_orm.png",
+ "physicalSize": 2,
+ "roughness": 1,
+ "porosity": 0.4,
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 31,
+  "albedoStrength": 0.3,
+  "roughnessStrength": 0.02,
+  "stainStrength": 0.2
+ }
+}

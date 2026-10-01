@@ -2,7 +2,7 @@
  "format": "rill.lightmapset",
  "version": 1,
  "backend": "blender-cycles 5.2.0 LTS",
- "bakedAt": "2026-10-01T08:41:08",
+ "bakedAt": "2026-10-01T09:26:27",
  "atlasSize": [
   2048,
   2048
@@ -361,7 +361,7 @@
  "stats": {
   "samples": 256,
   "denoise": true,
-  "bakeSeconds": 361.6,
+  "bakeSeconds": 453.5,
   "texelsUsed": 2622633,
   "objects": 34
  }

@@ -1,6 +1,16 @@
 {
-  "baseColor": "concrete_aggregate_albedo.png", "normal": "concrete_aggregate_normal.png", "orm": "concrete_aggregate_orm.png",
-  "physicalSize": 1, "roughness": 1, "porosity": 0.6,
-  "macro": { "texture": "macro_variation.png", "physicalSize": 19, "albedoStrength": 0.12, "roughnessStrength": 0.05, "stainStrength": 0.15 },
-  "notes": "Exposed-aggregate facade panels (1960s/70s Swedish 'frilagd ballast')."
+ "baseColor": "concrete_aggregate_albedo.png",
+ "normal": "concrete_aggregate_normal.png",
+ "orm": "concrete_aggregate_orm.png",
+ "physicalSize": 2,
+ "roughness": 1,
+ "porosity": 0.6,
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 19,
+  "albedoStrength": 0.12,
+  "roughnessStrength": 0.05,
+  "stainStrength": 0.15
+ },
+ "notes": "Exposed-aggregate facade panels (1960s/70s Swedish 'frilagd ballast')."
 }

@@ -1,1 +1,9 @@
-{ "inherits": "rock_granite", "physicalSize": 1.5, "normalStrength": 0.6, "notes": "Granite kerbstones." }
+{
+ "inherits": "rock_granite",
+ "physicalSize": 1.802,
+ "normalStrength": 0.6,
+ "notes": "Granite kerbstones.",
+ "baseColor": "granite_kerb_albedo.png",
+ "normal": "granite_kerb_normal.png",
+ "orm": "granite_kerb_orm.png"
+}

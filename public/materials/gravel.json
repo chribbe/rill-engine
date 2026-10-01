@@ -1,2 +1,14 @@
-{ "baseColor": "gravel_albedo.png", "normal": "gravel_normal.png", "orm": "gravel_orm.png", "physicalSize": 1, "roughness": 1, "porosity": 0.6,
-  "macro": { "texture": "macro_variation.png", "physicalSize": 15, "albedoStrength": 0.15, "stainStrength": 0.15 } }
+{
+ "baseColor": "gravel_albedo.png",
+ "normal": "gravel_normal.png",
+ "orm": "gravel_orm.png",
+ "physicalSize": 2,
+ "roughness": 1,
+ "porosity": 0.6,
+ "macro": {
+  "texture": "macro_variation.png",
+  "physicalSize": 15,
+  "albedoStrength": 0.15,
+  "stainStrength": 0.15
+ }
+}
