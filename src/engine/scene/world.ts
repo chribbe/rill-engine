@@ -1,5 +1,5 @@
 import { mat4, type Mat4 } from 'wgpu-matrix';
-import type { Renderer, Renderable, LightData } from '../render/renderer';
+import type { Renderer, Renderable, LightData, LodLevel } from '../render/renderer';
 import type { GpuMesh } from '../render/geometry';
 import type { Material, MaterialDef } from '../render/materials';
 import { transformAabb } from '../render/culling';
@@ -49,6 +49,14 @@ function slotName(n: string) {
   return n.replace(/\.\d{3}$/, '');
 }
 
+/** Model descriptor (assets/*.model.json): LOD meshes relative to the descriptor. */
+interface ModelDocument {
+  format: 'rill.model';
+  version: number;
+  lods: { mesh: string; distance: number }[];
+}
+type ModelLods = { mesh: GpuMesh; distance: number }[];
+
 export class World {
   readonly objects = new Map<string, RuntimeObject>();
   readonly renderables: Renderable[] = [];
@@ -56,6 +64,7 @@ export class World {
   readonly reflectionProbes: ReflectionProbeObject[] = [];
   readonly collision = new CollisionWorld();
   private meshes = new Map<string, Promise<GpuMesh>>();
+  private models = new Map<string, Promise<ModelLods>>();
   lightmaps: LoadedLightmaps | null = null;
   decalBytes = 0;
   loadMs = 0;
@@ -103,6 +112,46 @@ export class World {
     return p;
   }
 
+  /**
+   * An asset reference is either a mesh (.glb / builtin:) or a model descriptor
+   * (.model.json, written by the asset tools) listing LOD meshes + distances.
+   */
+  private model(ref: string): Promise<ModelLods> {
+    let p = this.models.get(ref);
+    if (!p) {
+      p = (async () => {
+        if (!ref.endsWith('.model.json')) return [{ mesh: await this.mesh(ref), distance: 0 }];
+        const url = '/' + ref.replace(/^\//, '');
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Model fetch failed: ${url} (${res.status})`);
+        const doc = (await res.json()) as ModelDocument;
+        const dir = ref.slice(0, ref.lastIndexOf('/') + 1);
+        const lods = await Promise.all(doc.lods.map(async (l) => ({ mesh: await this.mesh(dir + l.mesh), distance: l.distance })));
+        return lods.sort((a, b) => a.distance - b.distance);
+      })();
+      this.models.set(ref, p);
+    }
+    return p;
+  }
+
+  /** Loads a mesh or model reference with materials, for tools/stress tests spawning outside the map. */
+  async loadModel(ref: string) {
+    return this.lodMaterials(await this.model(ref), ref);
+  }
+
+  static lodsFor(lods: { mesh: GpuMesh; distance: number; materials: Material[] }[], scale: number) {
+    return World.lodChain(lods, scale);
+  }
+
+  private async lodMaterials(lods: ModelLods, objId: string, overrides?: Record<string, string | MaterialDef>) {
+    return Promise.all(lods.map(async (l) => ({ mesh: l.mesh, distance: l.distance, materials: await this.materialsFor(l.mesh, objId, overrides) })));
+  }
+
+  private static lodChain(lods: { mesh: GpuMesh; distance: number; materials: Material[] }[], scale: number): LodLevel[] | undefined {
+    if (lods.length < 2) return undefined;
+    return lods.map((l) => ({ mesh: l.mesh, materials: l.materials, dist2: (l.distance * scale) ** 2 }));
+  }
+
   private async materialsFor(mesh: GpuMesh, objId: string, overrides?: Record<string, string | MaterialDef>): Promise<Material[]> {
     const lib = this.renderer.materials;
     return Promise.all(
@@ -131,11 +180,15 @@ export class World {
     this.objects.set(o.id, rt);
     switch (o.type) {
       case 'mesh': {
-        const mesh = await this.mesh(o.asset);
-        const mats = await this.materialsFor(mesh, o.id, o.materialOverrides);
+        const lods = await this.lodMaterials(await this.model(o.asset), o.id, o.materialOverrides);
+        const mesh = lods[0].mesh;
+        const mats = lods[0].materials;
         const model = transformMatrix(o.transform);
         const flags = o.receiveDecals === false ? 2 : 0;
-        rt.renderables.push(this.makeRenderable(o.id, mesh, mats, model, o.castShadow ?? true, flags, fnv1a(o.id)));
+        const r = this.makeRenderable(o.id, mesh, mats, model, o.castShadow ?? true, flags, fnv1a(o.id));
+        const sc = o.transform.scale ?? [1, 1, 1];
+        r.lods = World.lodChain(lods, Math.max(sc[0], sc[1], sc[2]));
+        rt.renderables.push(r);
         if (o.collision ?? o.static ?? true) {
           for (const p of mesh.primitives) {
             const m = mats[mesh.primitives.indexOf(p)];
@@ -146,11 +199,14 @@ export class World {
         break;
       }
       case 'instances': {
-        const mesh = await this.mesh(o.asset);
-        const mats = await this.materialsFor(mesh, o.id, o.materialOverrides);
+        const lods = await this.lodMaterials(await this.model(o.asset), o.id, o.materialOverrides);
+        const mesh = lods[0].mesh;
+        const mats = lods[0].materials;
         o.instances.forEach((it, i) => {
           const model = yawMatrix(it[0], it[1], it[2], it[3], it[4]);
-          rt.renderables.push(this.makeRenderable(`${o.id}#${i}`, mesh, mats, model, o.castShadow ?? true, 2, fnv1a(`${o.id}#${i}`)));
+          const r = this.makeRenderable(`${o.id}#${i}`, mesh, mats, model, o.castShadow ?? true, 2, fnv1a(`${o.id}#${i}`));
+          r.lods = World.lodChain(lods, it[4]);
+          rt.renderables.push(r);
         });
         break;
       }

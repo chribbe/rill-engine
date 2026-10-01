@@ -13,7 +13,19 @@ export class GpuTimer {
   readonly maxPasses = 8;
   /** Smoothed milliseconds per pass name. */
   readonly results = new Map<string, number>();
+  /** Sum of pass durations (passes may overlap on tile-based GPUs). */
   total = 0;
+  /** First pass begin -> last pass end: the frame's GPU span, robust to overlap. */
+  span = 0;
+  private samples = 0;
+
+  /** Forget smoothed history (benchmarks between views). */
+  reset() {
+    this.results.clear();
+    this.total = 0;
+    this.span = 0;
+    this.samples = 0;
+  }
 
   constructor(device: GPUDevice, enabled: boolean) {
     this.enabled = enabled;
@@ -67,15 +79,23 @@ export class GpuTimer {
     buf.mapAsync(GPUMapMode.READ).then(() => {
       const t = new BigInt64Array(buf.getMappedRange());
       let total = 0;
+      let t0 = t[0], t1 = t[1];
+      // Converges quickly after reset(), then smooths.
+      const a = Math.max(0.1, 1 / (this.samples + 1));
       for (let i = 0; i < names.length; i++) {
         const ms = Number(t[i * 2 + 1] - t[i * 2]) / 1e6;
         if (ms >= 0 && ms < 1000) {
           const prev = this.results.get(names[i]) ?? ms;
-          this.results.set(names[i], prev * 0.9 + ms * 0.1);
+          this.results.set(names[i], prev * (1 - a) + ms * a);
           total += ms;
+          if (t[i * 2] < t0) t0 = t[i * 2];
+          if (t[i * 2 + 1] > t1) t1 = t[i * 2 + 1];
         }
       }
-      this.total = this.total * 0.9 + total * 0.1;
+      const span = Number(t1 - t0) / 1e6;
+      this.total = this.total * (1 - a) + total * a;
+      if (span >= 0 && span < 1000) this.span = this.span * (1 - a) + span * a;
+      this.samples++;
       buf.unmap();
       this.busy[slot] = false;
     }).catch(() => { this.busy[slot] = false; });

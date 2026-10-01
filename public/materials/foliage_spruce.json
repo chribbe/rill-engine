@@ -1,0 +1,3 @@
+{ "shader": "foliage", "alphaMode": "mask", "alphaCutoff": 0.4, "doubleSided": true,
+  "baseColor": "foliage_spruce_albedo.png", "orm": "foliage_spruce_orm.png", "physicalSize": 1, "roughness": 1, "translucency": 0.25, "porosity": 0,
+  "bake": { "exclude": true }, "notes": "Norway spruce frond card; twig base at the bottom centre of the texture." }

@@ -54,8 +54,8 @@ def add_mesh_object(obj_id, name, asset, semantic, pos=(0, 0, 0), yaw=0.0, light
     objects.append(o)
 
 
-def build(builder, lightmap_tpm=None, custom_normals=None):
-    obj, res = builder.finish(lightmap_tpm, custom_normals=custom_normals)
+def build(builder, lightmap_tpm=None, custom_normals=None, vertex_color=None, color_max_edge=None):
+    obj, res = builder.finish(lightmap_tpm, custom_normals=custom_normals, vertex_color=vertex_color, color_max_edge=color_max_edge)
     export_glb(obj, os.path.join(ASSET_DIR, builder.name + '.glb'))
     tris = sum(len(p.vertices) - 2 for p in obj.data.polygons)
     print(f'  {builder.name:24s} {tris:7d} tris  lightmap {res}')
@@ -86,8 +86,46 @@ def plateau_x(x):
     return smoothstep(WALL_X0, WALL_X0 + 8, x) * (1 - smoothstep(WALL_X1 - 8, WALL_X1, x))
 
 
+# Distant lakes (Stockholm is never far from water): centre, semi-axes, rotation.
+LAKES = [((-640.0, 860.0), (430.0, 220.0), 0.55), ((1180.0, -420.0), (300.0, 190.0), -0.35), ((-1250.0, -900.0), (260.0, 160.0), 0.2)]
+
+
+def lake_e(x, y, lake):
+    (cx, cy), (ax, ay), rot = lake
+    dx, dy = x - cx, y - cy
+    c, s_ = math.cos(rot), math.sin(rot)
+    u, v = dx * c + dy * s_, -dx * s_ + dy * c
+    return math.hypot(u / ax, v / ay)
+
+
+_lake_levels = {}
+
+
+def lake_level(i):
+    if i not in _lake_levels:
+        (cx, cy), (ax, ay), rot = LAKES[i]
+        shore = []
+        for k in range(48):
+            t = 2 * math.pi * k / 48
+            u, v = math.cos(t) * ax, math.sin(t) * ay
+            shore.append(H0(cx + u * math.cos(rot) - v * math.sin(rot), cy + u * math.sin(rot) + v * math.cos(rot)))
+        _lake_levels[i] = min(shore) - 0.6
+    return _lake_levels[i]
+
+
 def H(x, y):
-    """Terrain height (metres)."""
+    """Terrain height (metres), with lake basins far outside the map."""
+    h = H0(x, y)
+    if max(abs(x), abs(y)) > 300:
+        for i, lk in enumerate(LAKES):
+            e = lake_e(x, y, lk)
+            if e < 1.2:
+                h = h + (lake_level(i) - 3.0 - h) * smoothstep(1.15, 0.85, e)
+    return h
+
+
+def H0(x, y):
+    """Terrain height (metres) before lakes."""
     h = 0.0
     if y >= WALL_Y1 - 1e-6:
         h = 3.0 * plateau_x(x)
@@ -120,6 +158,18 @@ def forest_floor(x, y):
     return (y > WALL_Y1 and x > WALL_X0 - 2) or y > 40 or abs(x) > 72 or y < -45
 
 
+def forest_weight(x, y):
+    """Soft lawn -> forest-floor mask (vertex colour R on the terrain blend material)."""
+    plateau = smoothstep(WALL_Y1 + 0.5, WALL_Y1 + 7, y) * smoothstep(WALL_X0 - 4, WALL_X0 + 4, x)
+    w = max(plateau, smoothstep(34, 46, y), smoothstep(64, 78, abs(x)), smoothstep(-40, -50, y))
+    w += 0.35 * noise.noise(Vector((x / 9.0, y / 9.0, 2.3)))
+    return min(1.0, max(0.0, w))
+
+
+def terrain_color(co, mat):
+    return (forest_weight(co.x, co.y), 0.0, 0.0, 1.0)
+
+
 print('Building terrain...')
 ROWS = sorted(set([float(v) for v in range(-100, 101)] + [WALL_Y0, WALL_Y1]))
 COLS = [float(v) for v in range(-100, 101)]
@@ -142,7 +192,7 @@ for cy in range(4):
                     if abs(y - WALL_Y1) < 1e-6 and my < WALL_Y1:
                         return H(x, y - 1e-3)
                     return H(x, y)
-                mat = 'ground_forest' if forest_floor(mx, my) else 'ground_grass'
+                mat = 'terrain_blend'
                 b.quad((xa, ya, hz(xa, ya)), (xb, ya, hz(xb, ya)), (xb, yb, hz(xb, yb)), (xa, yb, hz(xa, yb)), mat, smooth=True)
                 faces += 1
         # Skirts on the map boundary hide T-junction cracks against the far landscape.
@@ -156,20 +206,10 @@ for cy in range(4):
                 (ax, ay), (bx, by) = seq[k], seq[k + 1]
                 b.quad((ax, ay, H(ax, ay) - 2), (bx, by, H(bx, by) - 2), (bx, by, H(bx, by)), (ax, ay, H(ax, ay)), 'ground_forest')
         if faces:
-            res = build(b, TPM_TERRAIN, custom_normals=terrain_normal)
+            res = build(b, TPM_TERRAIN, custom_normals=terrain_normal, vertex_color=terrain_color)
             add_mesh_object(f'terrain_{cx}_{cy}', f'Terrain chunk {cx},{cy}', f'terrain_{cx}_{cy}', 'terrain', lightmap=res)
 
-print('Building far landscape...')
-b = MeshBuilder('landscape_far')
-coords = sorted(set([-2400, -1700, -1200, -850, -620, -460, -350, -270, -210, -165, -130, -110, 110, 130, 165, 210, 270, 350, 460, 620, 850, 1200, 1700, 2400] + list(range(-100, 101, 10))))
-for j in range(len(coords) - 1):
-    for i in range(len(coords) - 1):
-        xa, xb, ya, yb = coords[i], coords[i + 1], coords[j], coords[j + 1]
-        if -100 <= xa and xb <= 100 and -100 <= ya and yb <= 100:
-            continue
-        b.quad((xa, ya, H(xa, ya)), (xb, ya, H(xb, ya)), (xb, yb, H(xb, yb)), (xa, yb, H(xa, yb)), 'landscape_far', smooth=True)
-build(b, None, custom_normals=terrain_normal)
-add_mesh_object('landscape_far', 'Distant landscape', 'landscape_far', 'terrain', collision=False, cast=False)
+# (far landscape is built after the trees: its tree-line strips are rendered from them)
 
 # =============================================================== road
 print('Building road...')
@@ -379,17 +419,24 @@ for (sa, sb) in spans:
         seg = seg + [sb]
     for i in range(len(seg) - 1):
         a, c = seg[i], seg[i + 1]
-        b.quad((a, WALL_Y0, 0), (c, WALL_Y0, 0), (c, WALL_Y0, top(c)), (a, WALL_Y0, top(a)), 'concrete_wall')
-        b.quad((c, WALL_Y1, back(c)), (a, WALL_Y1, back(a)), (a, WALL_Y1, top(a)), (c, WALL_Y1, top(c)), 'concrete_wall')
-        b.quad((a, WALL_Y0, top(a)), (c, WALL_Y0, top(c)), (c, WALL_Y1, top(c)), (a, WALL_Y1, top(a)), 'concrete_wall')
+        b.quad((a, WALL_Y0, 0), (c, WALL_Y0, 0), (c, WALL_Y0, top(c)), (a, WALL_Y0, top(a)), 'wall_blend')
+        b.quad((c, WALL_Y1, back(c)), (a, WALL_Y1, back(a)), (a, WALL_Y1, top(a)), (c, WALL_Y1, top(c)), 'wall_blend')
+        b.quad((a, WALL_Y0, top(a)), (c, WALL_Y0, top(c)), (c, WALL_Y1, top(c)), (a, WALL_Y1, top(a)), 'wall_blend')
     for (x, sgn) in [(sa, -1), (sb, 1)]:
         if x not in (WALL_X0, WALL_X1):
             continue
         if sgn < 0:
-            b.quad((x, WALL_Y1, 0), (x, WALL_Y0, 0), (x, WALL_Y0, top(x)), (x, WALL_Y1, top(x)), 'concrete_wall')
+            b.quad((x, WALL_Y1, 0), (x, WALL_Y0, 0), (x, WALL_Y0, top(x)), (x, WALL_Y1, top(x)), 'wall_blend')
         else:
-            b.quad((x, WALL_Y0, 0), (x, WALL_Y1, 0), (x, WALL_Y1, top(x)), (x, WALL_Y0, top(x)), 'concrete_wall')
-res = build(b, TPM_ARCH)
+            b.quad((x, WALL_Y0, 0), (x, WALL_Y1, 0), (x, WALL_Y1, top(x)), (x, WALL_Y0, top(x)), 'wall_blend')
+def wall_moss(co, mat):
+    base = 1.0 - smoothstep(0.0, 0.9, co.z)
+    crest = smoothstep(top(co.x) - 0.25, top(co.x), co.z) * 0.8
+    n = 0.3 * noise.noise(Vector((co.x / 3.0, co.z / 1.5, 7.1)))
+    return (min(1.0, max(0.0, max(base, crest) + n)), 0.0, 0.0, 1.0)
+
+
+res = build(b, TPM_ARCH, vertex_color=wall_moss, color_max_edge=0.4)
 add_mesh_object('retaining_wall', 'Retaining wall (3 m)', 'retaining_wall', 'wall', lightmap=res)
 
 b = MeshBuilder('stairs')
@@ -453,38 +500,45 @@ for i in range(len(ys) - 1):
     tile_top_a, tile_top_b = za + 2.0, zb + 2.0
     for (wx, facing) in [(UP_IX0, 1), (UP_IX1, -1)]:
         # inner faces: tiles band in the tunnel section, concrete above / on ramps
-        lo_mat = 'tiles_white' if tunnel else 'concrete_wall'
+        lo_mat = 'tiles_white' if tunnel else 'concrete_grime'
         if facing > 0:  # +x
             q = lambda z0a, z0b, z1a, z1b, m: b.quad((wx, ya, z0a), (wx, yb, z0b), (wx, yb, z1b), (wx, ya, z1a), m)
         else:           # -x
             q = lambda z0a, z0b, z1a, z1b, m: b.quad((wx, yb, z0b), (wx, ya, z0a), (wx, ya, z1a), (wx, yb, z1b), m)
         if tunnel:
             q(za, zb, tile_top_a, tile_top_b, lo_mat)
-            q(tile_top_a, tile_top_b, wall_top, wall_top, 'concrete_wall')
+            q(tile_top_a, tile_top_b, wall_top, wall_top, 'concrete_grime')
         else:
             q(za, zb, wall_top, wall_top, lo_mat)
     if not tunnel:
         # wall tops and outer faces above ground
         for (ox0, ox1) in [(UP_X0, UP_IX0), (UP_IX1, UP_X1)]:
-            b.quad((ox0, ya, 0.4), (ox1, ya, 0.4), (ox1, yb, 0.4), (ox0, yb, 0.4), 'concrete_wall')
-        b.quad((UP_X0, yb, 0.0), (UP_X0, ya, 0.0), (UP_X0, ya, 0.4), (UP_X0, yb, 0.4), 'concrete_wall')  # -x
-        b.quad((UP_X1, ya, 0.0), (UP_X1, yb, 0.0), (UP_X1, yb, 0.4), (UP_X1, ya, 0.4), 'concrete_wall')  # +x
+            b.quad((ox0, ya, 0.4), (ox1, ya, 0.4), (ox1, yb, 0.4), (ox0, yb, 0.4), 'concrete_grime')
+        b.quad((UP_X0, yb, 0.0), (UP_X0, ya, 0.0), (UP_X0, ya, 0.4), (UP_X0, yb, 0.4), 'concrete_grime')  # -x
+        b.quad((UP_X1, ya, 0.0), (UP_X1, yb, 0.0), (UP_X1, yb, 0.4), (UP_X1, ya, 0.4), 'concrete_grime')  # +x
 b.quad((UP_IX0, 7, UP_CEIL), (UP_IX1, 7, UP_CEIL), (UP_IX1, -7, UP_CEIL), (UP_IX0, -7, UP_CEIL), 'concrete_cast')  # ceiling
 # portal fascias (deck edge) from the ceiling up to the sidewalk
-b.quad((UP_X1, 7, UP_CEIL), (UP_X0, 7, UP_CEIL), (UP_X0, 7, 0.12), (UP_X1, 7, 0.12), 'concrete_wall')
-b.quad((UP_X0, -7, UP_CEIL), (UP_X1, -7, UP_CEIL), (UP_X1, -7, 0.12), (UP_X0, -7, 0.12), 'concrete_wall')
+b.quad((UP_X1, 7, UP_CEIL), (UP_X0, 7, UP_CEIL), (UP_X0, 7, 0.12), (UP_X1, 7, 0.12), 'concrete_grime')
+b.quad((UP_X0, -7, UP_CEIL), (UP_X1, -7, UP_CEIL), (UP_X1, -7, 0.12), (UP_X0, -7, 0.12), 'concrete_grime')
 # wall ends at the ramp tops
 for yy in (31.0, -31.0):
     for (ox0, ox1) in [(UP_X0, UP_IX0), (UP_IX1, UP_X1)]:
         if yy > 0:  # +y
-            b.quad((ox1, yy, 0.0), (ox0, yy, 0.0), (ox0, yy, 0.4), (ox1, yy, 0.4), 'concrete_wall')
+            b.quad((ox1, yy, 0.0), (ox0, yy, 0.0), (ox0, yy, 0.4), (ox1, yy, 0.4), 'concrete_grime')
         else:       # -y
-            b.quad((ox0, yy, 0.0), (ox1, yy, 0.0), (ox1, yy, 0.4), (ox0, yy, 0.4), 'concrete_wall')
+            b.quad((ox0, yy, 0.0), (ox1, yy, 0.0), (ox1, yy, 0.4), (ox0, yy, 0.4), 'concrete_grime')
 # ceiling light fixtures
 for ly in (-3.5, 3.5):
     b.box(-12.6, -11.4, ly - 0.12, ly + 0.12, UP_CEIL - 0.08, UP_CEIL, 'metal_dark', skip=('+z', '-z'))
     b.quad((-12.6, ly + 0.12, UP_CEIL - 0.08), (-11.4, ly + 0.12, UP_CEIL - 0.08), (-11.4, ly - 0.12, UP_CEIL - 0.08), (-12.6, ly - 0.12, UP_CEIL - 0.08), 'lamp_emissive')
-res = build(b, TPM_ARCH)
+def underpass_grime(co, mat):
+    fz = floor_z(co.y)
+    w = 1.0 - smoothstep(fz + 0.05, fz + 0.7, co.z)
+    w += 0.25 * noise.noise(Vector((co.y / 2.0, co.z, 3.3)))
+    return (min(1.0, max(0.0, w)), 0.0, 0.0, 1.0)
+
+
+res = build(b, TPM_ARCH, vertex_color=underpass_grime, color_max_edge=0.4)
 add_mesh_object('underpass', 'Pedestrian underpass + ramps', 'underpass', 'underpass', lightmap=res)
 
 b = MeshBuilder('underpass_rails')
@@ -614,62 +668,167 @@ for vi, (sx, sy, sz, seed) in enumerate([(3.2, 2.4, 1.3, 1), (5.5, 3.8, 1.8, 2),
     build(b)
 
 
-def tree_asset(name, kind):
-    """Placeholder trees: trunk + crossed alpha cards. Card normals are bent
-    away from the crown axis so the canopy shades as a volume."""
-    b = MeshBuilder(name)
-    rnd = random.Random(hash(name) & 0xffff)
-    if kind == 'pine':
-        height, r0, crown0, crown_r, bark, leaf, card = 18.0, 0.24, 11.0, 3.2, 'bark_pine', 'foliage_pine', 3.0
-    elif kind == 'spruce':
-        height, r0, crown0, crown_r, bark, leaf, card = 17.0, 0.22, 1.2, 3.4, 'bark_pine', 'foliage_pine', 2.6
-    else:
-        height, r0, crown0, crown_r, bark, leaf, card = 14.0, 0.15, 5.0, 2.6, 'bark_birch', 'foliage_birch', 2.6
-    b.tube((0, 0, -0.3), (0, 0, height), r0, 0.03, bark, sides=10, caps=False)
-    cards = []
-    n_br = 34 if kind == 'spruce' else 22
-    for i in range(n_br):
-        t = (i + rnd.random() * 0.5) / n_br
-        z = crown0 + (height - crown0 - 0.8) * t
-        if kind == 'spruce':
-            reach = crown_r * (1 - t) ** 0.9 + 0.5
-        elif kind == 'pine':
-            reach = crown_r * (0.55 + 0.45 * math.sin(math.pi * min(1, t * 1.1)))
-        else:
-            reach = crown_r * (0.6 + 0.4 * math.sin(math.pi * t))
-        a = i * 2.39996 + rnd.random() * 0.4
-        d = Vector((math.cos(a), math.sin(a), 0))
-        droop = -0.35 if kind == 'spruce' else (-0.15 if kind == 'birch' else 0.1)
-        tip = Vector((0, 0, z)) + d * reach + Vector((0, 0, droop * reach))
-        base = Vector((0, 0, z)) + d * 0.1
-        tang = Vector((-d.y, d.x, 0)) * (card * 0.5 * (0.6 + 0.4 * reach / crown_r))
-        up = (tip - base).normalized().cross(tang.normalized()) * tang.length
-        for (s, vq) in [(tang, 'h'), (up, 'v')]:
-            q = [base - s, base + s, tip + s, tip - s]
-            cards.append((q, leaf))
-    top = Vector((0, 0, height - 0.4))
-    for k in range(2):
-        a = k * math.pi / 2
-        s = Vector((math.cos(a), math.sin(a), 0)) * 0.9
-        cards.append(([top - s + Vector((0, 0, -1.4)), top + s + Vector((0, 0, -1.4)), top + s + Vector((0, 0, 0.6)), top - s + Vector((0, 0, 0.6))], leaf))
-    for q, m in cards:
-        b.face(q, m, uvs=[(0, 0), (1, 0), (1, 1), (0, 1)], smooth=True)
-    center_z = (crown0 + height) / 2
+# Trees: procedural Scots pine / Norway spruce / silver birch with LODs + impostors (tools/blender/trees.py).
+import tempfile  # noqa: E402
+from trees import build_tree  # noqa: E402
+TREE_VARIANTS = {'tree_pine': [('pine', 11), ('pine', 12)], 'tree_spruce': [('spruce', 21), ('spruce', 22)], 'tree_birch': [('birch', 31), ('birch', 32)]}
+_imp_tmp = tempfile.mkdtemp(prefix='rill_impostor_')
+_lod0 = {'pine': [], 'spruce': [], 'birch': []}
+for base, variants in TREE_VARIANTS.items():
+    for k, (species, seed) in enumerate(variants):
+        _, ob0 = build_tree(f'{base}_{"ab"[k]}', species, seed, ASSET_DIR, _imp_tmp)
+        _lod0[species].append(ob0)
 
-    def bent(p):
-        rz = r0 + (0.03 - r0) * (p.z + 0.3) / (height + 0.3)
-        if abs(p.xy.length - rz) < 0.01:
-            return Vector((p.x, p.y, 0)).normalized()
-        v = Vector((p.x, p.y, (p.z - center_z) * 0.6))
-        return (v.normalized() * 0.8 + Vector((0, 0, 0.35))).normalized() if v.length > 1e-4 else Vector((0, 0, 1))
-    obj, _ = b.finish(None, weld=False, custom_normals=bent)
-    export_glb(obj, os.path.join(ASSET_DIR, name + '.glb'))
-    print(f'  {name:24s} {sum(len(p.vertices) - 2 for p in obj.data.polygons):7d} tris')
+# =============================================================== far scenery
+# Source-style backdrop beyond the playable area: masked fields/forest on the far
+# terrain, lakes, rings of tree-line silhouette strips and distant tower blocks.
+print('Building far scenery...')
+from trees import render_treeline, TREELINE_W, TREELINE_H  # noqa: E402
+render_treeline(_lod0, _imp_tmp)
 
 
-tree_asset('tree_pine', 'pine')
-tree_asset('tree_spruce', 'spruce')
-tree_asset('tree_birch', 'birch')
+BLOCK_SITES = [(20, 620), (35, 700), (75, 1350), (110, 900), (150, 520), (170, 1500), (205, 760), (240, 1100),
+               (262, 1180), (300, 640), (318, 980), (345, 1450), (128, 1550), (58, 480)]
+BLOCK_XY = [(math.cos(math.radians(a)) * d, math.sin(math.radians(a)) * d) for a, d in BLOCK_SITES]
+
+
+def far_forest(x, y):
+    n = noise.noise(Vector((x / 420.0, y / 420.0, 9.1))) + 0.5 * noise.noise(Vector((x / 150.0, y / 150.0, 3.3)))
+    w = smoothstep(-0.3, 0.05, n)
+    for lk in LAKES:
+        w *= smoothstep(1.05, 1.3, lake_e(x, y, lk))
+    for bx, by in BLOCK_XY:  # clearings around the tower blocks
+        w *= smoothstep(45, 85, math.hypot(x - bx, y - by))
+    return w
+
+
+CANOPY_H = 15.0
+
+
+def far_height(x, y):
+    """Far terrain with the forest canopy shell raised over forested ground (faded in away from the map)."""
+    return H(x, y) + CANOPY_H * far_forest(x, y) * smoothstep(210, 390, max(abs(x), abs(y)))
+
+
+def far_normal(p):
+    e = 2.0
+    dx = (far_height(p.x + e, p.y) - far_height(p.x - e, p.y)) / (2 * e)
+    dy = (far_height(p.x, p.y + e) - far_height(p.x, p.y - e)) / (2 * e)
+    return Vector((-dx, -dy, 1)).normalized()
+
+
+def in_lake(x, y, margin=1.0):
+    return any(lake_e(x, y, lk) < margin for lk in LAKES)
+
+
+def far_color(co, mat):
+    return (far_forest(co.x, co.y), 0.0, 0.0, 1.0)
+
+
+def graded(limit=2600.0, first=12.0, growth=1.13):
+    out, x, step = [], 100.0, first
+    while x < limit:
+        x += step
+        out.append(round(x, 2))
+        step *= growth
+    return out
+
+
+pos = graded()
+coords = sorted(set([-c for c in pos] + list(range(-100, 101, 10)) + pos))
+b = MeshBuilder('landscape_far')
+for j in range(len(coords) - 1):
+    for i in range(len(coords) - 1):
+        xa, xb, ya, yb = coords[i], coords[i + 1], coords[j], coords[j + 1]
+        if -100 <= xa and xb <= 100 and -100 <= ya and yb <= 100:
+            continue
+        F = far_height
+        b.quad((xa, ya, F(xa, ya)), (xb, ya, F(xb, ya)), (xb, yb, F(xb, yb)), (xa, yb, F(xa, yb)), 'landscape_far', smooth=True)
+build(b, None, custom_normals=far_normal, vertex_color=far_color)
+add_mesh_object('landscape_far', 'Distant landscape', 'landscape_far', 'terrain', collision=False, cast=False)
+
+# Lakes: flat water ellipses slightly larger than the shoreline (the basin rises through them).
+b = MeshBuilder('far_water')
+for i, ((cx, cy), (ax, ay), rot) in enumerate(LAKES):
+    wl = lake_level(i)
+    ring = []
+    for k in range(64):
+        t = 2 * math.pi * k / 64
+        u, v = math.cos(t) * ax * 1.12, math.sin(t) * ay * 1.12
+        ring.append((cx + u * math.cos(rot) - v * math.sin(rot), cy + u * math.sin(rot) + v * math.cos(rot), wl))
+    for k in range(64):
+        p0, p1 = ring[k], ring[(k + 1) % 64]
+        b.face([(cx, cy, wl), p0, p1], 'water_far')
+build(b)
+add_mesh_object('far_water', 'Distant lakes', 'far_water', 'water', collision=False, cast=False)
+
+# Tree-line rings: tangential strips where the far mask is forest.
+rnd_f = random.Random(77)
+b = MeshBuilder('far_treeline')
+R = 145.0
+n_strips = 0
+while R < 2100:
+    seg = min(90.0, max(14.0, R / 14.0))
+    n = int(2 * math.pi * R / seg)
+    u_off = rnd_f.uniform(0, 1)
+    jitter = [R * (1 + rnd_f.uniform(-0.035, 0.035)) for _ in range(n)]
+    for k in range(n):
+        t0, t1 = 2 * math.pi * k / n, 2 * math.pi * (k + 1) / n
+        r0, r1 = jitter[k], jitter[(k + 1) % n]
+        x0, y0 = math.cos(t0) * r0, math.sin(t0) * r0
+        x1, y1 = math.cos(t1) * r1, math.sin(t1) * r1
+        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
+        if far_forest(mx, my) < 0.55 or in_lake(mx, my, 1.25):
+            continue
+        hs = rnd_f.uniform(0.85, 1.15)
+        top = TREELINE_H * hs
+        za, zb = H(x0, y0) - 1.5, H(x1, y1) - 1.5
+        ua = u_off + R * t0 / TREELINE_W
+        ub = u_off + R * t1 / TREELINE_W
+        # Front face points towards the map centre (double-sided material anyway).
+        b.face([(x1, y1, zb), (x0, y0, za), (x0, y0, za + top), (x1, y1, zb + top)], 'treeline',
+               uvs=[(ub, 0), (ua, 0), (ua, 1), (ub, 1)], smooth=True)
+        n_strips += 1
+    R *= 1.27
+
+
+def strip_normal(co):
+    d = Vector((-co.x, -co.y, 0))
+    return (d.normalized() * 0.55 + Vector((0, 0, 0.85))).normalized() if d.length > 1e-3 else Vector((0, 0, 1))
+
+
+obj, _ = b.finish(None, weld=False, foliage_normals=({'treeline'}, strip_normal))
+export_glb(obj, os.path.join(ASSET_DIR, 'far_treeline.glb'))
+add_mesh_object('far_treeline', 'Distant tree lines', 'far_treeline', 'vegetation', collision=False, cast=False)
+print(f'  far_treeline: {n_strips} strips')
+
+# Distant tower blocks on the hills (miljonprogram slabs and point houses).
+b = MeshBuilder('far_buildings')
+rnd_b = random.Random(91)
+KINDS = [('slab', 12.0, 56.0, 8), ('slab', 12.0, 72.0, 9), ('point', 17.0, 17.0, 12), ('low', 11.0, 44.0, 4)]
+FACADES = ['facade_far', 'facade_far_brick', 'facade_far_ochre']
+placed_b = 0
+for (az_deg, dist), (cx, cy) in zip(BLOCK_SITES, BLOCK_XY):
+    az = math.radians(az_deg)
+    if in_lake(cx, cy, 1.4):
+        continue
+    kind, w, l, floors = rnd_b.choice(KINDS)
+    yaw = az + math.pi / 2 + rnd_b.uniform(-0.4, 0.4)
+    c, s_ = math.cos(yaw), math.sin(yaw)
+    hw, hl = l / 2, w / 2
+    corners = [(cx + c * px - s_ * py, cy + s_ * px + c * py) for (px, py) in [(-hw, -hl), (hw, -hl), (hw, hl), (-hw, hl)]]
+    base = min(H(x, y) for x, y in corners) - 1.0
+    top = base + 1.0 + floors * 2.8 + 0.6
+    fac = rnd_b.choice(FACADES)
+    for i in range(4):
+        (xa, ya), (xb, yb) = corners[i], corners[(i + 1) % 4]
+        L = math.hypot(xb - xa, yb - ya)
+        b.face([(xa, ya, base), (xb, yb, base), (xb, yb, top), (xa, ya, top)], fac, uvs=[(0, 0), (L, 0), (L, top - base), (0, top - base)])
+    b.face([(x, y, top) for x, y in corners], 'asphalt', uvs=[(0, 0), (l, 0), (l, w), (0, w)])
+    placed_b += 1
+build(b)
+add_mesh_object('far_buildings', 'Distant apartment blocks', 'far_buildings', 'building', collision=False, cast=False)
+print(f'  far_buildings: {placed_b} blocks')
 
 # =============================================================== placements
 print('Placing props, trees, lights, decals...')
@@ -766,7 +925,10 @@ for (x0, x1, y0, y1), count, mix in regions:
 for (x, y) in [(-33, 16), (-35, 20), (-14, 18), (2, -26), (53, -24), (-46, -4), (-48, -33), (-20, -35)]:
     trees['tree_birch'].append([*to_engine((x, y, H(x, y) - 0.1)), round(rnd.uniform(0, 360), 1), round(rnd.uniform(0.8, 1.1), 2)])
 for name, inst in trees.items():
-    objects.append({'id': f'trees_{name}', 'name': f'Trees ({name})', 'type': 'instances', 'semantic': 'vegetation', 'asset': f'{ASSET_REL}/{name}.glb', 'castShadow': True, 'instances': inst})
+    for k in range(len(TREE_VARIANTS[name])):
+        part = inst[k::len(TREE_VARIANTS[name])]
+        v = f'{name}_{"ab"[k]}'
+        objects.append({'id': f'trees_{v}', 'name': f'Trees ({v})', 'type': 'instances', 'semantic': 'vegetation', 'asset': f'{ASSET_REL}/{v}.model.json', 'castShadow': True, 'instances': part})
 print('  trees:', {k: len(v) for k, v in trees.items()})
 
 

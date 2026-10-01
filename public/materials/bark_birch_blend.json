@@ -1,0 +1,2 @@
+{ "inherits": "bark_birch", "blend": { "material": "bark_birch_base", "contrast": 3, "height": 0.6, "noise": 0.7 },
+  "notes": "Silver birch: white bark, dark fissured base (vertex colour R from the tree generator)." }

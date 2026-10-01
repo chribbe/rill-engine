@@ -1,0 +1,3 @@
+{ "baseColorFactor": [0.02, 0.028, 0.03], "roughness": 0.06, "metallic": 0, "specular": 0.5, "porosity": 0,
+  "macro": { "texture": "macro_variation.png", "physicalSize": 90, "albedoStrength": 0.0, "roughnessStrength": 0.25 },
+  "notes": "Distant lake surface: dark, smooth, reflects the sky." }

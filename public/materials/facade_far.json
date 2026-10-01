@@ -1,0 +1,2 @@
+{ "baseColor": "facade_far_albedo.png", "normal": "facade_far_normal.png", "orm": "facade_far_orm.png", "physicalSize": [10.8, 11.2], "roughness": 1, "porosity": 0.2,
+  "notes": "Distant apartment block facade (window grid). Tint per building via materialOverrides/baseColorFactor variants." }

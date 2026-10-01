@@ -69,11 +69,17 @@ function saveMaterial(name: string, size: number, physical: [number, number], m:
     });
     if (!ao) ao = aoFromHeight(m.height, opts.aoRadius ?? size / 128, opts.aoDepth ?? 200);
   }
+  // ORM(H): alpha = height normalised to the texture's own range (0.5 when flat),
+  // used for height-aware material blending.
+  let hMin = Infinity, hMax = -Infinity;
+  if (m.height) for (const v of m.height.data) { hMin = Math.min(hMin, v); hMax = Math.max(hMax, v); }
+  const hRange = hMax - hMin;
   writePng(`${name}_orm.png`, size, size, (x, y, o) => {
     const i = y * size + x;
     o[0] = ao ? ao.data[i] : 1;
     o[1] = m.rough.data[i];
     o[2] = m.metal ? m.metal.data[i] : 0;
+    o[3] = m.height && hRange > 1e-9 ? (m.height.data[i] - hMin) / hRange : 0.5;
   });
   let r = 0, g = 0, b = 0, n = 0;
   for (let i = 0; i < size * size; i++) {
@@ -359,7 +365,7 @@ recipes.ground_forest = () => {
   // Nordic forest floor: needles, moss, lingon/blueberry-ish green, bare soil.
   const S = 1024, P = 2;
   const albedo = new Img(S, S), height = new Field(S, S), rough = new Field(S, S);
-  const needles = lin('#6b5237'), moss = lin('#55623a'), soil = lin('#43372b'), lichen = lin('#9a9b84');
+  const needles = lin('#5c4831'), moss = lin('#46562c'), soil = lin('#3a3026'), lichen = lin('#8c8f76');
   const rng = mulberry32(91);
   const needleMask = new Field(S, S);
   // Scatter needle strokes.
@@ -373,7 +379,7 @@ recipes.ground_forest = () => {
   }
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     const u = (x + 0.5) / S, v = (y + 0.5) / S;
-    const mossW = smoothstep(-0.1, 0.35, fbm(u, v, 6, 4, 92)) * 0.8;
+    const mossW = smoothstep(-0.35, 0.2, fbm(u, v, 6, 4, 92)) * 0.9;
     const soilW = smoothstep(0.35, 0.6, fbm(u, v, 8, 3, 93)) * (1 - mossW) * 0.7;
     const lichenW = smoothstep(0.45, 0.6, fbm(u, v, 7, 3, 94)) * mossW;
     const nm = needleMask.data[y * S + x];
@@ -382,7 +388,7 @@ recipes.ground_forest = () => {
       let cc = lerp(needles[i], moss[i], mossW);
       cc = lerp(cc, soil[i], soilW);
       cc = lerp(cc, lichen[i], lichenW);
-      cc = lerp(cc, needles[i] * 1.2, nm * (1 - mossW) * 0.8);
+      cc = lerp(cc, needles[i] * 1.15, nm * (1 - mossW * 0.7) * 0.6);
       return cc * (0.85 + n * 0.2);
     });
     albedo.set(x, y, col[0], col[1], col[2]);
@@ -513,105 +519,335 @@ recipes.bark_birch = () => {
   saveMaterial('bark_birch', S, [P, P], { albedo, height, rough });
 };
 
-function foliageCard(name: string, kind: 'pine' | 'birch') {
-  // Alpha-tested branch card. Colour is dilated into transparent areas so mips
-  // never bleed dark fringes.
+recipes.moss = () => {
+  // Cushion moss / algae growth for wall bases and damp concrete.
+  const S = 1024, P = 1;
+  const albedo = new Img(S, S), height = new Field(S, S), rough = new Field(S, S);
+  const g1 = lin('#4f5d2c'), g2 = lin('#6f7a35'), dark = lin('#2b3220'), dry = lin('#7c7552');
+  const c: Cell = { f1: 0, f2: 0, id: 0, dx: 0, dy: 0 };
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = (x + 0.5) / S, v = (y + 0.5) / S;
+    worley(u, v, 40, 321, 1, c);
+    const cushion = Math.sqrt(clamp01(1 - c.f1 * 1.15));
+    const fine = fbm(u, v, 96, 3, 322);
+    const tone = fbm(u, v, 6, 4, 323);
+    const dryW = smoothstep(0.25, 0.5, fbm(u, v, 5, 3, 324));
+    const col = [0, 1, 2].map((i) => lerp(lerp(g1[i], g2[i], 0.5 + tone * 0.8), dry[i], dryW * 0.5) * (0.7 + cushion * 0.45 + fine * 0.15));
+    const crev = 1 - smoothstep(0.0, 0.25, c.f2 - c.f1);
+    albedo.set(x, y, lerp(col[0], dark[0], crev * 0.6), lerp(col[1], dark[1], crev * 0.6), lerp(col[2], dark[2], crev * 0.6));
+    height.data[y * S + x] = cushion * 0.006 + fine * 0.0008;
+    rough.data[y * S + x] = 0.97;
+  }
+  saveMaterial('moss', S, [P, P], { albedo, height, rough }, { aoRadius: 5, aoDepth: 60 });
+};
+
+recipes.dirt = () => {
+  // Damp soil / grime with grit for wall bases, path edges and splash zones.
+  const S = 1024, P = 1;
+  const albedo = new Img(S, S), height = new Field(S, S), rough = new Field(S, S);
+  const soil = lin('#4a3f33'), grey = lin('#5d5853'), wet = lin('#2f2a24');
+  const c: Cell = { f1: 0, f2: 0, id: 0, dx: 0, dy: 0 };
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = (x + 0.5) / S, v = (y + 0.5) / S;
+    worley(u, v, 140, 331, 1, c);
+    const grit = smoothstep(0.1, 0.3, c.f2 - c.f1) * ((hash2(c.id, 1, 1) / 4294967296) > 0.55 ? 1 : 0);
+    const tone = fbm(u, v, 5, 4, 332);
+    const wetW = smoothstep(0.1, 0.5, fbm(u, v, 4, 3, 333));
+    const col = [0, 1, 2].map((i) => lerp(lerp(soil[i], grey[i], 0.5 + tone * 0.6), wet[i], wetW * 0.5) * (1 + grit * 0.4));
+    albedo.set(x, y, col[0], col[1], col[2]);
+    height.data[y * S + x] = grit * 0.002 + fbm(u, v, 48, 3, 334) * 0.001;
+    rough.data[y * S + x] = clamp01(0.92 - wetW * 0.25);
+  }
+  saveMaterial('dirt', S, [P, P], { albedo, height, rough }, { aoRadius: 3, aoDepth: 120 });
+};
+
+/**
+ * Alpha-tested foliage spray cards (twig base at the bottom centre, growth
+ * upwards). Rasterised from strokes with coverage + a shade value; colour is
+ * dilated into transparent texels so mips never bleed dark fringes. AO darkens
+ * the inner/older parts of the spray.
+ */
+function sprayCard(name: string, kind: 'pine' | 'spruce' | 'birch') {
   const S = 1024;
-  const cov = new Field(S, S);
-  const shade = new Field(S, S);
-  const rng = mulberry32(kind === 'pine' ? 161 : 171);
-  const seg = (x0: number, y0: number, x1: number, y1: number, w: number, val: number) => {
+  const cov = new Field(S, S), shade = new Field(S, S), age = new Field(S, S);
+  const seeds = { pine: 161, spruce: 191, birch: 171 };
+  const rng = mulberry32(seeds[kind]);
+  // Anti-aliased capsule stroke; `val` = colour variation, `ag` = 0 young .. 1 old/inner.
+  const seg = (x0: number, y0: number, x1: number, y1: number, w: number, val: number, ag: number) => {
     const minX = Math.max(0, Math.floor(Math.min(x0, x1) - w - 1)), maxX = Math.min(S - 1, Math.ceil(Math.max(x0, x1) + w + 1));
     const minY = Math.max(0, Math.floor(Math.min(y0, y1) - w - 1)), maxY = Math.min(S - 1, Math.ceil(Math.max(y0, y1) + w + 1));
     const dx = x1 - x0, dy = y1 - y0, l2 = dx * dx + dy * dy || 1;
     for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
       const t = clamp01(((x + 0.5 - x0) * dx + (y + 0.5 - y0) * dy) / l2);
       const px = x0 + dx * t - (x + 0.5), py = y0 + dy * t - (y + 0.5);
-      const d = Math.sqrt(px * px + py * py);
-      const a = clamp01(w + 0.5 - d);
+      const a = clamp01(w + 0.5 - Math.sqrt(px * px + py * py));
       const i = y * S + x;
-      if (a > cov.data[i]) { cov.data[i] = a; shade.data[i] = val; }
-    }
-  };
-  const ellipse = (cx: number, cy: number, rx: number, ry: number, ang: number, val: number) => {
-    const r = Math.max(rx, ry) + 1;
-    const ca = Math.cos(ang), sa = Math.sin(ang);
-    for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(S - 1, Math.ceil(cy + r)); y++) for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(S - 1, Math.ceil(cx + r)); x++) {
-      const px = x + 0.5 - cx, py = y + 0.5 - cy;
-      const lx = px * ca + py * sa, ly = -px * sa + py * ca;
-      const d = Math.sqrt((lx / rx) ** 2 + (ly / ry) ** 2);
-      const a = clamp01((1 - d) * Math.min(rx, ry) + 0.5);
-      const i = y * S + x;
-      if (a > cov.data[i]) { cov.data[i] = a; shade.data[i] = val; }
-    }
-  };
-  if (kind === 'pine') {
-    // A spray of twigs radiating from the lower centre, densely needled.
-    for (let b = 0; b < 13; b++) {
-      const ang = -Math.PI / 2 + (b - 6) * 0.2 + (rng() - 0.5) * 0.12;
-      const len = S * (0.62 + rng() * 0.3) * (1 - Math.abs(b - 6) * 0.045);
-      let x = S / 2 + (rng() - 0.5) * 60, y = S * 0.985;
-      const steps = 30;
-      for (let s = 0; s < steps; s++) {
-        const t = s / steps;
-        const a = ang + Math.sin(t * 3 + b) * 0.08;
-        const nx = x + Math.cos(a) * (len / steps), ny = y + Math.sin(a) * (len / steps);
-        seg(x, y, nx, ny, 3.2 * (1 - t * 0.6), 0.15);
-        // needles
-        for (let k = 0; k < 7; k++) {
-          const side = k % 2 ? 1 : -1;
-          const na = a + side * (0.7 + rng() * 0.5) + (rng() - 0.5) * 0.3;
-          const nl = 34 + rng() * 26;
-          const ox = nx + (rng() - 0.5) * 6, oy = ny + (rng() - 0.5) * 6;
-          seg(ox, oy, ox + Math.cos(na) * nl, oy + Math.sin(na) * nl, 1.8, 0.55 + rng() * 0.45);
-        }
-        x = nx; y = ny;
+      if (a > cov.data[i] || (a > 0.5 && val < 0)) {
+        cov.data[i] = Math.max(cov.data[i], a); shade.data[i] = val; age.data[i] = ag;
       }
+    }
+  };
+  // Leaf blade: ovate-triangular with a serrated rim and a midrib.
+  const leaf = (bx: number, by: number, ang: number, len: number, wid: number, val: number) => {
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const r = len + 2;
+    for (let y = Math.max(0, Math.floor(by - r)); y <= Math.min(S - 1, Math.ceil(by + r)); y++) for (let x = Math.max(0, Math.floor(bx - r)); x <= Math.min(S - 1, Math.ceil(bx + r)); x++) {
+      const px = x + 0.5 - bx, py = y + 0.5 - by;
+      const l = px * ca + py * sa, q = -px * sa + py * ca;
+      const t = l / len;
+      if (t < 0 || t > 1) continue;
+      // Widest at ~30% (birch leaves are rhombic-triangular), pointed tip.
+      const prof = wid * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.75)), 0.9) * (1 - 0.35 * t);
+      const serr = 1 + 0.08 * Math.sin(t * 60);
+      const a = clamp01((prof * serr - Math.abs(q)) * 1.2 + 0.5);
+      if (a <= 0) continue;
+      const i = y * S + x;
+      const rib = Math.abs(q) < 0.9 && t < 0.92 ? -0.25 : 0;
+      if (a >= cov.data[i]) { cov.data[i] = a; shade.data[i] = clamp01(val + rib + (Math.abs(q) / Math.max(1, prof)) * 0.15); age.data[i] = t * 0.3; }
+    }
+  };
+  // Polyline twig with a curvature; calls `along(x, y, ang, t)` per step.
+  const twig = (x: number, y: number, ang: number, len: number, w0: number, w1: number, bend: number, steps: number,
+    along: (x: number, y: number, a: number, t: number) => void, ag0 = 0.8, ag1 = 0.1) => {
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps;
+      const a = ang + bend * t;
+      const nx = x + Math.cos(a) * (len / steps), ny = y + Math.sin(a) * (len / steps);
+      seg(x, y, nx, ny, lerp(w0, w1, t), -1, lerp(ag0, ag1, t));
+      along(nx, ny, a, t);
+      x = nx; y = ny;
+    }
+    return [x, y];
+  };
+  const UP = -Math.PI / 2;
+  if (kind === 'spruce') {
+    // Norway spruce frond: main shoot with alternating side shoots, short dense needles.
+    const needles = (x: number, y: number, a: number, t: number, density: number, nl: number) => {
+      for (let k = 0; k < density; k++) {
+        const side = k % 2 ? 1 : -1;
+        const na = a + side * (0.65 + rng() * 0.55) + (rng() - 0.5) * 0.25;
+        const l = nl * (0.8 + rng() * 0.4) * (1 - t * 0.25);
+        const ox = x + (rng() - 0.5) * 4, oy = y + (rng() - 0.5) * 4;
+        seg(ox, oy, ox + Math.cos(na) * l, oy + Math.sin(na) * l, 1.5, 0.4 + rng() * 0.6, 1 - t);
+      }
+    };
+    twig(S / 2, S - 8, UP + 0.04, S * 0.92, 5, 1.8, -0.1, 90, (x, y, a, t) => {
+      needles(x, y, a, t, 8, 30);
+      if (t > 0.03 && t < 0.88 && (Math.round(t * 90) % 3 === 0)) {
+        const side = Math.round(t * 90) % 6 === 0 ? 1 : -1;
+        const sl = S * 0.5 * (1 - t) ** 0.65 * (0.8 + rng() * 0.3) + 50;
+        twig(x, y, a + side * (0.9 + rng() * 0.25), sl, 2.8, 1.1, -side * 0.5, 34, (x2, y2, a2, t2) => {
+          needles(x2, y2, a2, t2, 6, 26);
+          if (t2 > 0.15 && t2 < 0.75 && rng() < 0.22) {
+            twig(x2, y2, a2 + (rng() < 0.5 ? 1 : -1) * 0.85, sl * 0.35, 1.6, 0.9, 0, 12, (x3, y3, a3, t3) => needles(x3, y3, a3, t3, 5, 22), 0.6, 0.1);
+          }
+        }, 0.7, 0.05);
+      }
+    }, 0.95, 0.1);
+  } else if (kind === 'pine') {
+    // Scots pine tuft: a few shoots fanning upwards, bottle-brush paired long needles towards the ends.
+    const n = 6;
+    for (let b = 0; b < n; b++) {
+      const ang = UP + (b - (n - 1) / 2) * 0.24 + (rng() - 0.5) * 0.1;
+      const len = S * (0.55 + rng() * 0.25) * (1 - Math.abs(b - (n - 1) / 2) * 0.06);
+      const x0 = S / 2 + (rng() - 0.5) * 50;
+      const [ex, ey] = twig(x0, S - 6, ang, len, 4.5, 2.6, (rng() - 0.5) * 0.3, 40, (x, y, a, t) => {
+        if (t < 0.18) return;
+        for (let k = 0; k < 9; k++) {
+          const side = k % 2 ? 1 : -1;
+          const spread = 0.35 + rng() * 0.75;
+          const na = a + side * spread;
+          const nl = (62 + rng() * 32) * (0.75 + 0.25 * Math.sin(Math.PI * t));
+          const ox = x + (rng() - 0.5) * 5, oy = y + (rng() - 0.5) * 5;
+          // Pine needles curve slightly and come in pairs.
+          const mx = ox + Math.cos(na) * nl * 0.5, my = oy + Math.sin(na) * nl * 0.5;
+          const na2 = na - side * 0.12;
+          const v = 0.35 + rng() * 0.65;
+          seg(ox, oy, mx, my, 1.45, v, 1 - t);
+          seg(mx, my, mx + Math.cos(na2) * nl * 0.5, my + Math.sin(na2) * nl * 0.5, 1.2, v, 1 - t);
+        }
+      }, 0.9, 0.2);
+      // terminal bud
+      seg(ex, ey, ex + Math.cos(ang) * 14, ey + Math.sin(ang) * 14, 4, -1, 0);
     }
   } else {
-    // Birch: thin drooping twigs with small serrated leaves.
-    for (let b = 0; b < 22; b++) {
-      let x = S * (0.04 + rng() * 0.92), y = S * (0.02 + rng() * 0.35);
-      let a = Math.PI / 2 + (rng() - 0.5) * 1.3;
-      const n = 40;
-      for (let s = 0; s < n; s++) {
-        const nx = x + Math.cos(a) * 18, ny = y + Math.sin(a) * 18;
-        seg(x, y, nx, ny, 1.1, 0.1);
-        a += (rng() - 0.5) * 0.15;
-        if (s > 3 && rng() < 0.6) {
+    // Silver birch: fine pendulous twigs with petioled rhombic leaves (texture "up" hangs down in the tree).
+    for (let b = 0; b < 7; b++) {
+      const x0 = S / 2 + (rng() - 0.5) * 160;
+      const ang = UP + (b - 3) * 0.2 + (rng() - 0.5) * 0.25;
+      twig(x0, S - 6, ang, S * (0.6 + rng() * 0.32), 2.4, 0.9, (rng() - 0.5) * 0.6, 44, (x, y, a, t) => {
+        if (t > 0.08 && rng() < 0.55) {
           const side = rng() < 0.5 ? -1 : 1;
-          const la = a + side * (0.8 + rng() * 0.6);
-          const lr = 16 + rng() * 10;
-          const lx = nx + Math.cos(la) * lr, ly = ny + Math.sin(la) * lr;
-          seg(nx, ny, lx, ly, 0.8, 0.1);
-          ellipse(lx, ly, lr * 0.75, lr * 0.5, la, 0.5 + rng() * 0.5);
+          const pa = a + side * (0.6 + rng() * 0.7);
+          const pl = 10 + rng() * 8;
+          const lx = x + Math.cos(pa) * pl, ly = y + Math.sin(pa) * pl;
+          seg(x, y, lx, ly, 0.8, -1, 0.2);
+          const ll = (42 + rng() * 22) * (0.75 + 0.25 * t);
+          leaf(lx, ly, pa + (rng() - 0.5) * 0.5, ll, ll * 0.42, 0.25 + rng() * 0.75);
         }
-        x = nx; y = ny;
-        if (y > S * 0.98) break;
-      }
+        if (t > 0.15 && t < 0.75 && rng() < 0.06) {
+          const side = rng() < 0.5 ? -1 : 1;
+          twig(x, y, a + side * 0.7, S * 0.22, 1.2, 0.7, -side * 0.3, 14, (x2, y2, a2, t2) => {
+            if (rng() < 0.5) {
+              const s2 = rng() < 0.5 ? -1 : 1;
+              const pa = a2 + s2 * (0.6 + rng() * 0.7);
+              const lx = x2 + Math.cos(pa) * 12, ly = y2 + Math.sin(pa) * 12;
+              seg(x2, y2, lx, ly, 0.7, -1, 0.2);
+              const ll = 36 + rng() * 18;
+              leaf(lx, ly, pa, ll, ll * 0.42, 0.3 + rng() * 0.7);
+            }
+          }, 0.5, 0.1);
+        }
+      }, 0.7, 0.1);
     }
   }
-  const leafA = kind === 'pine' ? lin('#2c3f22') : lin('#5b7a2e');
-  const leafB = kind === 'pine' ? lin('#445a2c') : lin('#86a043');
-  const twig = kind === 'pine' ? lin('#5a4130') : lin('#3a3029');
+  const pal = {
+    spruce: { a: lin('#1d3019'), b: lin('#3c5a2a'), young: lin('#6d8a3c'), twig: lin('#5a3f2a') },
+    pine: { a: lin('#2d4128'), b: lin('#506a3c'), young: lin('#5f7a44'), twig: lin('#8a5a36') },
+    birch: { a: lin('#44612a'), b: lin('#6a8834'), young: lin('#84a042'), twig: lin('#4a3a30') },
+  }[kind];
   const albedo = new Img(S, S), rough = new Field(S, S), ao = new Field(S, S);
-  const avg = leafA.map((c, i) => (c + leafB[i]) * 0.5);
+  // Dilate colours into empty texels (nearest-ish fill in a few passes).
+  const col = new Float32Array(S * S * 3);
+  const filled = new Uint8Array(S * S);
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     const i = y * S + x;
-    const a = cov.data[i];
-    const s = shade.data[i];
-    const isTwig = s < 0.2;
-    const col = isTwig ? twig : leafA.map((c, k) => lerp(c, leafB[k], (s - 0.5) * 2));
-    const n = fbm((x + 0.5) / S, (y + 0.5) / S, 16, 3, 181) * 0.15;
-    const c = a > 0.01 ? col : avg;
-    albedo.set(x, y, c[0] * (1 + n), c[1] * (1 + n), c[2] * (1 + n), a);
-    rough.data[i] = 0.65;
-    ao.data[i] = 0.75 + 0.25 * (1 - y / S);
+    if (cov.data[i] <= 0.01) continue;
+    const sv = shade.data[i];
+    let c: number[];
+    if (sv < 0) c = pal.twig;
+    else {
+      c = pal.a.map((v, k) => lerp(v, pal.b[k], sv));
+      // Young growth (shoot tips) lighter and yellower.
+      const yg = clamp01(1 - age.data[i] * 2.2) * (kind === 'birch' ? 0.25 : 0.55);
+      c = c.map((v, k) => lerp(v, pal.young[k], yg));
+    }
+    const n = fbm((x + 0.5) / S, (y + 0.5) / S, 12, 3, seeds[kind] + 9) * 0.18;
+    col[i * 3] = c[0] * (1 + n); col[i * 3 + 1] = c[1] * (1 + n); col[i * 3 + 2] = c[2] * (1 + n);
+    filled[i] = 1;
+  }
+  for (let pass = 0; pass < 24; pass++) {
+    const next = filled.slice();
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const i = y * S + x;
+      if (filled[i]) continue;
+      let r = 0, g = 0, b = 0, k = 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= S || yy >= S) continue;
+        const j = yy * S + xx;
+        if (!filled[j]) continue;
+        r += col[j * 3]; g += col[j * 3 + 1]; b += col[j * 3 + 2]; k++;
+      }
+      if (k) { col[i * 3] = r / k; col[i * 3 + 1] = g / k; col[i * 3 + 2] = b / k; next[i] = 1; }
+    }
+    filled.set(next);
+  }
+  const avg = [0, 1, 2].map((k) => (pal.a[k] + pal.b[k]) * 0.5);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = y * S + x;
+    const c = filled[i] ? [col[i * 3], col[i * 3 + 1], col[i * 3 + 2]] : avg;
+    albedo.set(x, y, c[0], c[1], c[2], cov.data[i]);
+    rough.data[i] = shade.data[i] < 0 ? 0.85 : kind === 'birch' ? 0.55 : 0.6;
+    ao.data[i] = cov.data[i] > 0.01 ? 0.55 + 0.45 * clamp01(1 - age.data[i] * 0.8) : 1;
   }
   saveMaterial(name, S, [1, 1], { albedo, rough, ao });
 }
-recipes.foliage_pine = () => foliageCard('foliage_pine', 'pine');
-recipes.foliage_birch = () => foliageCard('foliage_birch', 'birch');
+recipes.foliage_pine = () => sprayCard('foliage_pine', 'pine');
+recipes.foliage_spruce = () => sprayCard('foliage_spruce', 'spruce');
+recipes.foliage_birch = () => sprayCard('foliage_birch', 'birch');
+
+recipes.forest_canopy = () => {
+  // Forest seen from far away / above: irregular 3-6 m crowns (two sizes), soft gaps, mixed tones.
+  const S = 1024, P = 48;
+  const albedo = new Img(S, S), height = new Field(S, S), rough = new Field(S, S);
+  const spruce = lin('#2c4127'), pine = lin('#3d5532'), birch = lin('#5e7e36'), gap = lin('#1f2b1a');
+  const c1: Cell = { f1: 0, f2: 0, id: 0, dx: 0, dy: 0 }, c2: Cell = { f1: 0, f2: 0, id: 0, dx: 0, dy: 0 };
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = (x + 0.5) / S, v = (y + 0.5) / S;
+    // Domain warp breaks the cell regularity.
+    const wu = u + (fbm(u, v, 8, 3, 223) - 0.5) * 0.04, wv = v + (fbm(u, v, 8, 3, 224) - 0.5) * 0.04;
+    worley(((wu % 1) + 1) % 1, ((wv % 1) + 1) % 1, 11, 221, 1, c1);
+    worley(((wu % 1) + 1) % 1, ((wv % 1) + 1) % 1, 23, 225, 1, c2);
+    const big = 1 - smoothstep(0.2, 0.85, c1.f1 * 1.25);
+    const small = 1 - smoothstep(0.2, 0.85, c2.f1 * 1.25);
+    const crown = Math.max(big, small * 0.85);
+    const id = big >= small * 0.85 ? c1.id : c2.id + 7;
+    const t = hash2(id, 5, 9) / 4294967296;
+    const n = fbm(u, v, 128, 3, 222);
+    const base = t < 0.45 ? spruce : t < 0.85 ? pine : birch;
+    const lit = 0.85 + 0.2 * crown + (n - 0.5) * 0.2;
+    const col = [0, 1, 2].map((i) => lerp(gap[i], base[i] * lit, smoothstep(0.0, 0.45, crown)));
+    albedo.set(x, y, col[0], col[1], col[2]);
+    height.data[y * S + x] = crown * (0.6 + 0.4 * t) * 2.5;
+    rough.data[y * S + x] = 0.9;
+  }
+  saveMaterial('forest_canopy', S, [P, P], { albedo, height, rough }, { aoRadius: 8, aoDepth: 1.0 });
+};
+
+recipes.facade_far = () => {
+  // Distant apartment facade: 4 bays x 4 storeys (2.7 m bays, 2.8 m storeys), windows + balcony bands.
+  const S = 512, PW = 10.8, PH = 11.2;
+  const albedo = new Img(S, S), rough = new Field(S, S), metal = new Field(S, S), height = new Field(S, S);
+  const wall = lin('#c9c2b4'), glass = lin('#262c33'), frame = lin('#e8e6e0'), slab = lin('#9a958c');
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const mx = ((x + 0.5) / S) * PW, my = ((y + 0.5) / S) * PH;
+    const bx = mx % 2.7, sy = my % 2.8;
+    const win = bx > 0.7 && bx < 2.0 && sy > 0.9 && sy < 2.3;
+    const fr = bx > 0.62 && bx < 2.08 && sy > 0.82 && sy < 2.38;
+    const band = sy > 2.55;
+    const n = fbm((x + 0.5) / S, (y + 0.5) / S, 16, 3, 231);
+    const col = win ? glass : fr ? frame : band ? slab : wall;
+    albedo.set(x, y, col[0] * (0.95 + n * 0.1), col[1] * (0.95 + n * 0.1), col[2] * (0.95 + n * 0.1));
+    rough.data[y * S + x] = win ? 0.08 : 0.85;
+    height.data[y * S + x] = win ? -0.06 : band ? 0.04 : 0;
+  }
+  saveMaterial('facade_far', S, [PW, PH], { albedo, height, rough, metal }, { aoRadius: 2, aoDepth: 20 });
+};
+
+recipes.bark_pine_upper = () => {
+  // Scots pine upper trunk: thin orange bark peeling in papery, roughly horizontal flakes.
+  const S = 512, P = 1;
+  const albedo = new Img(S, S), height = new Field(S, S), rough = new Field(S, S);
+  const orange = lin('#b36a3c'), pale = lin('#d29a68'), dark = lin('#6e3f26'), grey = lin('#8a7a6a');
+  const c: Cell = { f1: 0, f2: 0, id: 0, dx: 0, dy: 0 };
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = (x + 0.5) / S, v = (y + 0.5) / S;
+    // Domain-warped cells: irregular papery flakes, wider than tall.
+    const wu = u + (fbm(u, v, 6, 3, 204) - 0.5) * 0.08, wv = v + (fbm(u, v, 6, 3, 205) - 0.5) * 0.03;
+    worley(((wu % 1) + 1) % 1, ((wv * 3 % 1) + 1) % 1, 16, 201, 1, c);
+    const e = c.f2 - c.f1;
+    const edge = 1 - smoothstep(0.0, 0.05, e);
+    const t = hash2(c.id, 3, 7) / 4294967296;
+    const n = fbm(u, v, 48, 4, 202);
+    let col = [0, 1, 2].map((i) => lerp(orange[i], pale[i], smoothstep(0.65, 1.0, t) * 0.6));
+    col = col.map((cc, i) => lerp(cc, grey[i], smoothstep(0.55, 0.8, fbm(u, v, 4, 3, 203)) * 0.5));
+    col = col.map((cc, i) => lerp(cc, dark[i], edge * 0.45 + (1 - n) * 0.15) * (0.88 + n * 0.24));
+    albedo.set(x, y, col[0], col[1], col[2]);
+    height.data[y * S + x] = (1 - edge) * 0.0015 * (0.5 + t) + n * 0.0006;
+    rough.data[y * S + x] = 0.82;
+  }
+  saveMaterial('bark_pine_upper', S, [P, P], { albedo, height, rough }, { aoRadius: 3, aoDepth: 60 });
+};
+
+recipes.bark_birch_base = () => {
+  // Old birch base: black-grey, deeply fissured with corky grey ridges.
+  const S = 512, P = 1;
+  const albedo = new Img(S, S), height = new Field(S, S), rough = new Field(S, S);
+  const ridge = lin('#6d6860'), fissure = lin('#1c1a18'), white = lin('#bdb8ad');
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const u = (x + 0.5) / S, v = (y + 0.5) / S;
+    const r = ridged((u * 3) % 1, v, 6, 4, 211);
+    const fis = smoothstep(0.45, 0.8, r);
+    const n = fbm(u, v, 32, 3, 212);
+    const wp = smoothstep(0.62, 0.75, fbm(u, v, 5, 3, 213)) * (1 - fis);
+    const col = [0, 1, 2].map((i) => lerp(lerp(ridge[i], white[i], wp * 0.7), fissure[i], fis) * (0.88 + n * 0.24));
+    albedo.set(x, y, col[0], col[1], col[2]);
+    height.data[y * S + x] = (1 - fis) * 0.01 + n * 0.001;
+    rough.data[y * S + x] = 0.93;
+  }
+  saveMaterial('bark_birch_base', S, [P, P], { albedo, height, rough }, { aoRadius: 4, aoDepth: 40 });
+};
 
 recipes.fence_chainlink = () => {
   // 50 mm diamond chain-link, 3 mm galvanised wire: tile = 0.1 m (two diamonds).

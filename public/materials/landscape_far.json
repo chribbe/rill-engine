@@ -1,3 +1,4 @@
-{ "baseColor": "ground_forest_albedo.png", "normal": "ground_forest_normal.png", "physicalSize": 8, "baseColorFactor": [0.62, 1.05, 0.72], "roughness": 0.95,
+{ "inherits": "ground_grass", "physicalSize": 6, "baseColorFactor": [0.9, 1.0, 0.85],
   "macro": { "texture": "macro_variation.png", "physicalSize": 420, "albedoStrength": 0.45, "roughnessStrength": 0.0 },
-  "notes": "Distant forested hills beyond the playable area (placeholder until forest impostors exist)." }
+  "blend": { "material": "forest_canopy", "contrast": 3, "height": 0.3, "noise": 0.5 },
+  "notes": "Distant fields (layer A) and forest canopy (layer B, vertex colour R) beyond the playable area." }

@@ -66,6 +66,11 @@ async function main() {
   renderer.textures.load('/textures/debug_grid_albedo.png', 'color').then((t) => renderer.setDebugGrid(t.view)).catch(() => {});
 
   loading.textContent = `Loading map '${mapName}'…`;
+  // Offline BC7 textures when supported (?bc=0 compares against the PNG + GPU-mip path).
+  if (params.get('bc') !== '0') {
+    const n = await renderer.textures.enableCompression();
+    if (n) console.log(`[textures] BC7 index: ${n} textures`);
+  }
   const world = await World.load(renderer, `/maps/${mapName}/map.json`, (m) => (loading.textContent = m));
   const env = new Environment(deepMerge(await loadPreset(world.doc.environment.preset), world.doc.environment.overrides));
   renderer.settings.tonemapper = tonemapperFromName(env.state.post.tonemapper);
@@ -205,6 +210,9 @@ async function main() {
       const ch = new MessageChannel();
       const tick = () => new Promise<void>((res) => { ch.port1.onmessage = () => res(); ch.port2.postMessage(0); });
       const cpu: number[] = [];
+      // Warm up, then measure from a clean timer history.
+      for (let i = 0; i < 8; i++) { frame(performance.now(), true); await renderer.device.queue.onSubmittedWorkDone(); }
+      renderer.timer.reset();
       const t0 = performance.now();
       for (let i = 0; i < frames; i++) {
         const c0 = performance.now();
@@ -217,7 +225,7 @@ async function main() {
       cpu.sort((a, b) => a - b);
       return {
         frames, wallMsPerFrame: +wall.toFixed(3), cpuMedianMs: +cpu[frames >> 1].toFixed(3), cpuP95Ms: +cpu[Math.floor(frames * 0.95)].toFixed(3),
-        gpuMs: +renderer.timer.total.toFixed(3), gpuPasses: Object.fromEntries([...renderer.timer.results].map(([k, v]) => [k, +v.toFixed(3)])),
+        gpuMs: +renderer.timer.total.toFixed(3), gpuSpanMs: +renderer.timer.span.toFixed(3), gpuPasses: Object.fromEntries([...renderer.timer.results].map(([k, v]) => [k, +v.toFixed(3)])),
         stats: { ...renderer.stats },
       };
     },

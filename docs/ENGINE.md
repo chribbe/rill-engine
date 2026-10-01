@@ -147,21 +147,75 @@ World (runtime, derived) ───────────────┐       
     Karis-weighted first downsample (no glint flicker). Off in debug views.
 17. **Assets are GLB; the runtime never depends on Blender.** Blender is the authoring and baking
     tool (headless scripts); the map document and LightmapSet are engine formats.
+18. **Directional lightmaps as a ratio (HL2 RNM basis).** Besides the flat `sky` bake, the sky
+    component is baked three more times with the shading normal tilted to the HL2 radiosity
+    basis. Cycles' tilted-normal bakes measured biased low (0.88/0.63/0.38 vs analytic
+    0.93/0.79/0.63 at 30/54.7/75°), so the runtime uses them only as a *direction ratio*:
+    `sky · Σwᵢ·Lᵢ / mean(Lᵢ)` with `wᵢ = saturate(N·eᵢ)²` normalised. Flat energy stays exact;
+    normal maps get directional shading in shade/overcast. Layers: sky, rnm0..2, sun.
+19. **Probe volume = Source-1 ambient cubes**, baked in the same Cycles passes as the lightmaps
+    (an invisible probe-cube mesh, camera-visible only), same sky/sunBounce decomposition, packed
+    as slabs in one rgba16float 3D texture. Non-lightmapped objects (trees, props) blend
+    `mix(skySH, probe, weight)`. **Validity:** a BVH over opaque static geometry raycasts 14
+    directions per probe; ≥5 back-face hits = buried (20 % of the test-map volume), and buried
+    probes are dilated from valid neighbours so nothing leaks dark.
+20. **Reflection probes captured in-engine** (not baked): 6 × 90° faces rendered by the real
+    renderer at a fixed pre-exposure, GGX-prefiltered with the sky pipelines, SH-projected for
+    normalisation. Box-projected, top-2 blend + sky fallback. Re-captured whenever the
+    environment changes (weather preset → wet tiles reflect the right sky).
+21. **Blend materials (vertex-painted, height-blended).** A material may declare `blend` with a
+    second material; vertex colour R is the layer-B weight, sharpened by the two layers' height
+    maps (ORM alpha = normalised height) and broken up by macro noise. Used for lawn→forest floor,
+    moss at wall bases, underpass grime, pine bark (grey plates → orange upper trunk) and birch
+    bases. Faces of blend materials are subdivided to ≤0.4 m at build time so weights have
+    vertices to live on. *Blender 5.2's glTF exporter writes white COLOR_0 for every material
+    after the first in a multi-material mesh* (it maps them to an internal key instead of
+    `COLOR_0`); `export_glb` exports such meshes as one part per material and the bake rejoins them.
+22. **Offline BC7 texture compression.** `tools/textures/compress.ts` builds the mip chain exactly
+    like the GPU mipgen (Lanczos-2 in linear light, vMF normal variance in alpha, 8-bit per level)
+    and encodes BC7 (modes 6 / 5 with rotation / 1 with partition search; PCA + least squares +
+    p-bit search; bit-exact against the GPU decoder) into KTX2. The kind (colour/normal/linear)
+    comes from material usage; the loader only substitutes when the kind matches. **Quality gate:**
+    per-texel-noise normal maps (gravel, grass, aggregate…) are 20–33 dB in BC7 and stay
+    uncompressed until normals move to BC5. 318 → 129 MB texture memory at the time of the switch.
+23. **Vegetation = skeleton → LODs → impostor.** `tools/blender/trees.py` grows a deterministic
+    skeleton per species (whorled spruce with dead lower branches, umbrella-crowned Scots pine
+    with clumped tufts, birch with pendulous twigs) and emits LOD0 (branch tubes + all spray
+    cards), LOD1 (coarse trunk, main limbs, every 3rd card ×1.65) and LOD2 (three crossed planes
+    cut into alpha-fitted bands, textured by an orthographic Cycles render of LOD0: albedo + crown
+    AO). Foliage normals are bent from the crown centre; trunks keep real normals.
+    **Model descriptors** (`*.model.json`, Source `vmdl` analogue) list LOD meshes + switch
+    distances; any placement of the model gets LODs. Selection is by distance to the bounds
+    centre × instance scale, normalised to a 60° FOV, with a user LOD bias. **Shadow casters use
+    a per-cascade minimum LOD (0, 1, 2, 2)** — cut forest shadow triangles from 3.1 M to 0.75 M.
+24. **Far scenery as a cheap backdrop (3D-skybox idea, real scale).** Beyond the playable area:
+    graded far terrain with a field/forest mask (vertex blend to a canopy texture) and a
+    **canopy shell** raised 15 m over forested ground (faded in from ~210 m), lakes in carved
+    basins, 12 rings of **tree-line strips** (a tileable 64×26 m forest-edge silhouette rendered
+    from the real tree models) placed where the mask is forest, and distant miljonprogram blocks
+    on the hills with clearings around them. ~11 k triangles total; fog/aerial perspective does
+    the rest.
 
 ## 5. Content pipeline
 
 ```
 npm run textures   # tools/textures/generate.ts   → public/textures (+ manifest.json avg albedo)
-npm run map        # Blender: build_testmap.py    → public/assets/testmap/*.glb + maps/testmap/map.json
+npm run map        # Blender: build_testmap.py    → public/assets/testmap/*.glb, *.model.json, impostor +
+                   #   tree-line textures, maps/testmap/map.json  (~25 s)
 npm run bake       # Blender/Cycles: bake_lightmaps.py -- [--samples 256] [--size 2048] [--no-denoise]
-                   #   → maps/testmap/lightmaps/{lm_0_sky.hdr, lm_0_sun.hdr, lightmapset.json}
+                   #   → maps/testmap/lightmaps/{lm_0_{sky,rnm0,rnm1,rnm2,sun}.hdr, probes_*.bin, lightmapset.json}
+npm run compress   # tools/textures/compress.ts → public/textures/bc7/*.ktx2 + index.json (incremental, ~30 s full)
 ```
+Order after content changes: `textures` → `map` → `bake` → `compress`. The BC7 folder is a
+build output (gitignored); without it the engine loads PNGs and builds mips on the GPU.
+`?bc=0` in the URL forces the PNG path for comparisons.
 
 **BakeScene → BakeBackend → LightmapSet.** The bake reconstructs the scene from `map.json` + GLBs
 (not from the authoring .blend), uses per-material bounce albedo (texture manifest × factor),
 alpha-cutout foliage with partial transmission, packs object rectangles into 2048² pages,
 bakes position/normal guides + the two components, runs a guided à-trous denoise, and writes
-RGBE `.hdr`. Current bake: 34 objects, 2.62 Mtexels (63 % of one page), 256 spp, **~115 s** on
+RGBE `.hdr`. Current bake: 34 lightmapped objects (1 010 scene objects incl. 900 LOD0 trees as
+occluders), flat sky + 3 RNM + sunBounce + probe volume (28 611 probes), 256 spp, **~6 min** on
 an M5 Pro (≈15 s per bake call is Cycles scene sync/BVH).
 
 Texel densities: terrain 4 t/m, ground surfaces 5 t/m, architecture 12 t/m, stairs 16 t/m.
@@ -182,6 +236,26 @@ TBDR and are only indicative). Clear preset, test map, MSAA 4×, aniso 16× unle
 | 3440×1440 | no MSAA, aniso 16× | 4.8 ms | 5.4 ms |
 
 Base map: ~120 main + ~240 shadow draws, 0.21 M main triangles, ~1 500 instances, CPU 0.3–0.5 ms/frame.
+
+**Current (after items 1–6: directional lightmaps, probes, blend materials, BC7, LOD vegetation,
+far scenery)** — 1920×1080, MSAA 4×, aniso 16×, GPU frame span (first pass begin → last pass end;
+see the measurement note below):
+
+| View | GPU span | Main tris | Draws | LOD0/1/2 trees |
+|---|---|---|---|---|
+| Road grazing | 7.2 ms | 0.25 M | 143 | 2 / 68 / 589 |
+| Retaining wall | 7.2 ms | 0.36 M | 87 | 17 / 164 / 165 |
+| Underpass | 6.3 ms | 0.31 M | 91 | 0 / 169 / 272 |
+| Forest path | 10.6 ms | 0.43 M | 47 | 31 / 187 / 9 |
+| Overview | 9.4 ms | 0.23 M | 138 | 0 / 45 / 616 |
+
+CPU 0.3 ms/frame. Vegetation dominates: the forest path is 2.6 ms with trees hidden. MSAA
+costs ~2× on the forest (5.6 ms without). Impostors are ~2.2× cheaper than LOD1 at the same
+placement (overview: +3.3 ms vs +7.2 ms). Texture memory 156 MB (85 of 109 textures BC7).
+
+**Measurement note:** in the desktop app's browser pane, a hidden pane throttles presentation,
+so wall-clock frame time is meaningless there, and per-pass timestamps overlap on TBDR (their
+sum double-counts). `rill.bench()` now warms up, resets the timer and reports `gpuSpanMs`.
 
 Stress (1080p, MSAA 4×, road / overview):
 
@@ -233,24 +307,29 @@ Findings:
 - ~~Deep shade under clear sun reads near-black~~ — fixed by realistic aerosols (sky 2× brighter,
   whiter) + auto exposure. Remaining: no *local* exposure, so a bright exterior seen from deep
   shade still clips (as a camera would).
-- Placeholder vegetation: crossed cards read as "cardboard" up close; no LOD/impostors; forest
-  floor under dense cards is dark.
-- Distant landscape is a smooth green mesh (no forest silhouette) — placeholder.
-- Puddle/wet reflections are subtle: only the global sky probe exists (no local probes, no SSR by design).
+- Vegetation: LOD switches pop (no dithered crossfade yet); impostors are a single side view on
+  three planes (star-shaped from above); spruce sprays seen from directly below read as flat
+  fronds; no wind.
+- Far scenery is a ground-level illusion: from well above the map edge the tree-line strips and
+  the flat canopy band between 145–210 m are visible as such.
+- Content is still procedural (no scanned textures yet); the forest floor and grass are the
+  weakest materials at close range.
 - Lightmap bounce is baked for the reference sun direction (clear preset); other sun angles keep
   realtime direct light but approximate bounce.
-- Dynamic objects (trees, props, gallery spheres) use sky SH × crude AO — no probe volume yet,
-  so they can look too bright in occluded areas.
-- `rill.bench` numbers include ~0.5 ms of frame-pacing overhead; timestamp queries overlap on TBDR.
-- When the browser pane/tab is hidden, rAF drops to 1 Hz (use `rill.shot`/`rill.bench`).
+- Hidden browser pane → presentation throttled (use `rill.shot` / `rill.bench`, read `gpuSpanMs`).
 
 ## 9. Technical debt
 
 - Lightmap atlas waste: ring-shaped charts (parapet caps) and curved path ribbons pack into
   their bounding boxes (building charts ~40 % empty, forest path 93 %). Split islands or use a
   better packer.
-- No texture compression yet (all RGBA8 PNG + GPU mips, ~300 MB GPU texture memory incl. mips).
-  Plan: offline KTX2 with BC7 (albedo/ORM) and BC5 (normals; variance → ORM roughness mips).
+- 8 noisy normal maps stay RGBA8 (BC7 can't hold per-texel noise). Plan: BC5 normals with the
+  normal variance folded into the ORM roughness mips (Source 2 style), then compress everything.
+- BC7 encoder is single-pass PCA + LS (no exhaustive mode 7/4, no perceptual weighting) — fine
+  for these textures, worth revisiting for scanned content. Impostor/tree-line textures are
+  re-rendered (and so re-compressed) on every map build.
+- Tiling-wrap mip filtering is also applied to non-tiling textures (impostors, tree line).
+- LOD selection has no hysteresis/crossfade; shadow LOD minimum is per cascade, not per texel size.
 - Lightmaps are rgb9e5 raw (32 MB for one page with two components) — consider BC6H.
 - Brute-force local light loop (fine for ~20 lights); clustered lighting when needed.
 - CPU culling is flat (no BVH / sectors); no GPU-driven path yet.
@@ -283,19 +362,23 @@ Findings:
 
 ## 11. Next steps (proposed order)
 
-1. **Directional lightmaps** (L1 SH or 3-basis RNM via three Cycles bakes with fixed normals) —
-   biggest remaining gain for normal-mapped surfaces in shade/overcast.
-2. **Local reflection probes** (box-projected, captured in-engine at load/bake) → wet surfaces, glass, tiles.
-3. **Irradiance probe volume** baked alongside lightmaps (same sky/sunBounce decomposition) for
-   dynamic objects and vegetation.
-4. **Real materials** (scanned CC0 sets through the same JSON model) and texture compression (KTX2/BC).
-5. **Vegetation**: better pine/spruce/birch assets, LOD + impostors, wind.
-6. **Exposure**: optional eye adaptation / local exposure for sun-vs-shade scenes.
-7. GPU culling + indirect draws once CPU culling shows up in profiles; hierarchical sectors.
+Done: directional lightmaps, reflection probes, probe volume, blend materials, BC7, LOD
+vegetation with impostors, far scenery (decisions 18–24).
+
+1. **Scanned CC0 materials** (ground, bark, concrete, asphalt) through the same JSON model —
+   needs a download step (ambientCG/Poly Haven) and the user's go-ahead.
+2. **BC5 normals + variance-in-roughness**, so every texture compresses.
+3. **Vegetation polish:** dithered LOD crossfade, wind (trunk sway + spray flutter, shared by
+   prepass/shadow/lit vertex stages), octahedral impostors, undergrowth (blueberry/lingon, ferns).
+4. **Foliage shading variant** (no box-projected probes for rough foliage) and GPU culling +
+   indirect draws for the forest; hierarchical sectors.
+5. **Exposure**: optional local exposure for sun-vs-shade scenes.
 
 ## 12. Automation API (precursor of future editor/AI tools)
 
 `window.rill` in the running app: `getScene()`, `setPreset(name)`, `setView(name)`,
 `setCamera(pos, yawDeg, pitchDeg)`, `getCamera()`, `stats()`, `shot(name, w, h)` (writes
 `screenshots/<name>.png` via the dev server), `shotViews(prefix, w, h)`, `bench(frames)`,
-`stress(kind, n)`, `clearStress()`, plus the live `renderer`, `world`, `env` objects.
+`stress(kind, n)`, `clearStress()`, `setSize(w, h)` (render-size override for benchmarks),
+plus the live `renderer`, `world`, `env` objects. `bench()` reports `gpuSpanMs`; the stats overlay
+shows per-LOD object counts and the BC7 share of texture memory.

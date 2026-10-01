@@ -1,0 +1,3 @@
+{ "baseColor": "forest_canopy_albedo.png", "normal": "forest_canopy_normal.png", "orm": "forest_canopy_orm.png", "physicalSize": 48, "roughness": 1, "normalStrength": 0.45, "porosity": 0,
+  "macro": { "texture": "macro_variation.png", "physicalSize": 380, "albedoStrength": 0.35, "roughnessStrength": 0.0 },
+  "notes": "Forest canopy as seen from a distance (far landscape only)." }
