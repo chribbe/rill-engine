@@ -13,5 +13,6 @@
   "exclude": true
  },
  "notes": "Dead lower spruce twigs with lichen flecks.",
- "alphaDistance": "average"
+ "alphaDistance": "average",
+ "snow": 0.25
 }

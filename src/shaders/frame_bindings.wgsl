@@ -48,5 +48,9 @@ struct ReflProbe {
   pad: vec4f,
 };
 @group(0) @binding(21) var<storage, read> reflProbes: array<ReflProbe>;
+// Global snow layer (weather), projected from above in world space.
+@group(0) @binding(22) var snowAlbedoTex: texture_2d<f32>;
+@group(0) @binding(23) var snowNormalTex: texture_2d<f32>;
+@group(0) @binding(24) var snowOrmTex: texture_2d<f32>;
 
 fn hasFlag(bit: u32) -> bool { return (frame.debug.y & bit) != 0u; }

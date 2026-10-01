@@ -323,6 +323,8 @@ export class Renderer {
   private lightmapView: GPUTextureView;
   private debugGridView: GPUTextureView;
   private cloudNoiseView: GPUTextureView;
+  /** Snow layer albedo / normal / ORM (defaults until loaded). */
+  private snowViews: GPUTextureView[];
   private postParams: GPUBuffer;
   readonly exposure: ExposureController;
   private captureFrame = new FrameUniforms();
@@ -403,6 +405,7 @@ export class Renderer {
     this.decalAtlasView = decalDummy.createView({ dimension: '2d-array' });
     this.debugGridView = this.textures.white.view;
     this.cloudNoiseView = this.textures.gray.view;
+    this.snowViews = [this.textures.white.view, this.textures.flatNormal.view, this.textures.defaultOrm.view];
 
     // ---- layouts
     const FV = SS.VERTEX | SS.FRAGMENT;
@@ -431,6 +434,9 @@ export class Renderer {
         { binding: 19, visibility: SS.FRAGMENT, texture: { viewDimension: '3d' } },
         { binding: 20, visibility: SS.FRAGMENT, texture: { viewDimension: 'cube-array' } },
         { binding: 21, visibility: SS.FRAGMENT, buffer: { type: 'read-only-storage' } },
+        { binding: 22, visibility: SS.FRAGMENT, texture: {} },
+        { binding: 23, visibility: SS.FRAGMENT, texture: {} },
+        { binding: 24, visibility: SS.FRAGMENT, texture: {} },
       ],
     });
     this.materialLayout = d.createBindGroupLayout({
@@ -521,6 +527,10 @@ export class Renderer {
     this.debugGridView = view;
     this.bindingsDirty = true;
   }
+  setSnowTextures(albedo: GPUTextureView, normal: GPUTextureView, orm: GPUTextureView) {
+    this.snowViews = [albedo, normal, orm];
+    this.bindingsDirty = true;
+  }
   setCloudNoise(view: GPUTextureView) {
     this.cloudNoiseView = view;
     this.sky.setCloudNoise(view);
@@ -578,7 +588,7 @@ export class Renderer {
   /** Global shader features active this frame (feed the `override` constants). */
   private features = {
     debug: false, decals: true, wetness: false, shadows: true, lightmap: true, localLights: false, fog: true, specAA: true, detail: true, macro: true,
-    dirLightmap: false, probeVolume: false, reflProbes: false,
+    dirLightmap: false, probeVolume: false, reflProbes: false, season: false,
   };
   /** Set false to compile the full runtime uber-shader (for comparisons). */
   specialize = true;
@@ -605,6 +615,7 @@ export class Renderer {
       USE_PROBE_VOLUME: on(g.probeVolume),
       USE_REFL_PROBES: on(g.reflProbes),
       USE_BLEND: on(!!m.blendDef),
+      USE_SNOW: on(g.season && d.shader !== 'unlit'),
     };
     let bits = 0;
     Object.values(constants).forEach((v, i) => (bits |= v << i));
@@ -958,6 +969,9 @@ export class Renderer {
         { binding: 19, resource: this.probeVolume?.view ?? this.dummyVolume },
         { binding: 20, resource: this.probes?.cubeArrayView ?? this.dummyCubeArray },
         { binding: 21, resource: { buffer: this.probes?.dataBuffer ?? this.dummyProbeData } },
+        { binding: 22, resource: this.snowViews[0] },
+        { binding: 23, resource: this.snowViews[1] },
+        { binding: 24, resource: this.snowViews[2] },
       ];
     this.frameBG = d.createBindGroup({ label: 'frame', layout: this.frameLayout, entries: frameEntries(this.frameBuffer) });
     this.captureFrameBG = d.createBindGroup({ label: 'captureFrame', layout: this.frameLayout, entries: frameEntries(this.captureFrameBuffer) });
@@ -1031,7 +1045,9 @@ export class Renderer {
     const ft = this.features;
     ft.debug = !capture && S.debugView !== 0;
     ft.decals = S.decals && this.decalCount > 0;
-    ft.wetness = envState.weather.wetness > 0;
+    const W = envState.weather;
+    ft.wetness = W.wetness > 0 || (W.melt ?? 0) > 0;
+    ft.season = (W.snow ?? 0) > 0 || (W.dry ?? 0) > 0;
     ft.shadows = shadowsOn;
     ft.lightmap = S.lightmaps && this.lightmapLayers > 0;
     ft.localLights = (flags & RF.LOCAL_LIGHTS) !== 0 && this.lightCount > 0;
@@ -1094,6 +1110,8 @@ export class Renderer {
       F.vec4(FO.pvInvSpacing, 1 / pv.spacing[0], 1 / pv.spacing[1], 1 / pv.spacing[2], 0);
     }
     F.uvec4(FO.pvDims, pv ? pv.dims[0] : 1, pv ? pv.dims[1] : 1, pv ? pv.dims[2] : 1, this.probes?.count ?? 0);
+    const W = envState.weather;
+    F.vec4(FO.season, W.snow ?? 0, W.melt ?? 0, W.dry ?? 0, 1 / 2.0);
     this.device.queue.writeBuffer(buffer, 0, F.data);
   }
 

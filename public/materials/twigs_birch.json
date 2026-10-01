@@ -13,5 +13,6 @@
   "exclude": true
  },
  "notes": "Winter (leafless) birch / shrub twig spray card.",
- "alphaDistance": "average"
+ "alphaDistance": "average",
+ "snow": 0.25
 }

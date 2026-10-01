@@ -20,5 +20,6 @@
   "roughnessStrength": 0.12,
   "stainStrength": 0.2
  },
- "notes": "Worn road asphalt; macro layer gives patching / wheel-track variation."
+ "notes": "Worn road asphalt; macro layer gives patching / wheel-track variation.",
+ "snow": 0.05
 }

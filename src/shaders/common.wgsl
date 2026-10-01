@@ -35,6 +35,7 @@ struct Frame {
   pvOrigin: vec4f,       // probe volume min corner (probe 0,0,0), w = enabled
   pvInvSpacing: vec4f,   // 1 / probe spacing
   pvDims: vec4u,         // x,y,z probe counts, w = reflection probe count
+  season: vec4f,         // x snow cover, y melt water, z dormant-season tint, w 1 / snow texture size (m)
 };
 
 // debug.y flags

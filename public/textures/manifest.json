@@ -170,9 +170,9 @@
  },
  "ground_forest": {
   "averageAlbedo": [
-   0.1119,
-   0.0831,
-   0.0243
+   0.0907,
+   0.075,
+   0.0283
   ],
   "size": 1024,
   "physicalSize": [
@@ -475,5 +475,24 @@
    1,
    1
   ]
+ },
+ "snow": {
+  "averageAlbedo": [
+   0.6187,
+   0.6189,
+   0.6344
+  ],
+  "size": 1024,
+  "physicalSize": [
+   2,
+   2
+  ],
+  "source": {
+   "kind": "scan",
+   "provider": "Poly Haven",
+   "id": "snow_02",
+   "license": "CC0",
+   "url": "https://polyhaven.com/a/snow_02"
+  }
  }
 }

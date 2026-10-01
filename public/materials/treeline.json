@@ -1,3 +1,17 @@
-{ "shader": "foliage", "alphaMode": "mask", "alphaCutoff": 0.45, "doubleSided": true,
-  "baseColor": "treeline_albedo.png", "orm": "treeline_orm.png", "physicalSize": 1, "roughness": 1, "translucency": 0.2, "porosity": 0,
-  "bake": { "exclude": true }, "notes": "Tileable tree-line silhouette (rendered from the tree models by tools/blender/trees.py) for far scenery strips." }
+{
+ "shader": "foliage",
+ "alphaMode": "mask",
+ "alphaCutoff": 0.45,
+ "doubleSided": true,
+ "baseColor": "treeline_albedo.png",
+ "orm": "treeline_orm.png",
+ "physicalSize": 1,
+ "roughness": 1,
+ "translucency": 0.2,
+ "porosity": 0,
+ "bake": {
+  "exclude": true
+ },
+ "notes": "Tileable tree-line silhouette (rendered from the tree models by tools/blender/trees.py) for far scenery strips.",
+ "snow": 0.0
+}

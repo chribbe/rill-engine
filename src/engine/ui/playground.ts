@@ -26,7 +26,7 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
   const proxy = { preset: E().name, view: 'lit' };
 
   const envF = gui.addFolder('Environment');
-  envF.add(proxy, 'preset', ['clear', 'overcast', 'foggy', 'dusk']).name('Weather preset').onChange(async (v: string) => {
+  envF.add(proxy, 'preset', ['clear', 'overcast', 'foggy', 'dusk', 'winter']).name('Weather preset').onChange(async (v: string) => {
     await hooks.setPreset(v);
     gui.controllersRecursive().forEach((c) => c.updateDisplay());
   });
@@ -80,6 +80,9 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
   const wet = envF.addFolder('Wetness');
   envBind(wet, () => E().weather, 'wetness', 0, 1, 0.01, 'Wetness');
   envBind(wet, () => E().weather, 'puddles', 0, 1, 0.01, 'Puddles');
+  envBind(wet, () => E().weather, 'snow', 0, 1, 0.01, 'Snow cover');
+  envBind(wet, () => E().weather, 'melt', 0, 1, 0.01, 'Melt water');
+  envBind(wet, () => E().weather, 'dry', 0, 1, 0.01, 'Dormant season');
   const post = envF.addFolder('Grading (restrained)');
   envBind(post, () => E().post, 'contrast', 0.7, 1.4, 0.01, 'Contrast');
   envBind(post, () => E().post, 'saturation', 0, 1.5, 0.01, 'Saturation');

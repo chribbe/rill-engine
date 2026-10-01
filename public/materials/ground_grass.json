@@ -11,5 +11,12 @@
   "albedoStrength": 0.3,
   "roughnessStrength": 0.02,
   "stainStrength": 0.2
- }
+ },
+ "snow": 1.0,
+ "dryTint": [
+  1.55,
+  0.95,
+  0.62
+ ],
+ "dryStrength": 1.0
 }

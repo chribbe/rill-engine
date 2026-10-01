@@ -11,12 +11,13 @@
     { "name": "brick_red", "id": "brick_wall_09", "albedoLuma": 0.17, "materials": ["brick_red"] },
     { "name": "paving_slabs", "id": "concrete_pavement", "albedoLuma": 0.24, "materials": ["paving_slabs"] },
     { "name": "ground_grass", "id": "forrest_ground_01", "albedoLuma": 0.12, "tint": [0.52, 1.0, 0.62], "materials": ["ground_grass"] },
-    { "name": "ground_forest", "id": "forest_leaves_02", "albedoLuma": 0.085, "tint": [0.82, 1.0, 0.9], "materials": ["ground_forest"] },
+    { "name": "ground_forest", "id": "forest_leaves_02", "albedoLuma": 0.075, "tint": [0.7, 0.95, 1.1], "materials": ["ground_forest"] },
     { "name": "gravel", "id": "gravel_floor_02", "albedoLuma": 0.28, "materials": ["gravel"] },
     { "name": "rock_granite", "id": "mossy_rock", "albedoLuma": 0.2, "materials": ["rock_granite"] },
     { "name": "bark_pine", "id": "pine_bark", "albedoLuma": 0.11, "materials": ["bark_pine"] },
     { "name": "moss", "id": "concrete_moss", "albedoLuma": 0.1, "materials": ["moss"] },
     { "name": "dirt", "id": "dirt", "albedoLuma": 0.12, "materials": ["dirt"] },
-    { "name": "granite_kerb", "id": "granite_tile_03", "albedoLuma": 0.2, "assign": ["granite_curb"] }
+    { "name": "granite_kerb", "id": "granite_tile_03", "albedoLuma": 0.2, "assign": ["granite_curb"] },
+    { "name": "snow", "id": "snow_02", "albedoLuma": 0.62, "heightInAlbedo": true, "materials": ["snow"] }
   ]
 }

@@ -1,0 +1,10 @@
+{
+ "baseColor": "snow_albedo.png",
+ "normal": "snow_normal.png",
+ "orm": "snow_orm.png",
+ "physicalSize": 2,
+ "roughness": 1,
+ "porosity": 0.2,
+ "snow": 0,
+ "notes": "Aged late-winter snow. Also bound globally as the weather snow layer (renderer.setSnowTextures)."
+}

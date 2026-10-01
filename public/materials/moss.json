@@ -9,5 +9,11 @@
   "texture": "macro_variation.png",
   "physicalSize": 11,
   "albedoStrength": 0.2
- }
+ },
+ "dryTint": [
+  1.15,
+  0.85,
+  0.7
+ ],
+ "dryStrength": 0.8
 }

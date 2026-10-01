@@ -66,16 +66,22 @@ async function main() {
   }).observe(canvas);
   applySize();
 
-  // Global engine textures.
-  renderer.textures.load('/textures/cloud_noise.png', 'linear').then((t) => renderer.setCloudNoise(t.view)).catch(() => {});
-  renderer.textures.load('/textures/debug_grid_albedo.png', 'color').then((t) => renderer.setDebugGrid(t.view)).catch(() => {});
-
-  loading.textContent = `Loading map '${mapName}'…`;
   // Offline BC7 textures when supported (?bc=0 compares against the PNG + GPU-mip path).
   if (params.get('bc') !== '0') {
     const n = await renderer.textures.enableCompression();
     if (n) console.log(`[textures] BC7 index: ${n} textures`);
   }
+  // Global engine textures.
+  renderer.textures.load('/textures/cloud_noise.png', 'linear').then((t) => renderer.setCloudNoise(t.view)).catch(() => {});
+  renderer.textures.load('/textures/debug_grid_albedo.png', 'color').then((t) => renderer.setDebugGrid(t.view)).catch(() => {});
+  // Weather snow layer (same maps as the 'snow' material).
+  Promise.all([
+    renderer.textures.load('/textures/snow_albedo.png', 'color'),
+    renderer.textures.load('/textures/snow_normal.png', 'normal'),
+    renderer.textures.load('/textures/snow_orm.png', 'linear'),
+  ]).then(([a, n, o]) => renderer.setSnowTextures(a.view, n.view, o.view)).catch((e) => console.warn('[snow] textures unavailable', e));
+
+  loading.textContent = `Loading map '${mapName}'…`;
   const world = await World.load(renderer, `/maps/${mapName}/map.json`, (m) => (loading.textContent = m));
   const env = new Environment(deepMerge(await loadPreset(world.doc.environment.preset), world.doc.environment.overrides));
   renderer.settings.tonemapper = tonemapperFromName(env.state.post.tonemapper);
@@ -88,7 +94,7 @@ async function main() {
   const renderables: Renderable[] = world.renderables;
   const stressList: Renderable[] = [];
 
-  const presets = ['clear', 'overcast', 'foggy', 'dusk'];
+  const presets = ['clear', 'overcast', 'foggy', 'dusk', 'winter'];
   const setPreset = async (name: string) => {
     env.set(deepMerge(await loadPreset(name), name === world.doc.environment.preset ? world.doc.environment.overrides : undefined));
   };

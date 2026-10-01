@@ -10,5 +10,6 @@
   "physicalSize": 15,
   "albedoStrength": 0.15,
   "stainStrength": 0.15
- }
+ },
+ "snow": 0.7
 }

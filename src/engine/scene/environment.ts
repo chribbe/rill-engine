@@ -56,7 +56,11 @@ export interface EnvironmentState {
     envSpecular: number;
   };
   lights: { intensity: number };
-  weather: { wetness: number; puddles: number };
+  /**
+   * Surface weather. snow: cover on upward-facing, sky-exposed surfaces (0..1);
+   * melt: wet dark edges around the snow; dry: dormant-season tint (winter grass).
+   */
+  weather: { wetness: number; puddles: number; snow?: number; melt?: number; dry?: number };
   post: { tonemapper: string; contrast: number; saturation: number; temperature: number };
 }
 
@@ -82,12 +86,20 @@ export class Environment {
   private cloudTime = 0;
 
   constructor(initial: EnvironmentState) {
-    this.state = structuredClone(initial);
+    this.state = Environment.normalize(structuredClone(initial));
   }
 
   set(next: EnvironmentState) {
-    this.state = structuredClone(next);
+    this.state = Environment.normalize(structuredClone(next));
     this.version++;
+  }
+
+  /** Fills optional fields so every preset exposes the same controls. */
+  static normalize(s: EnvironmentState): EnvironmentState {
+    s.weather.snow ??= 0;
+    s.weather.melt ??= 0;
+    s.weather.dry ??= 0;
+    return s;
   }
 
   touch() {

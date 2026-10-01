@@ -27,6 +27,8 @@ const UA = { 'User-Agent': 'rill-texture-import/1.0 (offline asset tool)' };
 
 interface SetDef {
   name: string; id: string; albedoLuma?: number; tint?: [number, number, number];
+  /** Store the normalised height in the albedo's alpha too (single-fetch layers like weather snow). */
+  heightInAlbedo?: boolean;
   /** Materials whose physicalSize follows the scan. */
   materials?: string[];
   /** Materials that switch their base maps to this set (plus physicalSize). */
@@ -139,7 +141,7 @@ async function importSet(s: SetDef, credits: string[]) {
       avg[k] += v;
       albedo[o + k] = q8(l2s(v));
     }
-    albedo[o + 3] = 255;
+    albedo[o + 3] = s.heightInAlbedo ? q8((disp[o] - hMin) / hr) : 255;
     // Normal: mean of unit vectors; its shortening -> vMF variance (same as mipgen.wgsl).
     const sx = nor[o], sy = nor[o + 1], sz = nor[o + 2];
     const r = Math.min(Math.hypot(sx, sy, sz), 0.9999);

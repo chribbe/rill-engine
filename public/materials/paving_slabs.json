@@ -20,5 +20,6 @@
   "roughnessStrength": 0.08,
   "stainStrength": 0.18
  },
- "notes": "35x35 cm grey concrete slabs (betongplattor)."
+ "notes": "35x35 cm grey concrete slabs (betongplattor).",
+ "snow": 0.3
 }

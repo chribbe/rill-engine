@@ -1,0 +1,78 @@
+{
+  "name": "winter",
+  "sun": {
+    "azimuth": 200,
+    "elevation": 30,
+    "intensity": 1,
+    "angularDiameter": 0.53
+  },
+  "sky": {
+    "intensity": 1,
+    "turbidity": 1.6,
+    "cloudCover": 1,
+    "cloudAltitude": 1200,
+    "cloudSharpness": 0.35,
+    "cloudDensity": 1,
+    "overcastLuminance": 3600,
+    "overcastTint": [
+      0.93,
+      0.97,
+      1.06
+    ],
+    "wind": [
+      0,
+      0
+    ]
+  },
+  "fog": {
+    "enabled": true,
+    "density": 0.0012,
+    "height": 0,
+    "falloff": 0.03,
+    "hazeVisibilityKm": 5,
+    "anisotropy": 0.3,
+    "albedo": [
+      0.92,
+      0.96,
+      1.02
+    ],
+    "sunScatter": 0.3,
+    "startDistance": 0,
+    "maxOpacity": 1
+  },
+  "exposure": {
+    "ev100": 12,
+    "compensation": 0,
+    "auto": true,
+    "min": 10.3,
+    "max": 13.6
+  },
+  "ambient": {
+    "groundAlbedo": [
+      0.3,
+      0.31,
+      0.32
+    ],
+    "lightmapSky": 1,
+    "lightmapSun": 1,
+    "indirect": 1,
+    "envSpecular": 1
+  },
+  "lights": {
+    "intensity": 0
+  },
+  "weather": {
+    "wetness": 0.25,
+    "puddles": 0.2,
+    "snow": 0.55,
+    "melt": 0.65,
+    "dry": 1
+  },
+  "post": {
+    "tonemapper": "agx",
+    "contrast": 1,
+    "saturation": 0.9,
+    "temperature": -0.2
+  },
+  "notes": "Late-winter thaw (Stockholm, March): patchy old snow, melt water, dormant grass, low grey sky."
+}

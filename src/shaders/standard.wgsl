@@ -53,6 +53,7 @@ override USE_DIR_LIGHTMAP: bool = true;
 override USE_PROBE_VOLUME: bool = true;
 override USE_REFL_PROBES: bool = true;
 override USE_BLEND: bool = true;
+override USE_SNOW: bool = true;
 // Dithered LOD crossfade (only pipelines that draw instances inside a transition band).
 override USE_LOD_FADE: bool = false;
 
@@ -442,8 +443,43 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
     s.N = normalize(T * tn.x + B * tn.y + Ng * tn.z);
   }
 
+  // --- season: dormant tint, snow cover, melt water
+  // Kept deliberately small: shader size costs more than texture fetches under MSAA here.
+  var meltWet = 0.0;
+  if (USE_SNOW) {
+    s.albedo *= mix(vec3f(1.0), material.dryTint.rgb, saturate(frame.season.z * material.misc.z));
+    if (frame.season.x > 0.0 && material.misc.y > 0.0) {
+      // Sky exposure: baked sky visibility on lightmapped surfaces (1 = open sky),
+      // vertex AO elsewhere (crown AO on trees, 1 on props).
+      var expo = in.color.g;
+      let lmIdx = i32(inst.info.x) - 1;
+      if (USE_LIGHTMAP && lmIdx >= 0 && hasFlag(F_LIGHTMAPS)) {
+        expo = saturate(textureSampleLevel(lightmaps, sampClamp, in.lmUv, lmIdx, 0.0).g * 1.4);
+      }
+      // Faces up (bent crown normals for foliage).
+      let slope = select(smoothstep(0.45, 0.85, s.N.y) * smoothstep(0.2, 0.5, Ng.y), smoothstep(0.3, 0.8, s.N.y) * mix(1.0, orm.r, 0.7), matFlag(M_FOLIAGE));
+      // Thaw patches: world noise remapped towards uniform so the amount ~ covered
+      // fraction; hollows (low ORM height) keep snow longest.
+      let patchy = saturate((textureSampleLevel(cloudNoise, sampAniso, wp.xz * (1.0 / 29.0), 0.0).r - 0.5) * 2.6 + 0.5);
+      var x = patchy + (0.5 - orm.a) * 0.25 - (1.0 - frame.season.x * material.misc.y * expo * slope);
+      if (x > -0.25) {
+        let sc = frame.season.w;
+        let sa = texGrad(snowAlbedoTex, wp.xz * sc, dpx.xz * sc, dpy.xz * sc); // a = snow relief
+        x += (sa.a - 0.5) * 0.3;
+        let cov = saturate(x * 7.0 + 0.5);
+        s.albedo = mix(s.albedo, sa.rgb, cov);
+        s.roughness = mix(s.roughness, 0.55, cov);
+        s.metallic *= 1.0 - cov;
+        s.N = normalize(mix(s.N, Ng, cov * 0.8));
+        meltWet = frame.season.y * smoothstep(-0.25, 0.0, x) * (1.0 - cov);
+      } else {
+        meltWet = 0.0;
+      }
+    }
+  }
+
   // --- global wetness: porous darkening + smoother, flatter surfaces
-  let wet = frame.mat1.y * material.pbr2.z * saturate(Ng.y * 0.8 + 0.4);
+  let wet = max(frame.mat1.y, meltWet) * material.pbr2.z * saturate(Ng.y * 0.8 + 0.4);
   if (USE_WETNESS && wet > 0.0) {
     s.albedo *= mix(1.0, 0.5, wet);
     s.roughness = mix(s.roughness, 0.12, wet * 0.8);
