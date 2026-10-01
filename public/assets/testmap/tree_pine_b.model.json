@@ -10,11 +10,11 @@
   },
   {
    "mesh": "tree_pine_b_lod1.glb",
-   "distance": 30.0
+   "distance": 21.0
   },
   {
    "mesh": "tree_pine_b_lod2.glb",
-   "distance": 95.0
+   "distance": 66.0
   }
  ],
  "notes": "pine (seed 12); LOD distances in metres at scale 1, scaled by instance size."

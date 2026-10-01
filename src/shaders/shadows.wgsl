@@ -2,6 +2,10 @@
 // sphere fit + texel snapping); here we pick a cascade, apply normal-offset
 // bias and filter with Castano's optimised PCF (smooth, deterministic, no noise).
 
+// 7x7 PCF is compiled only into pipelines that ask for it: its 16 live taps and
+// weights raise register use (and so MSAA cost) of every lit shader otherwise.
+override USE_PCF7: bool = false;
+
 fn shadowTap(uv: vec2f, off: vec2f, invSize: f32, depth: f32, layer: i32) -> f32 {
   return textureSampleCompareLevel(shadowMap, sampShadow, uv + off * invSize, layer, depth);
 }
@@ -95,7 +99,7 @@ fn sampleCascade(c: i32, worldPos: vec3f, Ng: vec3f, NoL: f32) -> f32 {
   if (c >= 2 && spread < 1.5) {
     return pcf3(uv, depth, c, size);
   }
-  if ((frame.debug.y & 0x10000u) != 0u) {
+  if (USE_PCF7 && (frame.debug.y & 0x10000u) != 0u) {
     return pcf7(uv, depth, c, size, min(spread, 6.0));
   }
   return pcf5(uv, depth, c, size, min(spread, 8.0));
@@ -110,17 +114,18 @@ fn sunShadow(worldPos: vec3f, Ng: vec3f, NoL: f32, viewDepth: f32) -> vec2f {
   for (var i = 0; i < 4; i++) {
     if (viewDepth < frame.cascadeSplits[i]) { c = i; break; }
   }
-  var s = sampleCascade(c, worldPos, Ng, NoL);
   // Blend into the next cascade over the last 12% of this one.
+  var b = 0.0;
   if (hasFlag(F_CASCADE_BLEND) && c < 3) {
     let far = frame.cascadeSplits[c];
     var near = 0.0;
     if (c > 0) { near = frame.cascadeSplits[c - 1]; }
     let range = (far - near) * 0.12;
-    let b = saturate((viewDepth - (far - range)) / range);
-    if (b > 0.0) {
-      s = mix(s, sampleCascade(c + 1, worldPos, Ng, NoL), b);
-    }
+    b = saturate((viewDepth - (far - range)) / range);
+  }
+  var s = sampleCascade(c, worldPos, Ng, NoL);
+  if (b > 0.0) {
+    s = mix(s, sampleCascade(c + 1, worldPos, Ng, NoL), b);
   }
   // Fade out at the shadow distance.
   let fade = saturate((dist - viewDepth) / (dist * 0.1));

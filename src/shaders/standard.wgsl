@@ -57,6 +57,14 @@ override USE_BLEND: bool = true;
 override USE_SNOW: bool = true;
 // Dithered LOD crossfade (only pipelines that draw instances inside a transition band).
 override USE_LOD_FADE: bool = false;
+// Prefiltered environment reflections (compiled out for rough foliage).
+override USE_ENV_SPEC: bool = true;
+// Spot-light shadow lookups (compiled in only while a shadowed spot such as the flashlight exists).
+override USE_SPOT_SHADOWS: bool = true;
+// Foliage colour pass: fog and ambient (sky SH + probe volume) come from the vertex
+// stage (vsFoliage). Cards are small, so per-vertex is indistinguishable, and the
+// lighter fragment shader matters most under MSAA (cost tracks compiled size).
+override USE_VERTEX_LIGHT: bool = false;
 
 // Half-Life 2 radiosity normal mapping basis (tangent space).
 const RNM0: vec3f = vec3f(0.81649658, 0.0, 0.57735027);
@@ -132,20 +140,113 @@ struct VSOut {
   @location(8) @interpolate(flat) lodFade: f32,
 };
 
+// Every vertex entry point that feeds the masked prepass / equal-depth colour pass
+// pair must compute positions through this one function (bit-identical depths).
+fn clipPosition(inst: Instance, wp: vec4f) -> vec4f {
+  var p = frame.viewProj * wp;
+  if ((inst.info.y & I_VIEWMODEL) != 0u) {
+    // Same projection as the world (muzzle effects line up), depth remapped into
+    // [0.75, 1] of reverse-Z so the weapon never clips into walls.
+    p.z = p.z * 0.25 + p.w * 0.75;
+  }
+  return p;
+}
+
+// Slim vertex stage for the masked depth prepass: only what coverage needs. On a
+// tile-based GPU every varying is written to and read back from memory per
+// vertex, which is most of the prepass cost on dense foliage.
+struct VSOutDepth {
+  @invariant @builtin(position) pos: vec4f,
+  @location(0) uv0: vec2f,
+  @location(1) @interpolate(flat) lodFade: f32,
+};
+
+@vertex
+fn vsDepth(@location(0) position: vec3f, @location(3) uv0: vec2f, @builtin(instance_index) instance: u32) -> VSOutDepth {
+  let e = visibleList[instance];
+  let inst = instances[e & 0xFFFFFFu];
+  var o: VSOutDepth;
+  o.pos = clipPosition(inst, inst.model * vec4f(position, 1.0));
+  o.uv0 = uv0;
+  let mode = e >> 30u;
+  let q = f32((e >> 24u) & 63u) / 63.0;
+  o.lodFade = select(select(0.0, -q, mode == 1u), q, mode == 2u);
+  return o;
+}
+
+/// Per-vertex fog and ambient for foliage (see USE_VERTEX_LIGHT).
+struct VertexLight {
+  fog: vec4f,      // rgb in-scatter (scene units, not pre-exposed), a transmittance
+  ambFront: vec3f, // irradiance/PI for the card's front side
+  ambBack: vec3f,  // ... and for its back side (double-sided cards flip the normal)
+};
+
+fn noVertexLight() -> VertexLight {
+  return VertexLight(vec4f(0.0, 0.0, 0.0, 1.0), vec3f(0.0), vec3f(0.0));
+}
+
+struct VSOutFoliage {
+  @invariant @builtin(position) pos: vec4f,
+  @location(0) worldPos: vec3f,
+  @location(1) normal: vec3f,
+  @location(2) tangent: vec4f,
+  @location(3) uv0: vec2f,
+  @location(4) lmUv: vec2f,
+  @location(5) viewDepth: f32,
+  @location(6) @interpolate(flat) slot: u32,
+  @location(7) color: vec4f,
+  @location(8) @interpolate(flat) lodFade: f32,
+  @location(9) fog: vec4f,
+  @location(10) ambFront: vec3f,
+  @location(11) ambBack: vec3f,
+};
+
+fn vertexAmbient(wp: vec3f, n: vec3f) -> vec3f {
+  var irr = shEval(n);
+  if (USE_PROBE_VOLUME && hasFlag(F_PROBE_VOLUME)) {
+    let pv = probeVolumeIrradiance(wp, n, skyUpRadiance());
+    irr = mix(irr, pv.rgb, pv.a);
+  }
+  return irr;
+}
+
 @vertex
 fn vsMain(v: VSIn) -> VSOut {
+  return vertexCommon(v);
+}
+
+@vertex
+fn vsFoliage(v: VSIn) -> VSOutFoliage {
+  let b = vertexCommon(v);
+  var o: VSOutFoliage;
+  o.pos = b.pos; o.worldPos = b.worldPos; o.normal = b.normal; o.tangent = b.tangent;
+  o.uv0 = b.uv0; o.lmUv = b.lmUv; o.viewDepth = b.viewDepth; o.slot = b.slot;
+  o.color = b.color; o.lodFade = b.lodFade;
+  o.fog = vec4f(0.0, 0.0, 0.0, 1.0);
+  if (USE_FOG) {
+    let cam = frame.cameraPos.xyz;
+    let toP = b.worldPos - cam;
+    let d = max(length(toP), 1e-4);
+    let f = computeFog(cam, toP / d, d, false);
+    o.fog = vec4f(f.inscatter, f.transmittance);
+  }
+  o.ambFront = vec3f(0.0);
+  o.ambBack = vec3f(0.0);
+  if (hasFlag(F_SKY_AMBIENT)) {
+    o.ambFront = vertexAmbient(b.worldPos, b.normal);
+    o.ambBack = vertexAmbient(b.worldPos, -b.normal);
+  }
+  return o;
+}
+
+fn vertexCommon(v: VSIn) -> VSOut {
   // Visible-list entry: slot (24 bits) | fade (6 bits) | mode (2 bits: 1 out, 2 in).
   let e = visibleList[v.instance];
   let slot = e & 0xFFFFFFu;
   let inst = instances[slot];
   let wp = inst.model * vec4f(v.position, 1.0);
   var o: VSOut;
-  o.pos = frame.viewProj * wp;
-  if ((inst.info.y & I_VIEWMODEL) != 0u) {
-    // Same projection as the world (muzzle effects line up), depth remapped into
-    // [0.75, 1] of reverse-Z so the weapon never clips into walls.
-    o.pos.z = o.pos.z * 0.25 + o.pos.w * 0.75;
-  }
+  o.pos = clipPosition(inst, wp);
   o.worldPos = wp.xyz;
   o.normal = normalize(normalMatrix(inst.model) * v.normal.xyz);
   // Not normalised here: a zero tangent must stay zero (the fragment stage orthonormalises with a fallback).
@@ -380,7 +481,7 @@ struct ShadeOut {
 };
 
 
-fn shade(in: VSOut, front: bool) -> ShadeOut {
+fn shade(in: VSOut, front: bool, vl: VertexLight) -> ShadeOut {
   let inst = instances[in.slot];
   let camPos = frame.cameraPos.xyz;
   let wp = in.worldPos;
@@ -713,6 +814,8 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
       let lmSun = sampleLightmap(taps, lmLayer + 1) * frame.lmParams.w;
       irr = (lmSky * skyUpRadiance() + lmSun * frame.sunColor.rgb) * ratio;
     }
+  } else if (USE_VERTEX_LIGHT) {
+    irr = select(vl.ambBack, vl.ambFront, front);
   } else if (hasFlag(F_SKY_AMBIENT)) {
     irr = shN;
     if (USE_PROBE_VOLUME && hasFlag(F_PROBE_VOLUME)) {
@@ -728,7 +831,7 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
 
   // Indirect specular: prefiltered environment probe with split-sum BRDF.
   var indirectSpec = vec3f(0.0);
-  if (hasFlag(F_ENV_SPEC)) {
+  if (USE_ENV_SPEC && hasFlag(F_ENV_SPEC)) {
     let R = reflect(-V, N);
     let rough = sqrt(a);
     let lod = rough * (frame.sky.z - 1.0);
@@ -789,11 +892,14 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
     indirectSpec = env * (f0 * ab.x + ab.y) * so * frame.mat1.w;
   }
 
-  // Local lights (small list, brute force for now; clustered later if needed).
+  // Local lights: only those whose range reaches this pixel's light-grid cell.
   var local = vec3f(0.0);
   if (USE_LOCAL_LIGHTS && hasFlag(F_LOCAL_LIGHTS)) {
-    for (var i = 0u; i < frame.debug.z; i++) {
-      let l = lights[i];
+    let lcBase = lightCellBase(wp);
+    var lcCount = 0u;
+    if (lcBase != 0xFFFFFFFFu) { lcCount = lightCells[lcBase]; }
+    for (var k = 0u; k < lcCount; k++) {
+      let l = lights[lightCells[lcBase + 1u + k]];
       let toL = l.posRange.xyz - wp;
       let d2 = dot(toL, toL);
       let r2 = l.posRange.w * l.posRange.w;
@@ -806,7 +912,7 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
       }
       let NoL = saturate(dot(N, Ld));
       if (att <= 0.0) { continue; }
-      if (l.params.w > 0.5) { att *= spotShadow(u32(l.params.w + 0.5) - 1u, wp, Ng, sqrt(d2)); }
+      if (USE_SPOT_SHADOWS && l.params.w > 0.5) { att *= spotShadow(u32(l.params.w + 0.5) - 1u, wp, Ng, sqrt(d2)); }
       let H = normalize(V + Ld);
       let NoH = saturate(dot(N, H));
       let VoH = saturate(dot(V, H));
@@ -816,7 +922,6 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
       if (foliage) { c += diffuseColor * material.pbr2.w * saturate(dot(-N, Ld)) * INV_PI; }
       local += c * l.color.rgb * att;
     }
-    local *= frame.ground.w;
   }
 
   var color = direct + indirectDiffuse + indirectSpec + local + s.emissive;
@@ -836,7 +941,11 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
   }
 
   // ---------------------------------------------------------------- fog
-  if (USE_FOG) {
+  if (USE_VERTEX_LIGHT) {
+    color = color * vl.fog.a + vl.fog.rgb;
+    // Lamp glow stays per pixel: its cones and halos are sharper than card vertices.
+    if (USE_FOG && USE_LOCAL_LIGHTS) { color += fogLightScatter(camPos, -V, dist); }
+  } else if (USE_FOG) {
     let fog = computeFog(camPos, -V, dist, false);
     if (DEBUG_VIEWS && mode == 19u) { out.raw = true; out.color = vec4f(vec3f(fog.transmittance), s.alpha); return out; }
     color = color * fog.transmittance + fog.inscatter;
@@ -860,7 +969,7 @@ fn finalize(o: ShadeOut) -> vec4f {
 @fragment
 fn fsOpaque(in: VSOut, @builtin(front_facing) front: bool) -> @location(0) vec4f {
   if (USE_LOD_FADE && lodFadeKill(in.pos.xy, in.lodFade)) { discard; }
-  return finalize(shade(in, front));
+  return finalize(shade(in, front, noVertexLight()));
 }
 
 struct MaskedOut {
@@ -879,7 +988,7 @@ fn fsMasked(in: VSOut, @builtin(front_facing) front: bool) -> MaskedOut {
   let mip = max(log2(dUv), 0.0);
   let alpha = texGrad(baseColorTex, uv, dpdx(uv), dpdy(uv)).a * material.baseColor.a;
   let cov = maskCoverage(alpha, mip, material.pbr2.y);
-  let o = shade(in, front);
+  let o = shade(in, front, noVertexLight());
   var out: MaskedOut;
   out.color = finalize(o);
   if (hasFlag(F_A2C)) {
@@ -942,8 +1051,50 @@ fn fsDepthA2C(in: VSOut) -> @location(0) vec4f {
   return vec4f(0.0, 0.0, 0.0, maskCoverage(alpha, mip, material.pbr2.y));
 }
 
+fn prepassCoverage(uv0: vec2f) -> f32 {
+  let uv = uv0 * material.uvTransform.xy + material.uvTransform.zw;
+  let texSize = vec2f(textureDimensions(baseColorTex));
+  let dUv = max(length(dpdx(uv) * texSize), length(dpdy(uv) * texSize));
+  let mip = max(log2(dUv), 0.0);
+  let alpha = texGrad(baseColorTex, uv, dpdx(uv), dpdy(uv)).a * material.baseColor.a;
+  return maskCoverage(alpha, mip, material.pbr2.y);
+}
+
+// Prepass entries for vsDepth (the VSOut versions above serve ground clutter).
+@fragment
+fn fsDepthA2CSlim(in: VSOutDepth) -> @location(0) vec4f {
+  if (USE_LOD_FADE && lodFadeKill(in.pos.xy, in.lodFade)) { discard; }
+  return vec4f(0.0, 0.0, 0.0, prepassCoverage(in.uv0));
+}
+
+@fragment
+fn fsDepthMaskedSlim(in: VSOutDepth) -> DepthOut {
+  if (USE_LOD_FADE && lodFadeKill(in.pos.xy, in.lodFade)) { discard; }
+  let cov = prepassCoverage(in.uv0);
+  var out: DepthOut;
+  if (hasFlag(F_A2C)) {
+    let dither = ign(in.pos.xy) - 0.5;
+    let n = u32(clamp(round(cov * 4.0 + dither * 0.9), 0.0, 4.0));
+    if (n == 0u) { discard; }
+    let rot = u32(in.pos.x + in.pos.y * 2.0) & 3u;
+    let m = (0xFu >> (4u - n));
+    out.mask = ((m << rot) | (m >> (4u - rot))) & 0xFu;
+  } else {
+    if (cov <= ign(in.pos.xy)) { discard; }
+    out.mask = 0xFFFFFFFFu;
+  }
+  return out;
+}
+
+// Foliage colour pass after the prepass: fog and ambient from vsFoliage.
+@fragment
+fn fsFoliageColor(f: VSOutFoliage, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+  let in = VSOut(f.pos, f.worldPos, f.normal, f.tangent, f.uv0, f.lmUv, f.viewDepth, f.slot, f.color, f.lodFade);
+  return finalize(shade(in, front, VertexLight(f.fog, f.ambFront, f.ambBack)));
+}
+
 // Lit colour pass for masked geometry after the prepass (no discard).
 @fragment
 fn fsMaskedColor(in: VSOut, @builtin(front_facing) front: bool) -> @location(0) vec4f {
-  return finalize(shade(in, front));
+  return finalize(shade(in, front, noVertexLight()));
 }

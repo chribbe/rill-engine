@@ -42,7 +42,7 @@ fn fsDiagGradFront(in: VSOut, @builtin(front_facing) front: bool) -> @location(0
 @fragment
 fn fsDiagShadeAlbedo(in: VSOut, @builtin(front_facing) front: bool) -> @location(0) vec4f {
   // The real shade() path; the albedo debug view returns right after texturing.
-  return finalize(shade(in, front));
+  return finalize(shade(in, front, noVertexLight()));
 }
 
 // Same as fsDiagGrad plus a register-heavy path that never executes at runtime
@@ -125,7 +125,7 @@ fn fsDiagS3(in: VSOut) -> @location(0) vec4f {
 // black = pixel-rate execution, bright = sample-rate execution.
 @fragment
 fn fsDiagSampleRate(in: VSOut, @builtin(front_facing) front: bool) -> @location(0) vec4f {
-  let o = shade(in, front);
+  let o = shade(in, front, noVertexLight());
   let f = abs(fract(in.pos.xy) - 0.5);
   return vec4f(vec3f(f.x + f.y) * 100.0 + o.color.rgb * 1e-7, -1.0);
 }

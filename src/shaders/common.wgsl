@@ -36,6 +36,8 @@ struct Frame {
   pvInvSpacing: vec4f,   // 1 / probe spacing
   pvDims: vec4u,         // x,y,z probe counts, w = reflection probe count
   season: vec4f,         // x snow cover, y melt water, z dormant-season tint, w 1 / snow texture size (m)
+  lightGrid: vec4f,      // local-light XZ grid: x origin x, y origin z, z cell size, w inv cell size
+  lightGrid2: vec4u,     // x cells x, y cells z, z max lights per cell, w word offset of the cells in lightCells
 };
 
 // debug.y flags

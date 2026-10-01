@@ -299,6 +299,36 @@ World (runtime, derived) ───────────────┐       
     Interleaved A/B against the old paths: 5–10 % less GPU time per view. Ground clutter is
     parked (off by default, built on first enable, `?clutter=1`).
 
+36. **Compiled code is what MSAA pays for; rare paths are variants.** Compiling the (never
+    selected) 7×7 PCF out of every lit shader took the forest view from 10.0 to 9.0 ms with the
+    no-MSAA frame unchanged. Since then optional paths are `override` variants, not runtime
+    branches: `USE_PCF7` (only when chosen), `USE_SPOT_SHADOWS` (only while a shadowed spot such
+    as the flashlight exists), `USE_ENV_SPEC` / `USE_SPEC_AA` off for rough foliage. Reducing
+    executed taps alone (a cheap foliage shadow filter) measured nothing and was dropped.
+    Foliage colour passes take fog and ambient (sky SH + probe volume, front and back side of
+    the double-sided card) from the vertex stage (`vsFoliage` / `fsFoliageColor`); lamp glow
+    stays per pixel (its cones are sharper than card vertices). The masked prepass uses a slim
+    position+uv vertex stage (`vsDepth`). All entry points that feed the prepass / equal-depth
+    pair compute clip positions through one function (`clipPosition`) so depths match.
+37. **Local lights through a light grid; fog glow from a few chosen lamps.** The 15 map lamps
+    made blue hour ~2× the frame (road 10.1 vs 5.5 ms with lamps off, forest 13.4 vs 6.2).
+    Pixels now loop only over the lights of their 8 m XZ grid cell (rebuilt on the CPU when
+    lights change, like the decal grid), and the analytic airlight runs for the 8 lamps that
+    matter most from the camera (intensity / distance), copied into a small uniform buffer,
+    with the spot cone tested before the integral and the two `atan` reduced to one
+    polynomial `atan2`. Fewer than 8 lamps visibly drops distant halos. Road 10.1 → ~7.7 ms,
+    forest 13.4 → ~9.7 ms (1080p). The environment's lamp intensity scales map lamps only
+    (lamps that are off are not uploaded); gameplay lights (flashlight, muzzle flash) always
+    shine — before, they were dark in every daytime preset. Probe captures exclude gameplay
+    lights.
+38. **Tree LOD distances set by measured cost.** In a dense forest the alpha-to-coverage prepass
+    is ~80 % of the trees' cost (≈ 2 ms at 1×, ≈ 4.5 ms with MSAA at 1080p): it scales with
+    rasterised card layers. Draw order (front-to-back buckets, distance bands), depth format and
+    the prepass vertex stage changed nothing — on this GPU alpha-tested cards do not
+    early-reject each other. LOD1 cards from 21 m (was 30) and impostors from 66 m (was 95),
+    bare birches / shrubs 9 / 25 m: ~8 % cheaper in forest and road views at near-identical
+    look (the impostors are brightness-matched since decision 33).
+
 ## 5. Content pipeline
 
 ```
@@ -452,7 +482,8 @@ Findings:
 - Tiling-wrap mip filtering is also applied to non-tiling textures (impostors, tree line).
 - LOD selection has no hysteresis/crossfade; shadow LOD minimum is per cascade, not per texel size.
 - Lightmaps are rgb9e5 raw (32 MB for one page with two components) — consider BC6H.
-- Brute-force local light loop (fine for ~20 lights); clustered lighting when needed.
+- The light grid is 2D (XZ, 8 m cells, sphere bounds): fine for street-level lamps, not for
+  multi-storey interiors (would want a 3D/clustered grid). Fog glow is limited to 8 lamps.
 - CPU culling is flat (no BVH / sectors); no GPU-driven path yet.
 - Non-variant pipelines (sky, post, bloom, lines, overdraw) are still created synchronously
   (once, at load). A feature toggle (debug view, preset with new features) shows missing
@@ -494,11 +525,13 @@ Findings:
 Done: directional lightmaps, reflection probes, probe volume, blend materials, BC7, LOD
 vegetation with impostors, far scenery, scanned materials, LOD crossfade, Nordic conifers,
 season layer, ground clutter, graded mood presets, BC5 + card trimming, action rendering,
-impostor calibration, async pipelines, MSAA fetch budget (decisions 18–35).
+impostor calibration, async pipelines, MSAA fetch budget, compiled-size variants, light grid,
+cost-based tree LODs (decisions 18–38).
 
-1. **Lit-shader register pressure** (decision 35): f16 for colour/lighting math (`shader-f16`
-   is available), more paths as compiled variants (decals, local lights, probe blending only
-   where present), then re-measure the MSAA premium on a quiet machine.
+1. **Foliage overdraw** is now the forest's budget limit (decision 38): fewer, larger LOD1 cards
+   (regenerate in `trees.py`), and later octahedral impostors to move the impostor switch
+   closer. Then **lit-shader register pressure**: f16 colour/lighting math (`shader-f16` is
+   available), decals and probe blending only where present; re-measure on a quiet machine.
    GPU-driven culling / Hi-Z occlusion matter once levels have real occluders (draw count and
    CPU culling are not limits here: 0.5–0.7 ms CPU per frame).
 2. **Soft particles** (depth fade; needs a depth copy or a resolved depth before the particle

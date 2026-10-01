@@ -55,8 +55,11 @@ fn particleLight(wp: vec3f, n: vec3f, toCam: vec3f, viewDepth: f32) -> vec3f {
   }
   if (hasFlag(F_LOCAL_LIGHTS)) {
     var local = vec3f(0.0);
-    for (var i = 0u; i < frame.debug.z; i++) {
-      let l = lights[i];
+    let lcBase = lightCellBase(wp);
+    var lcCount = 0u;
+    if (lcBase != 0xFFFFFFFFu) { lcCount = lightCells[lcBase]; }
+    for (var k = 0u; k < lcCount; k++) {
+      let l = lights[lightCells[lcBase + 1u + k]];
       let toL = l.posRange.xyz - wp;
       let d2 = dot(toL, toL);
       let r2 = l.posRange.w * l.posRange.w;
@@ -71,7 +74,7 @@ fn particleLight(wp: vec3f, n: vec3f, toCam: vec3f, viewDepth: f32) -> vec3f {
       if (l.params.w > 0.5) { att *= spotShadow(u32(l.params.w + 0.5) - 1u, wp, Ld, sqrt(d2)); }
       local += l.color.rgb * att * (dot(n, Ld) * 0.5 + 0.5) * INV_PI;
     }
-    c += local * frame.ground.w;
+    c += local;
   }
   return c;
 }

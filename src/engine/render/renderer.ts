@@ -343,10 +343,21 @@ export class Renderer {
   private visibleBuffer: GPUBuffer;
   private lightBuffer: GPUBuffer;
   private lightCount = 0;
+  /** XZ grid of per-cell light lists, see frame_bindings.wgsl. */
+  private lightCellBuffer: GPUBuffer;
+  private lightGrid = { originX: 0, originZ: 0, cell: 8, nx: 0, nz: 0, maxPer: 0 };
+  private activeLights: LightData[] = [];
+  private fogLightBuffer: GPUBuffer;
+  /** Lights whose fog glow is integrated per pixel (the most important from the camera). */
+  maxFogLights = 8;
+  private fogLightData = new Float32Array(4 + 16 * 8);
+  /** Packed Light structs as uploaded (16 floats each), for the fog-glow copies. */
+  private lightData = new Float32Array(16);
   private staticLights: LightData[] = [];
   /** Per-frame lights from gameplay (flashlight, muzzle flashes); appended to the map's lights. */
   dynamicLights: LightData[] = [];
   private lightsDirty = true;
+  private lampScale = -1;
   private hadDynamicLights = false;
   readonly spotShadows: SpotShadows;
   private spotLists: DrawList[] = [];
@@ -426,6 +437,8 @@ export class Renderer {
 
     this.visibleBuffer = d.createBuffer({ label: 'visible', size: this.visible.data.byteLength, usage: BU.STORAGE | BU.COPY_DST });
     this.lightBuffer = d.createBuffer({ label: 'lights', size: 64 * 256, usage: BU.STORAGE | BU.COPY_DST });
+    this.lightCellBuffer = d.createBuffer({ label: 'lightCells', size: 4096, usage: BU.STORAGE | BU.COPY_DST });
+    this.fogLightBuffer = d.createBuffer({ label: 'fogLights', size: 16 + 64 * 8, usage: BU.UNIFORM | BU.COPY_DST });
     this.spotShadows = new SpotShadows(d);
     this.decalBuffer = d.createBuffer({ label: 'decals', size: 96 * 16, usage: BU.STORAGE | BU.COPY_DST });
     this.decalCellBuffer = d.createBuffer({ label: 'decalCells', size: 64, usage: BU.STORAGE | BU.COPY_DST });
@@ -477,6 +490,8 @@ export class Renderer {
         { binding: 24, visibility: SS.FRAGMENT, texture: {} },
         { binding: 25, visibility: FV, texture: { sampleType: 'depth', viewDimension: '2d-array' } },
         { binding: 26, visibility: FV, buffer: { type: 'read-only-storage' } },
+        { binding: 27, visibility: FV, buffer: { type: 'read-only-storage' } },
+        { binding: 28, visibility: FV, buffer: { type: 'uniform' } },
       ],
     });
     this.materialLayout = d.createBindGroupLayout({
@@ -633,8 +648,14 @@ export class Renderer {
   }
 
   /** Uploads map + dynamic lights; dynamic shadowed spots get spot-shadow layers. */
-  private uploadLights() {
-    const lights = this.dynamicLights.length ? [...this.staticLights, ...this.dynamicLights] : this.staticLights;
+  /**
+   * Map lamps scaled by the environment's lamp intensity (off = not uploaded at all),
+   * plus this frame's gameplay lights at full strength.
+   */
+  private uploadLights(lampScale: number) {
+    const lamps = lampScale > 0 ? this.staticLights : [];
+    const lights = this.dynamicLights.length ? [...lamps, ...this.dynamicLights] : lamps;
+    const nStatic = lamps.length;
     const n = Math.min(lights.length, 256);
     const spots: { position: ArrayLike<number>; direction: ArrayLike<number>; outerAngle: number; range: number }[] = [];
     this.spotCasterIndex.length = 0;
@@ -643,7 +664,8 @@ export class Renderer {
       const l = lights[i];
       const o = i * 16;
       f.set([...l.position, l.range], o);
-      f.set([l.color[0] * l.intensity, l.color[1] * l.intensity, l.color[2] * l.intensity, l.fogScatter ?? 1], o + 4);
+      const k = l.intensity * (i < nStatic ? lampScale : 1);
+      f.set([l.color[0] * k, l.color[1] * k, l.color[2] * k, l.fogScatter ?? 1], o + 4);
       const dir = l.direction ?? [0, -1, 0];
       const outer = ((l.outerAngle ?? 60) * Math.PI) / 180;
       const inner = ((l.innerAngle ?? 45) * Math.PI) / 180;
@@ -656,8 +678,83 @@ export class Renderer {
       f.set([Math.cos(inner), l.type === 'spot' ? 1 : 0, l.sourceRadius ?? 0.1, layer], o + 12);
     }
     this.device.queue.writeBuffer(this.lightBuffer, 0, f);
+    this.lightData = f;
     this.lightCount = n;
+    this.activeLights = lights.slice(0, n);
     this.spotShadows.update(spots);
+    this.buildLightGrid();
+  }
+
+  /**
+   * World-space XZ grid (8 m cells) of the lights whose range reaches each cell, so a
+   * pixel loops over its few lights instead of all of them. Rebuilt when lights change
+   * (every frame while gameplay lights move: a few dozen lights is microseconds).
+   */
+  private buildLightGrid() {
+    const L = this.activeLights;
+    const cell = 8;
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const l of L) {
+      x0 = Math.min(x0, l.position[0] - l.range); x1 = Math.max(x1, l.position[0] + l.range);
+      z0 = Math.min(z0, l.position[2] - l.range); z1 = Math.max(z1, l.position[2] + l.range);
+    }
+    if (L.length === 0) { x0 = z0 = 0; x1 = z1 = cell; }
+    x0 = Math.floor(x0 / cell) * cell;
+    z0 = Math.floor(z0 / cell) * cell;
+    const nx = Math.max(1, Math.ceil((x1 - x0) / cell)), nz = Math.max(1, Math.ceil((z1 - z0) / cell));
+    const lists: number[][] = Array.from({ length: nx * nz }, () => []);
+    L.forEach((l, i) => {
+      const r = l.range;
+      const ax = Math.floor((l.position[0] - r - x0) / cell), bx = Math.floor((l.position[0] + r - x0) / cell);
+      const az = Math.floor((l.position[2] - r - z0) / cell), bz = Math.floor((l.position[2] + r - z0) / cell);
+      for (let z = Math.max(0, az); z <= Math.min(nz - 1, bz); z++) {
+        for (let x = Math.max(0, ax); x <= Math.min(nx - 1, bx); x++) {
+          // Keep cells the light's sphere actually reaches (closest point of the cell box).
+          const cx = Math.max(x0 + x * cell, Math.min(l.position[0], x0 + (x + 1) * cell));
+          const cz = Math.max(z0 + z * cell, Math.min(l.position[2], z0 + (z + 1) * cell));
+          if ((cx - l.position[0]) ** 2 + (cz - l.position[2]) ** 2 <= r * r) lists[z * nx + x].push(i);
+        }
+      }
+    });
+    const maxPer = Math.max(1, ...lists.map((l) => l.length));
+    const words = nx * nz * (maxPer + 1);
+    const data = new Uint32Array(words);
+    lists.forEach((l, c) => {
+      const o = c * (maxPer + 1);
+      data[o] = l.length;
+      l.forEach((v, k) => (data[o + 1 + k] = v));
+    });
+    if (data.byteLength > this.lightCellBuffer.size) {
+      this.lightCellBuffer.destroy();
+      this.lightCellBuffer = this.device.createBuffer({ label: 'lightCells', size: Math.max(data.byteLength, this.lightCellBuffer.size * 2), usage: BU.STORAGE | BU.COPY_DST });
+      this.bindingsDirty = true;
+    }
+    this.device.queue.writeBuffer(this.lightCellBuffer, 0, data);
+    this.lightGrid = { originX: x0, originZ: z0, cell, nx, nz, maxPer };
+  }
+
+  /**
+   * Picks the lights whose fog glow (analytic airlight) matters most from this
+   * viewpoint (up to 8); only these run the per-pixel scattering integral.
+   */
+  private updateFogLights(eye: ArrayLike<number>) {
+    const L = this.activeLights;
+    const cand: { i: number; w: number }[] = [];
+    for (let i = 0; i < L.length; i++) {
+      const l = L[i];
+      const fs = l.fogScatter ?? 1;
+      if (fs <= 0) continue;
+      const lum = (0.2126 * l.color[0] + 0.7152 * l.color[1] + 0.0722 * l.color[2]) * l.intensity * fs;
+      const d2 = (l.position[0] - eye[0]) ** 2 + (l.position[1] - eye[1]) ** 2 + (l.position[2] - eye[2]) ** 2;
+      // The airlight integral falls off roughly as 1/distance (glow halo size), not 1/d².
+      cand.push({ i, w: lum / Math.max(Math.sqrt(d2), 2) });
+    }
+    cand.sort((a, b) => b.w - a.w);
+    const n = Math.min(this.maxFogLights, 8, cand.length);
+    const fd = this.fogLightData;
+    new Uint32Array(fd.buffer)[0] = n;
+    for (let k = 0; k < n; k++) fd.set(this.lightData.subarray(cand[k].i * 16, cand[k].i * 16 + 16), 4 + k * 16);
+    this.device.queue.writeBuffer(this.fogLightBuffer, 0, fd, 0, 4 + n * 16);
   }
 
   /** Decals: packed decal structs + a world-space XZ grid of per-cell index lists. */
@@ -696,7 +793,7 @@ export class Renderer {
   /** Global shader features active this frame (feed the `override` constants). */
   private features = {
     debug: false, decals: true, wetness: false, shadows: true, lightmap: true, localLights: false, fog: true, specAA: true, detail: true, macro: true,
-    dirLightmap: false, probeVolume: false, reflProbes: false, season: false,
+    dirLightmap: false, probeVolume: false, reflProbes: false, season: false, spotShadows: false,
   };
   /** Set false to compile the full runtime uber-shader (for comparisons). */
   specialize = true;
@@ -716,9 +813,14 @@ export class Renderer {
       USE_SHADOWS: on(g.shadows),
       USE_LIGHTMAP: on(g.lightmap && !foliage),
       USE_LOCAL_LIGHTS: on(g.localLights),
+      USE_SPOT_SHADOWS: on(g.localLights && g.spotShadows),
       USE_FOG: on(g.fog),
       USE_FOLIAGE: on(foliage),
-      USE_SPEC_AA: on(g.specAA),
+      // Rough foliage: no geometric specular AA and no environment reflections.
+      USE_SPEC_AA: on(g.specAA && !foliage),
+      USE_ENV_SPEC: on(!foliage),
+      // The 7x7 PCF option is compiled in only when selected (it costs every lit pixel otherwise).
+      USE_PCF7: on(this.settings.shadows.pcf7),
       USE_DIR_LIGHTMAP: on(g.dirLightmap && g.lightmap && !foliage),
       USE_PROBE_VOLUME: on(g.probeVolume),
       // Rough foliage / clutter: sky reflection only (no box-projected local probes).
@@ -727,7 +829,7 @@ export class Renderer {
       USE_SNOW: on(g.season && d.shader !== 'unlit'),
     };
     let bits = 0;
-    Object.values(constants).forEach((v, i) => (bits |= v << i));
+    Object.values(constants).forEach((v, i) => (bits |= (v ? 1 : 0) << i));
     return { key: bits.toString(16), constants };
   }
 
@@ -783,17 +885,26 @@ export class Renderer {
     const msaa = this.settings.msaa;
     const prev = this.syncPipelines;
     this.syncPipelines = false;
-    for (const m of mats) {
-      for (const fade of [false, true]) {
-        if (m.masked && this.maskedMode !== 'direct') {
-          this.maskedPipeline(true, m.doubleSided, m, msaa, fade);
-          this.maskedPipeline(false, m.doubleSided, m, msaa, fade);
-        } else {
-          this.stdPipeline(m.masked, m.doubleSided, m, msaa, fade);
+    // Gameplay lights switch variants at runtime (flashlight, muzzle flashes): also
+    // compile local lights on, with and without spot shadows.
+    const ft = this.features;
+    const saved = { ...ft };
+    for (const [ll, ss] of [[saved.localLights, saved.spotShadows], [true, false], [true, true]]) {
+      ft.localLights = ll;
+      ft.spotShadows = ss;
+      for (const m of mats) {
+        for (const fade of [false, true]) {
+          if (m.masked && this.maskedMode !== 'direct') {
+            this.maskedPipeline(true, m.doubleSided, m, msaa, fade);
+            this.maskedPipeline(false, m.doubleSided, m, msaa, fade);
+          } else {
+            this.stdPipeline(m.masked, m.doubleSided, m, msaa, fade);
+          }
         }
+        this.shadowPipeline(m.masked, m.doubleSided);
       }
-      this.shadowPipeline(m.masked, m.doubleSided);
     }
+    Object.assign(ft, saved);
     this.particlePipeline(false, msaa);
     this.particlePipeline(true, msaa);
     const n = this.pendingPipelines.size;
@@ -827,18 +938,26 @@ export class Renderer {
     // Only the prepass needs the fade variant: the equal-depth colour pass inherits its coverage.
     // Clutter always fades with distance.
     const fadeV = prepass && (fade || clutter);
-    const key = `masked:${prepass}:${doubleSided}:${msaa}:${hwA2C}:${prepass ? '' : v.key}:${fadeV}:${clutter}`;
+    // Foliage colour pass: fog + ambient per vertex (vsFoliage / fsFoliageColor).
+    const vl = !prepass && !clutter && mat.def.shader === 'foliage' && this.specialize;
+    // Prepass with the slim vertex stage (position + uv only).
+    const slim = prepass && !clutter && this.slimPrepass;
+    const key = `masked:${prepass}:${doubleSided}:${msaa}:${hwA2C}:${prepass ? '' : v.key}:${fadeV}:${clutter}:${vl}:${slim}`;
     return this.cached(key, () => {
       const mod = shaderModule(this.device, 'standard');
       return {
         label: key,
         layout: clutter ? this.clutterPipelineLayout : this.stdPipelineLayout,
-        vertex: { module: mod, entryPoint: clutter ? 'vsClutter' : 'vsMain', buffers: VERTEX_LAYOUT_FULL },
+        vertex: vl
+          ? { module: mod, entryPoint: 'vsFoliage', buffers: VERTEX_LAYOUT_FULL, constants: { USE_FOG: v.constants.USE_FOG, USE_PROBE_VOLUME: v.constants.USE_PROBE_VOLUME } }
+          : slim
+            ? { module: mod, entryPoint: 'vsDepth', buffers: VERTEX_LAYOUT_POS_UV }
+            : { module: mod, entryPoint: clutter ? 'vsClutter' : 'vsMain', buffers: VERTEX_LAYOUT_FULL },
         fragment: {
           module: mod,
-          entryPoint: prepass ? (hwA2C ? 'fsDepthA2C' : 'fsDepthMasked') : 'fsMaskedColor',
+          entryPoint: prepass ? (hwA2C ? (slim ? 'fsDepthA2CSlim' : 'fsDepthA2C') : (slim ? 'fsDepthMaskedSlim' : 'fsDepthMasked')) : vl ? 'fsFoliageColor' : 'fsMaskedColor',
           targets: [{ format: this.hdrFormat, writeMask: prepass ? 0 : GPUColorWrite.ALL }],
-          constants: { ...v.constants, USE_LOD_FADE: fadeV ? 1 : 0 },
+          constants: { ...v.constants, USE_LOD_FADE: fadeV ? 1 : 0, USE_VERTEX_LIGHT: vl ? 1 : 0 },
         },
         primitive: { topology: 'triangle-list', cullMode: doubleSided ? 'none' : 'back', frontFace: 'ccw' },
         depthStencil: prepass
@@ -849,6 +968,8 @@ export class Renderer {
     });
   }
   hwA2C = true;
+  /** Masked prepass with the position+uv vertex stage (vsDepth). */
+  slimPrepass = true;
   hdrFormat: GPUTextureFormat = 'rgba16float';
   depthFormat: GPUTextureFormat = 'depth32float';
   /** Diagnostic: switch render-target formats (clears pipeline cache + targets). */
@@ -1173,6 +1294,8 @@ export class Renderer {
         { binding: 24, resource: this.snowViews[2] },
         { binding: 25, resource: this.spotShadows.arrayView },
         { binding: 26, resource: { buffer: this.spotShadows.mats } },
+        { binding: 27, resource: { buffer: this.lightCellBuffer } },
+        { binding: 28, resource: { buffer: this.fogLightBuffer } },
       ];
     this.frameBG = d.createBindGroup({ label: 'frame', layout: this.frameLayout, entries: frameEntries(this.frameBuffer) });
     this.captureFrameBG = d.createBindGroup({ label: 'captureFrame', layout: this.frameLayout, entries: frameEntries(this.captureFrameBuffer) });
@@ -1242,7 +1365,7 @@ export class Renderer {
     if (S.detailStrength > 0) flags |= RF.DETAIL;
     if (S.decals) flags |= RF.DECALS;
     if (S.specularAA > 0) flags |= RF.SPEC_AA;
-    if (S.localLights && envState.lights.intensity > 0) flags |= RF.LOCAL_LIGHTS;
+    if (S.localLights && this.lightCount > 0) flags |= RF.LOCAL_LIGHTS;
     if (S.shadows.cascadeBlend) flags |= RF.CASCADE_BLEND;
     if (S.shRatio) flags |= RF.SH_RATIO;
     if (S.specOcclusion) flags |= RF.SPEC_OCCLUSION;
@@ -1271,6 +1394,7 @@ export class Renderer {
     ft.dirLightmap = (flags & RF.DIR_LIGHTMAP) !== 0;
     ft.probeVolume = (flags & RF.PROBE_VOLUME) !== 0;
     ft.reflProbes = reflOn;
+    ft.spotShadows = this.spotShadows.active > 0;
     return { flags, shadowsOn, fogOn };
   }
 
@@ -1323,6 +1447,9 @@ export class Renderer {
       F.vec4(FO.pvInvSpacing, 1 / pv.spacing[0], 1 / pv.spacing[1], 1 / pv.spacing[2], 0);
     }
     F.uvec4(FO.pvDims, pv ? pv.dims[0] : 1, pv ? pv.dims[1] : 1, pv ? pv.dims[2] : 1, this.probes?.count ?? 0);
+    const lg = this.lightGrid;
+    F.vec4(FO.lightGrid, lg.originX, lg.originZ, lg.cell, 1 / lg.cell);
+    F.uvec4(FO.lightGrid2, lg.nx, lg.nz, lg.maxPer, 0);
     const W = envState.weather;
     F.vec4(FO.season, W.snow ?? 0, W.melt ?? 0, W.dry ?? 0, 1 / 2.0);
     this.device.queue.writeBuffer(buffer, 0, F.data);
@@ -1636,11 +1763,14 @@ export class Renderer {
     if (this.shadows.ensure(S.shadows.resolution)) this.bindingsDirty = true;
     if (this.bindingsDirty) this.rebuildBindings();
     // Map lights + this frame's dynamic lights (flashlight, muzzle flashes).
-    if (this.lightsDirty || this.dynamicLights.length > 0 || this.hadDynamicLights) {
-      this.uploadLights();
+    const lampScale = env.state.lights.intensity;
+    if (this.lightsDirty || this.dynamicLights.length > 0 || this.hadDynamicLights || lampScale !== this.lampScale) {
+      this.lampScale = lampScale;
+      this.uploadLights(lampScale);
       this.lightsDirty = false;
       this.hadDynamicLights = this.dynamicLights.length > 0;
     }
+    this.updateFogLights(camera.position);
 
     const envState = env.state;
     const de = env.derive();
@@ -1655,7 +1785,14 @@ export class Renderer {
       this.sky.encodeUpdate(enc0, this.frameBuffer, { mieScale: envState.sky.turbidity * AEROSOL_BASE, cameraAltitudeKm: 0.1, groundAlbedo: [ga[0], ga[1], ga[2]] }, de.sunDir);
       d.queue.submit([enc0.finish()]);
       this.lastEnvVersion = env.version;
-      if (this.probes && S.reflectionProbes) this.captureProbes(env, renderables.filter((r) => !r.viewmodel));
+      if (this.probes && S.reflectionProbes) {
+        // Probes see the map's lamps only: no flashlight / muzzle flashes baked into
+        // reflections (and no light variants compiled for the capture).
+        const dyn = this.dynamicLights;
+        if (dyn.length) { this.dynamicLights = []; this.uploadLights(lampScale); }
+        this.captureProbes(env, renderables.filter((r) => !r.viewmodel));
+        if (dyn.length) { this.dynamicLights = dyn; this.uploadLights(lampScale); }
+      }
     }
 
     // ---- exposure + main view uniforms

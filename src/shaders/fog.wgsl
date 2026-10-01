@@ -70,30 +70,44 @@ fn computeFog(camPos: vec3f, dir: vec3f, distIn: f32, isSky: bool) -> FogResult 
   return r;
 }
 
+// atan2 for y >= 0 (result in [0, pi]) with a 7th-order minimax polynomial
+// (~1e-5 rad error), cheaper than the built-in on GPUs.
+fn atan2Pos(y: f32, x: f32) -> f32 {
+  let ax = abs(x);
+  let a = min(ax, y) / max(max(ax, y), 1e-20);
+  let s = a * a;
+  var r = ((-0.0464964749 * s + 0.15931422) * s - 0.327622764) * s * a + a;
+  if (y > ax) { r = 1.57079637 - r; }
+  if (x < 0.0) { r = 3.14159274 - r; }
+  return r;
+}
+
 // Analytic single scattering of point lights along the view segment in a
 // homogeneous medium ("airlight"): integral of 1/(h^2 + t^2) = atan/h.
 fn fogLightScatter(camPos: vec3f, dir: vec3f, dist: f32) -> vec3f {
   if (!hasFlag(F_FOG) || !hasFlag(F_LOCAL_LIGHTS) || frame.fog0.x <= 0.0) { return vec3f(0.0); }
   var acc = vec3f(0.0);
-  let n = frame.debug.z;
+  // Only the few lights whose glow matters this frame (chosen on the CPU).
+  let n = min(fogLights.count.x, 8u);
   let sigma = frame.fog0.x * exp(-frame.fog0.z * max(camPos.y - frame.fog0.y, -20.0));
-  for (var i = 0u; i < n; i++) {
-    let l = lights[i];
-    if (l.color.w <= 0.0) { continue; }
+  for (var k = 0u; k < n; k++) {
+    let l = fogLights.l[k];
     let toL = l.posRange.xyz - camPos;
     let tc = dot(toL, dir);
-    let h2 = max(dot(toL, toL) - tc * tc, 0.04);
-    let h = sqrt(h2);
-    let t1 = dist;
-    let integ = (atan((t1 - tc) / h) - atan(-tc / h)) / h;
     // Spot lights only light the medium inside their cone: evaluate the cone at
-    // the point of the (clamped) ray segment closest to the light.
+    // the point of the (clamped) ray segment closest to the light, before the
+    // integral, so rays that miss the cone cost a few dot products.
     var cone = 1.0;
     if (l.params.y > 0.5) {
       let pc = camPos + dir * clamp(tc, 0.0, dist);
       let toP = normalize(pc - l.posRange.xyz);
       cone = smoothstep(l.dirCone.w - 0.15, l.params.x, dot(toP, l.dirCone.xyz));
+      if (cone <= 0.0) { continue; }
     }
+    let h2 = max(dot(toL, toL) - tc * tc, 0.04);
+    let h = sqrt(h2);
+    // atan((t1 - tc) / h) - atan(-tc / h) as a single atan2 (exact identity).
+    let integ = atan2Pos(dist * h, h2 - tc * (dist - tc)) / h;
     acc += l.color.rgb * l.color.w * integ * cone * (1.0 / (4.0 * PI));
   }
   return acc * sigma * frame.fogColor.rgb;

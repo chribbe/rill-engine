@@ -55,5 +55,24 @@ struct ReflProbe {
 // Dynamic spot-light shadows (flashlight): depth layers + light-space matrices.
 @group(0) @binding(25) var spotShadowMap: texture_depth_2d_array;
 @group(0) @binding(26) var<storage, read> spotShadowMats: array<mat4x4f>;
+// Local-light XZ grid (frame.lightGrid*): per cell [count, light index...], from
+// word lightGrid2.w.
+@group(0) @binding(27) var<storage, read> lightCells: array<u32>;
+// The same fog-glow lights as copies in a uniform buffer: every pixel reads the same
+// few lights, which the constant cache serves far faster than storage loads.
+struct FogLights {
+  count: vec4u,
+  l: array<Light, 8>,
+};
+@group(0) @binding(28) var<uniform> fogLights: FogLights;
+
+/// Start of the light list of the grid cell containing `wp` (count at the start; 0 = none).
+fn lightCellBase(wp: vec3f) -> u32 {
+  let g = frame.lightGrid;
+  let c = vec2i(floor((wp.xz - g.xy) * g.w));
+  let n = vec2i(frame.lightGrid2.xy);
+  if (any(c < vec2i(0)) || any(c >= n)) { return 0xFFFFFFFFu; }
+  return frame.lightGrid2.w + u32(c.y * n.x + c.x) * (frame.lightGrid2.z + 1u);
+}
 
 fn hasFlag(bit: u32) -> bool { return (frame.debug.y & bit) != 0u; }
