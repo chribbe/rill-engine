@@ -328,6 +328,41 @@ World (runtime, derived) ───────────────┐       
     early-reject each other. LOD1 cards from 21 m (was 30) and impostors from 66 m (was 95),
     bare birches / shrubs 9 / 25 m: ~8 % cheaper in forest and road views at near-identical
     look (the impostors are brightness-matched since decision 33).
+39. **Interior mapping behind glazing.** Windows and shopfronts show rooms instead of flat dark
+    glass (`interior` on a glass material: style home/shop/office/hall, room size, depth, lit
+    fraction; emissive = the rooms' light). The view ray is intersected with a box room in the
+    pane's UV frame, which comes from screen derivatives (cotangent frame, no tangent-sign
+    assumptions). Panes carry *room-space* UVs (u along the facade, v up from that storey's
+    floor), so room floors line up with each building's real storeys. Wall/floor/furniture
+    colours, curtains, shop shelves and the lit state at night come from a hash of the room's
+    world origin. Day light falls off with depth from the glass's own irradiance; lamps follow
+    the environment's local-light switch (shops and offices are also lit by day). A material
+    variant (`USE_INTERIOR`) so other glass pays nothing.
+40. **Text signs as map objects, rasterised at load.** `sign` objects (text, size, font,
+    colours, backlit, lightbox depth) are drawn into one 2048² canvas atlas with the bundled OFL
+    fonts (`public/fonts`), registered as a texture (`TextureManager.registerCanvas`) and drawn
+    as one mesh (backlit faces / painted faces / lightbox bodies). Editing a shop name or a
+    plate is a document change, no asset build — the shape a future editor's "place sign" tool
+    needs. Backlit artwork uses `emissiveFromBaseColor`.
+41. **Facades are one lightmap chart per wall.** `arch.wall` writes wall-plane UVs (distance
+    along the wall, world height: no stretching on diagonal walls) and unfolds each opening's
+    reveals (mitred) into the opening, with frames and panes filling the rest; a per-wall chart id
+    keeps it together. Panes whose UV0 is room space carry a separate layout UV for the packer
+    (stripped before export). The packer turns every chart to its minimum-area rectangle,
+    splits sparse islands (ribbons around corners) by greedy region growing, and shelf-packs at
+    several widths. Hässelby: 19.4 → 6.8 Mtexels for the same densities' look (two pages).
+    The packer is deterministic (faces visited in index order) and fails the build if any
+    UV1 falls outside the chart atlas: a bake is only valid for byte-identical assets.
+42. **Real places from OpenStreetMap, generated not hand-built.** `build_hasselby.py` turns an
+    Overpass extract (ODbL) into a map: street surfaces as signed distance fields (road,
+    parking, kerb, pavement, path; smooth-min fillets between different streets, exclusive by
+    priority, marching squares with shared edge points), building archetypes from footprint +
+    storeys + use, the viaduct from the rail ways and platform polygon, lamps/trees/cars by
+    rules. Everything visible is modelled for the target period from reference photos.
+    Street meshes are simplified by a planar dissolve bounded by seams on a 3 m grid and
+    triangulated in plan: an unbounded dissolve produced faces wrapping islands and
+    cut-outs whose triangulation lost coverage (holes in the roads); the build now checks
+    that the plan area of every surface tile is preserved.
 
 ## 5. Content pipeline
 
@@ -339,6 +374,8 @@ npm run bake       # Blender/Cycles: bake_lightmaps.py -- [--samples 256] [--siz
                    #   → maps/testmap/lightmaps/{lm_0_{sky,rnm0,rnm1,rnm2,sun}.hdr, probes_*.bin, lightmapset.json}
 npm run scanned    # tools/textures/scanned.ts  → Poly Haven 2K maps (.texture-cache) → 1K PNGs + manifest + material sizes
 npm run compress   # tools/textures/compress.ts → public/textures/bc7/*.ktx2 + index.json (incremental, ~30 s full)
+npm run map:hasselby          # Blender: build_hasselby.py → public/assets/hasselby, maps/hasselby/map.json (~20 s)
+npm run bake -- --map hasselby
 ```
 Order after content changes: `textures` / `scanned` → `map` → `bake` → `compress`. The BC7 folder is a
 build output (gitignored); without it the engine loads PNGs and builds mips on the GPU.
@@ -471,9 +508,9 @@ Findings:
 
 ## 9. Technical debt
 
-- Lightmap atlas waste: ring-shaped charts (parapet caps) and curved path ribbons pack into
-  their bounding boxes (building charts ~40 % empty, forest path 93 %). Split islands or use a
-  better packer.
+- Lightmap atlas: charts are now min-area-rectangle oriented and sparse islands split
+  (decision 41), but packing is still shelf-based and street charts from marching squares are
+  irregular (fill ~50 %). A skyline packer and per-tile street charts would gain more.
 - Decal textures stay RGBA8 PNG (the decal atlas copies rgba8 layers); a BC7 atlas would need
   the layers compressed with matching formats.
 - BC7 encoder is single-pass PCA + LS (no exhaustive mode 7/4, no perceptual weighting) — fine
@@ -540,9 +577,8 @@ cost-based tree LODs (decisions 18–38).
    by macro noise).
 4. **Vegetation polish:** wind (trunk sway + spray flutter, shared by prepass/shadow/lit vertex
    stages), octahedral impostors.
-5. **Signage**: a text/logo atlas helper (store fronts, street and traffic signs) when real
-   levels are built.
-6. **Exposure**: optional local exposure for sun-vs-shade scenes.
+5. **Exposure**: optional local exposure for sun-vs-shade scenes.
+6. **Hässelby slice polish** (see §13).
 
 ## 12. Automation API (precursor of future editor/AI tools)
 
@@ -554,3 +590,40 @@ cost-based tree LODs (decisions 18–38).
 `sandbox` objects (`sandbox.toggleWeapon()`, `toggleFlashlight()`, `trigger = true` fires).
 In the app: **L** flashlight, **X** weapon, left click fires while the mouse is captured. `bench()` reports `gpuSpanMs`; the stats overlay
 shows per-LOD object counts and the BC7 share of texture memory.
+
+## 13. Hässelby torg 1993 (vertical slice)
+
+`?map=hasselby` — Hässelby gård, western Stockholm, a grey November in 1993. Generated by
+`npm run map:hasselby` from `tools/hasselby/osm.json` (© OpenStreetMap contributors, ODbL;
+credits in `public/maps/hasselby/CREDITS.md`). Reference photos (Wikimedia Commons) live in the
+gitignored `reference/hasselby` with their licences.
+
+- **Layout** (OSM): ~50 buildings by archetype (16-storey tower with red end walls and glazed
+  balcony bands, 10–11-storey point blocks with ochre panels, 3-storey yellow slabs with tile
+  roofs, dark-brick retail centre, kiosks on the square, garages), streets, paths, parking, the
+  T-bana viaduct and platform, lamps, bus stops. Terrain is an invented valley (no elevation
+  data yet): the square low under the viaduct, embankment west, rock cut east.
+- **T-bana**: two single-track decks joined under the wedge island platform, parapets with
+  flat-bar railings, board-formed bents kept out of the carriageways, abutments, ballast,
+  sleepers, rails and third rail (away from the platform), slatted canopy on a central column
+  row with fluorescent fittings; the station hall under the platform's west end (glazed front,
+  brown tiles, entrance canopy, the blue name band and the SL T sign on the bent in front).
+- **Life**: 26 fictional 1993 shop and kiosk fascias, 114 parked cars (five fictional
+  lookalikes: 240/245, 740, 900, Golf II) with period plates, ~1000 trees and shrubs (bare
+  birches and maples — `broadleaf` in `trees.py` — pines and spruces on the hill, maples in
+  planters on the square), 41 sodium mast lamps, 53 mercury globe lamps, bus shelters at the
+  OSM stops, benches, bins, a phone booth, bike racks, ~700 decals (zebra crossings, centre
+  lines, parking bays, manholes, oil, water streaks on the viaduct, grime), interior-mapped
+  windows.
+- **Lighting**: 171 lightmapped objects, 6.9 Mtexels on two 2048² pages, probe volume
+  58×12×62 (6 × 4 × 6 m), six reflection probes. The asset build is deterministic (the bake
+  depends on it: lightmap charts must match between bake and runtime).
+- **Moods**: `november` (default: low grey afternoon, damp) and `november_evening` (wet streets,
+  lamps, lit rooms); keys 7 / 8.
+- **Viewpoints**: station entrance, forecourt shops, Astrakangatan under the bridge, courtyard,
+  platform, rock cut, overview (`rill.shotViews('hb')`).
+
+Known gaps: the platform is not reachable on foot (no stairs/escalator geometry yet), cars are
+static props without door seams or interiors, no traffic signs or bus shelters yet, deciduous
+trees are all birches (a bare broadleaf species would add variety), terrain heights are
+invented.

@@ -75,18 +75,88 @@ def add_sign(sid, name, pos, facing, text, size, **opts):
                     'sign': {'text': text, 'size': [round(size[0], 3), round(size[1], 3)], **opts}})
 
 
-def build(builder, lightmap_tpm=None, vertex_color=None, color_max_edge=None, dissolve=False):
+def tessellate_ngons(bm):
+    """Triangulates n-gons of a height-field surface in plan (XY): dissolved street
+    n-gons are large and slightly curved, and filling them in their best-fit plane
+    folds them (lost coverage = holes); in plan they are always simple."""
+    from mathutils.geometry import tessellate_polygon
+    for f in [f for f in bm.faces if len(f.verts) > 4]:
+        verts = list(f.verts)
+        mi, sm = f.material_index, f.smooth
+        if abs(f.normal.z) < 0.5:
+            continue                                  # vertical faces (kerb edges) stay as they are
+        tris = tessellate_polygon([[Vector((v.co.x, v.co.y, 0.0)) for v in verts]])
+        if os.environ.get('RILL_TESS_DEBUG'):
+            P = [(v.co.x, v.co.y) for v in verts]
+            a_f = abs(sum(P[i - 1][0] * P[i][1] - P[i][0] * P[i - 1][1] for i in range(len(P)))) / 2
+            a_t = sum(abs((P[j][0] - P[i][0]) * (P[k][1] - P[i][1]) - (P[k][0] - P[i][0]) * (P[j][1] - P[i][1])) / 2 for (i, j, k) in tris)
+            if abs(a_f - a_t) > 0.01:
+                keys = [(round(x, 4), round(y, 4)) for (x, y) in P]
+                print(f'    TESS face {len(P)} verts area {a_f:.3f} tris {a_t:.3f} dup-pos {len(keys) - len(set(keys))} ntris {len(tris)}')
+        nrm = f.normal.copy()
+        bm.faces.remove(f)
+        for (i, j, k) in tris:
+            tri = [verts[i], verts[j], verts[k]]
+            try:
+                nf = bm.faces.new(tri)
+            except ValueError:
+                continue
+            nf.normal_update()
+            if nf.normal.dot(nrm) < 0:
+                nf.normal_flip()
+            nf.material_index, nf.smooth = mi, sm
+
+
+def _up_area(bm):
+    """Plan (XY) area of the upward faces: exact for height-field surfaces."""
+    tot = 0.0
+    for f in bm.faces:
+        if f.normal.z > 0.5:
+            p = [v.co for v in f.verts]
+            tot += abs(sum(p[i - 1].x * p[i].y - p[i].x * p[i - 1].y for i in range(len(p)))) / 2
+    return tot
+
+
+def build(builder, lightmap_tpm=None, vertex_color=None, color_max_edge=None, dissolve=False, seam_grid=None):
     if dissolve:
         bm = builder.bm
+        bm.normal_update()
+        a_before = _up_area(bm)
+        dbg = builder.name == os.environ.get('RILL_DISSOLVE_DEBUG')
+        step = lambda nm: dbg and (bm.normal_update() or print(f'    {nm}: {_up_area(bm):.2f} m2, {len(bm.faces)} faces'))
+        step('start')
         bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=0.0005)
+        step('remove_doubles')
         bmesh.ops.dissolve_degenerate(bm, dist=0.002, edges=bm.edges[:])
-        bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(0.6), verts=bm.verts[:], edges=bm.edges[:], delimit={'MATERIAL'})
+        step('dissolve_degenerate')
+        delimit = {'MATERIAL'}
+        if seam_grid:
+            # Seam lines on a coarse grid bound the planar merge: dissolved faces stay
+            # within one cell and cannot wrap around islands or cut-outs.
+            gx0, gy0, cell = seam_grid
+            on = lambda c, o: abs((c - o) / cell - round((c - o) / cell)) < 1e-4
+            for e in bm.edges:
+                a_, b_ = e.verts[0].co, e.verts[1].co
+                if (on(a_.x, gx0) and on(b_.x, gx0) and abs(a_.x - b_.x) < 1e-4) or (on(a_.y, gy0) and on(b_.y, gy0) and abs(a_.y - b_.y) < 1e-4):
+                    e.seam = True
+            delimit = {'MATERIAL', 'SEAM'}
+        bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(0.6), verts=bm.verts[:], edges=bm.edges[:], delimit=delimit)
+        step('dissolve_limit')
         bmesh.ops.dissolve_degenerate(bm, dist=0.002, edges=bm.edges[:])
-        # Dissolved n-gons can pinch at a vertex: triangulate here (beauty) so the mesh stays valid.
+        step('dissolve_degenerate 2')
+        # Dissolved n-gons are large, concave and slightly curved: fill them in plan.
+        bm.normal_update()
+        tessellate_ngons(bm)
+        step('tessellate_ngons')
         bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method='BEAUTY', ngon_method='BEAUTY')
+        step('triangulate')
         # bmesh ops leave element tags set; MeshBuilder reads face tags as "explicit UVs".
         for f in bm.faces:
             f.tag = False
+        bm.normal_update()
+        lost = a_before - _up_area(bm)
+        if abs(lost) > 0.05:
+            print(f'  WARNING {builder.name}: dissolve changed walkable area by {lost:.2f} m2')
     obj, res = builder.finish(lightmap_tpm, vertex_color=vertex_color, color_max_edge=color_max_edge)
     # Collapsed slivers can leave duplicate faces: validate() removes them.
     obj.data.validate(verbose=bool(os.environ.get('RILL_VALIDATE')))
@@ -277,7 +347,7 @@ def tile_of(p):
 print('Building street surfaces...')
 for cls, (f, mat, dz) in SURF.items():
     f = HS.subtract(f, d_bldg)
-    polys, segs = HS.march(g, f)
+    polys, segs = HS.march(g, f, split=10)
     tiles = {}
     for poly in polys:
         cx = sum(p[0] for p in poly) / len(poly)
@@ -301,7 +371,7 @@ for cls, (f, mat, dz) in SURF.items():
             b.quad((c[0], c[1], zc + dz), (a[0], a[1], za + dz), (a[0], a[1], za - 0.06), (c[0], c[1], zc - 0.06), mat if cls != 'walk' else 'granite_curb')
         if not b.bm.faces:
             continue
-        res = build(b, TPM_STREET, dissolve=True)
+        res = build(b, TPM_STREET, dissolve=True, seam_grid=(g.x0, g.y0, g.res * 10))
         add_mesh_object(b.name, f'Street {cls} {key}', b.name, 'ground', lightmap=res)
 
 
@@ -860,6 +930,23 @@ def faces_walk(a, u, ln):
     return hits >= 2
 
 
+def machine_room(b, ring, z, mat):
+    """Lift machine room on a tall block's roof (centred, along the long axis)."""
+    rect = arch.oriented_rect(ring)
+    if rect:
+        c, u, v, hu, hv = rect
+    else:
+        c = Vector((sum(p[0] for p in ring) / len(ring), sum(p[1] for p in ring) / len(ring)))
+        u, v, hu, hv = Vector((1, 0)), Vector((0, 1)), 4.0, 3.0
+    hu, hv = min(hu * 0.3, 3.2), min(hv * 0.4, 2.4)
+    P = lambda a_, b_, zz: (c.x + u.x * a_ + v.x * b_, c.y + u.y * a_ + v.y * b_, zz)
+    z1 = z + 2.6
+    for (a0, b0, a1, b1) in [(-hu, -hv, hu, -hv), (hu, -hv, hu, hv), (hu, hv, -hu, hv), (-hu, hv, -hu, -hv)]:
+        arch.quad_facing(b, [P(a0, b0, z), P(a1, b1, z), P(a1, b1, z1), P(a0, b0, z1)],
+                         ((a0 + a1) / 2 * u.x + (b0 + b1) / 2 * v.x, (a0 + a1) / 2 * u.y + (b0 + b1) / 2 * v.y, 0), mat)
+    b.quad(P(-hu - 0.1, -hv - 0.1, z1), P(hu + 0.1, -hv - 0.1, z1), P(hu + 0.1, hv + 0.1, z1), P(-hu - 0.1, hv + 0.1, z1), 'roof_felt')
+
+
 def build_building(bd, idx):
     kind = archetype(bd)
     ring = bd['ring']
@@ -885,6 +972,7 @@ def build_building(bd, idx):
         roof_z = top
         arch.polygon_roof(b, ring, roof_z, 'roof_felt')
         arch.roof_edge(b, ring, roof_z + 0.02, 0.32, 'metal_dark')
+        machine_room(b, ring, roof_z, wall_m)
     elif kind == 'tower':
         top = z0 + lv * FLOOR + 0.5
         for (a, u, ln, us0) in edges_of(ring):
@@ -907,6 +995,7 @@ def build_building(bd, idx):
         roof_z = top
         arch.polygon_roof(b, ring, roof_z, 'roof_felt')
         arch.roof_edge(b, ring, roof_z + 0.02, 0.4, 'metal_dark')
+        machine_room(b, ring, roof_z, 'render_grey')
     elif kind == 'retail':
         g_h = 4.2
         up = max(0, lv - 1)
@@ -1165,6 +1254,138 @@ for i, (x, y, z) in enumerate(STATION_LIGHTS[::2]):
 print(f'  {len(lamps_street)} street lamps, {len(lamps_path)} path lamps')
 
 
+# =============================================================== street furniture
+# Bus shelters at the OSM stops, benches, bins, phone booths, bike racks (props,
+# probe-lit; local origin, front towards +y).
+print('Street furniture...')
+b = MeshBuilder('bus_shelter')                     # 3.6 x 1.4 m, open towards +y (the kerb)
+for (x, y) in ((-1.75, -0.65), (1.75, -0.65), (-1.75, 0.6), (1.75, 0.6)):
+    b.box(x - 0.04, x + 0.04, y - 0.04, y + 0.04, 0.0, 2.35, 'metal_green')
+b.box(-1.9, 1.9, -0.8, 0.8, 2.35, 2.45, 'metal_green')                  # roof
+b.box(-1.85, 1.85, -0.72, 0.72, 2.33, 2.35, 'ceiling_panel', skip=('+z',))
+b.box(-1.71, 1.71, -0.69, -0.62, 0.15, 1.05, 'metal_painted')           # back panel (lower)
+b.box(-1.71, 1.71, -0.69, -0.64, 1.05, 2.3, 'fence_chainlink')          # mesh guard above
+b.box(1.72, 1.78, -0.6, 0.55, 0.25, 2.1, 'sign_body')                    # advert case at the end
+b.quad((1.781, -0.55, 0.32), (1.781, 0.5, 0.32), (1.781, 0.5, 2.03), (1.781, -0.55, 2.03), 'advert_lit')
+b.quad((1.719, 0.5, 0.32), (1.719, -0.55, 0.32), (1.719, -0.55, 2.03), (1.719, 0.5, 2.03), 'advert_lit')
+for k in range(3):                                                       # bench
+    b.box(-1.2, 0.9, -0.55 + k * 0.12, -0.46 + k * 0.12, 0.44, 0.48, 'wood_door')
+b.box(-1.1, -1.05, -0.55, -0.25, 0.0, 0.44, 'metal_dark')
+b.box(0.8, 0.85, -0.55, -0.25, 0.0, 0.44, 'metal_dark')
+build(b, None)
+
+b = MeshBuilder('bench_park')                       # 1.8 m slatted bench, faces +y
+for sx in (-0.75, 0.75):
+    b.box(sx - 0.035, sx + 0.035, -0.28, 0.22, 0.0, 0.42, 'metal_dark')
+    b.box(sx - 0.035, sx + 0.035, -0.3, -0.24, 0.42, 0.85, 'metal_dark')
+for k in range(4):
+    b.box(-0.9, 0.9, -0.22 + k * 0.11, -0.22 + k * 0.11 + 0.085, 0.42, 0.46, 'wood_door')
+for k in range(2):
+    b.box(-0.9, 0.9, -0.3, -0.26, 0.55 + k * 0.15, 0.66 + k * 0.15, 'wood_door')
+build(b, None)
+
+b = MeshBuilder('bin_post')                         # green litter bin on a post
+b.tube((0, 0, 0), (0, 0, 1.05), 0.03, 0.03, 'metal_green', sides=6)
+b.tube((0, 0.2, 0.55), (0, 0.2, 1.05), 0.17, 0.19, 'metal_green', sides=12)
+b.tube((0, 0.2, 0.55), (0, 0.2, 0.56), 0.17, 0.17, 'metal_dark', sides=12)
+build(b, None)
+
+b = MeshBuilder('phone_booth')                      # aluminium-framed booth, door towards +y
+b.box(-0.5, 0.5, -0.5, 0.5, 0.0, 0.08, 'concrete_cast')
+for (x, y) in ((-0.48, -0.48), (0.48, -0.48), (-0.48, 0.48), (0.48, 0.48)):
+    b.box(x - 0.03, x + 0.03, y - 0.03, y + 0.03, 0.08, 2.25, 'metal_galvanized')
+b.box(-0.5, 0.5, -0.5, 0.5, 2.25, 2.55, 'sign_body')
+for side in range(4):
+    a_ = side * math.pi / 2
+    c, s_ = math.cos(a_), math.sin(a_)
+    P = lambda u_, z: (c * u_ - s_ * 0.47, s_ * u_ + c * 0.47, z)
+    arch.quad_facing(b, [P(-0.45, 0.25), P(0.45, 0.25), P(0.45, 2.2), P(-0.45, 2.2)], (-s_, c, 0), 'car_glass')
+    arch.quad_facing(b, [P(-0.45, 0.08), P(0.45, 0.08), P(0.45, 0.25), P(-0.45, 0.25)], (-s_, c, 0), 'metal_galvanized')
+build(b, None)
+
+b = MeshBuilder('sign_pole')
+b.tube((0, 0, 0), (0, 0, 2.95), 0.035, 0.035, 'metal_galvanized', sides=8)
+build(b, None)
+
+b = MeshBuilder('bike_rack')                        # 5 hoops on rails, 3 m
+for k in range(5):
+    x = -1.2 + k * 0.6
+    pts = [(x, -0.35 + 0.7 * i / 8, 0.35 + 0.4 * math.sin(math.pi * i / 8)) for i in range(9)]
+    for p, q in zip(pts, pts[1:]):
+        b.tube(p, q, 0.02, 0.02, 'metal_galvanized', sides=5, caps=False)
+    b.tube((x, -0.35, 0.0), (x, -0.35, 0.35), 0.02, 0.02, 'metal_galvanized', sides=5, caps=False)
+    b.tube((x, 0.35, 0.0), (x, 0.35, 0.35), 0.02, 0.02, 'metal_galvanized', sides=5, caps=False)
+build(b, None)
+
+furn = {k: [] for k in ('bus_shelter', 'bench_park', 'bin_post', 'phone_booth', 'bike_rack', 'sign_pole')}
+
+
+def road_frame(x, y):
+    """Unit normal away from the nearest carriageway and its distance."""
+    eps = 0.4
+    gx = (HS.sample(g, d_road, x + eps, y) - HS.sample(g, d_road, x - eps, y)) / (2 * eps)
+    gy = (HS.sample(g, d_road, x, y + eps) - HS.sample(g, d_road, x, y - eps)) / (2 * eps)
+    ln = math.hypot(gx, gy) or 1.0
+    return (gx / ln, gy / ln), HS.sample(g, d_road, x, y)
+
+
+def heading_of(v):
+    return math.degrees(math.atan2(v[0], v[1]))
+
+
+for (p, name) in L['bus_stops']:
+    if not (X0 + 5 < p[0] < X1 - 5 and Y0 + 5 < p[1] < Y1 - 5):
+        continue
+    n, dr = road_frame(*p)
+    x, y = p[0] + n[0] * (2.6 - dr), p[1] + n[1] * (2.6 - dr)       # shelter 2.6 m behind the kerb line
+    if HS.sample(g, d_bldg, x, y) < 1.5:
+        continue
+    furn['bus_shelter'].append((x, y, heading_of((-n[0], -n[1]))))   # open side faces the road
+    t = (-n[1], n[0])
+    sx, sy = x + t[0] * 3.2 + n[0] * -1.6, y + t[1] * 3.2 + n[1] * -1.6
+    furn['bin_post'].append((x - t[0] * 2.6, y - t[1] * 2.6, heading_of((-n[0], -n[1]))))
+    # stop sign: pole + name plate (sign objects carry the text)
+    furn['sign_pole'].append((sx, sy, 0.0))
+    k = len(furn['bus_shelter'])
+    add_sign(f'sign_busstop_{k}', 'Bus stop sign', (sx, sy, H(sx, sy) + 2.55), (-n[0], -n[1]), 'Buss\nHässelby gård', (0.62, 0.42),
+             font='Inter', weight=700, color='#ffffff', background='#1d4f91', border='#ffffff', textHeight=0.62,
+             uppercase=False, doubleSided=True, depth=0.03)
+
+for p in L['benches']:
+    if X0 + 3 < p[0] < X1 - 3 and Y0 + 3 < p[1] < Y1 - 3 and HS.sample(g, d_bldg, *p) > 1.0:
+        n, dr = road_frame(*p)
+        furn['bench_park'].append((p[0], p[1], heading_of(n) + 180 if dr < 8 else 0.0))
+for p in L['bins']:
+    if X0 + 3 < p[0] < X1 - 3 and Y0 + 3 < p[1] < Y1 - 3 and HS.sample(g, d_bldg, *p) > 0.8:
+        furn['bin_post'].append((p[0], p[1], 0.0))
+# the forecourt: benches facing the station, a phone booth by the entrance, bike racks
+if STATION.get('front'):
+    a, t, ln, zb, z0 = STATION['front']
+    out = Vector((t.y, -t.x))
+    for k, (u_, o_) in enumerate(((-6.0, 7.5), (-2.5, 9.0), (ln + 3.0, 9.5), (ln + 6.5, 8.0))):
+        q = a + t * u_ + out * o_
+        if HS.sample(g, d_bldg, q.x, q.y) > 1.5:
+            furn['bench_park'].append((q.x, q.y, heading_of((-out.x, -out.y)) + 180))
+    q = a + t * (ln + 2.0) + out * 4.5
+    furn['phone_booth'].append((q.x, q.y, heading_of((t.x, t.y))))
+    add_sign('sign_phone_0', 'Phone booth header', (q.x, q.y, H(q.x, q.y) + 2.4), (t.x, t.y), 'Telefon', (0.96, 0.26),
+             font='Barlow Condensed', color='#1b3c8a', background='#f0d23c', backlit=1, doubleSided=False)
+    for k in range(2):
+        q = a + t * (-2.0 - k * 3.4) + out * 3.4
+        if HS.sample(g, d_bldg, q.x, q.y) > 1.0:
+            furn['bike_rack'].append((q.x, q.y, heading_of((t.x, t.y)) + 90))
+    q = a + t * (ln * 0.5) + out * 5.2
+    furn['bin_post'].append((q.x, q.y, heading_of((-out.x, -out.y))))
+
+for name, lst in furn.items():
+    if not lst:
+        continue
+    objects.append({'id': f'furniture_{name}', 'name': f'Street furniture ({name})', 'type': 'instances', 'semantic': 'prop',
+                    'asset': f'{ASSET_REL}/{name}.glb', 'castShadow': True, 'transform': {'position': [0, 0, 0]},
+                    'instances': [[*to_engine((x, y, H(x, y) + 0.1)), round(h, 1), 1.0] for (x, y, h) in lst]})
+print('  ' + ', '.join(f'{k} {len(v)}' for k, v in furn.items()))
+
+
 # =============================================================== parked cars
 # Fictional lookalikes of the cars on a Stockholm street in 1993 (tools/blender/cars.py):
 # 240/740-style Volvos dominate, then 900-style Saabs and small hatches.
@@ -1283,12 +1504,142 @@ for i, (mdl, col, x, y, h) in enumerate(parked):
 print(f'  {len(parked)} cars in {len(groups)} groups')
 
 
+# =============================================================== decals
+# Road paint (zebra crossings, centre dashes, parking bays), manholes, oil, water
+# streaks down the viaduct beams, grime along shop bases. Runtime decals: no bake.
+print('Decals...')
+from common import quat_mul  # noqa: E402
+rng_d = random.Random(1966)
+ndec = 0
+
+
+def ground_decal(mat, x, y, z, w, h, along, repeat=1.0, opacity=1.0, depth=0.35):
+    """Decal on the ground; `along` = compass heading of the decal's width axis."""
+    global ndec
+    qx = [-0.7071068, 0, 0, 0.7071068]          # local +Z -> up
+    q = quat_mul(yaw_quat(90.0 - along), qx)
+    objects.append({'id': f'decal_{ndec:04d}', 'type': 'decal', 'semantic': 'decal',
+                    'transform': {'position': to_engine((x, y, z)), 'rotation': [round(v, 6) for v in q]},
+                    'decal': {'material': mat, 'size': [round(w, 3), round(h, 3), depth], 'repeat': repeat, 'opacity': opacity}})
+    ndec += 1
+
+
+def wall_decal(mat, x, y, z, w, h, facing, opacity=1.0, depth=0.5):
+    """Decal on a wall facing compass heading `facing`."""
+    global ndec
+    objects.append({'id': f'decal_{ndec:04d}', 'type': 'decal', 'semantic': 'decal',
+                    'transform': {'position': to_engine((x, y, z)), 'rotation': yaw_quat(facing + 180)},
+                    'decal': {'material': mat, 'size': [round(w, 3), round(h, 3), depth], 'opacity': opacity}})
+    ndec += 1
+
+
+def centreline_dir(x, y):
+    """Unit direction of the nearest carriageway centreline segment."""
+    best, bd_ = None, 1e9
+    for pts, m in roads:
+        for a_, c_ in zip(pts, pts[1:]):
+            dx, dy = c_[0] - a_[0], c_[1] - a_[1]
+            l2 = dx * dx + dy * dy
+            if l2 < 1e-9:
+                continue
+            t_ = max(0.0, min(1.0, ((x - a_[0]) * dx + (y - a_[1]) * dy) / l2))
+            dd = math.hypot(x - a_[0] - dx * t_, y - a_[1] - dy * t_)
+            if dd < bd_:
+                bd_, best = dd, (dx / math.sqrt(l2), dy / math.sqrt(l2))
+    return best
+
+
+# zebra crossings (bars along the traffic direction, side by side across the road)
+for c in L['crossings']:
+    if not (X0 + 5 < c[0] < X1 - 5 and Y0 + 5 < c[1] < Y1 - 5) or HS.sample(g, d_road, *c) > 0.5:
+        continue
+    t = centreline_dir(*c)                            # along the road
+    n = (t[1], -t[0])
+    hd = math.degrees(math.atan2(t[0], t[1]))
+    for k in range(-5, 6):
+        x, y = c[0] + n[0] * k * 1.0, c[1] + n[1] * k * 1.0
+        ends = [(x + t[0] * e_, y + t[1] * e_) for e_ in (-1.6, 0.0, 1.6)]
+        if any(HS.sample(g, d_road, ex, ey) > -0.25 for (ex, ey) in ends):
+            continue
+        ground_decal('decal_paint_line', x, y, H(x, y), 3.0, 0.5, hd, repeat=6.0, opacity=0.9)
+# centre dashes on the main roads
+for pts, m in roads:
+    if m['width'] < 7.4 or m['kind'] == 'service':
+        continue
+    for (p, t) in resample(pts, 12.0):
+        if HS.sample(g, d_road, p[0] + t[1] * 4.5, p[1] - t[0] * 4.5) < 0 and HS.sample(g, d_road, p[0] - t[1] * 4.5, p[1] + t[0] * 4.5) < 0:
+            continue                                  # junction
+        if any(math.dist(p, c) < 6 for c in L['crossings']):
+            continue
+        ground_decal('decal_paint_line', p[0], p[1], H(*p), 3.0, 0.11, math.degrees(math.atan2(t[0], t[1])), repeat=1.5, opacity=0.85)
+# manholes and cracks
+for pts, m in roads:
+    for (p, t) in resample(pts, 37.0):
+        o = rng_d.uniform(-1.2, 1.2)
+        x, y = p[0] + t[1] * o, p[1] - t[0] * o
+        if X0 < x < X1 and Y0 < y < Y1:
+            ground_decal('decal_manhole', x, y, H(x, y), 0.7, 0.7, rng_d.uniform(0, 360))
+            if rng_d.random() < 0.5:
+                ground_decal('decal_crack', x + t[0] * 6, y + t[1] * 6, H(x, y), rng_d.uniform(1.5, 3.0), rng_d.uniform(1.0, 2.0), rng_d.uniform(0, 360), opacity=0.8)
+# parking: bay lines between stalls of each parked row and oil stains under the cars
+for (mdl, col, x, y, h) in parked:
+    hx, hy = math.sin(math.radians(h)), math.cos(math.radians(h))
+    if rng_d.random() < 0.55:
+        ground_decal('decal_oil', x + hx * 0.8, y + hy * 0.8, H(x, y), 1.1, 1.5, h + rng_d.uniform(-20, 20), opacity=0.75)
+for ring in L['parking']:
+    if len(ring) < 3 or abs(HL.area2(ring)) < 60:
+        continue
+    cx = sum(p[0] for p in ring) / len(ring)
+    cy = sum(p[1] for p in ring) / len(ring)
+    if not (X0 < cx < X1 and Y0 < cy < Y1):
+        continue
+    e = max(((ring[i], ring[(i + 1) % len(ring)]) for i in range(len(ring))), key=lambda ab: math.dist(*ab))
+    u = Vector((e[1][0] - e[0][0], e[1][1] - e[0][1])).normalized()
+    v = Vector((-u.y, u.x))
+    us = [Vector(p).dot(u) for p in ring]
+    vs = [Vector(p).dot(v) for p in ring]
+    for vv in np.arange(min(vs) + 2.6, max(vs) - 2.4, 0.5):
+        phase = (vv - min(vs)) % 16.0
+        if not (abs(phase - 2.6) < 0.25 or abs(phase - 13.4) < 0.25):
+            continue
+        for uu in np.arange(min(us) + 1.4 - 1.275, max(us) - 1.2, 2.55):
+            p = u * uu + v * vv
+            if all(HL.poly_contains(ring, q.x, q.y) for q in (p + v * 2.3, p - v * 2.3)):
+                ground_decal('decal_paint_line', p.x, p.y, H(p.x, p.y), 4.6, 0.1, math.degrees(math.atan2(v.x, v.y)), repeat=2.3, opacity=0.8)
+# viaduct: water streaks down the edge beams, every ~7 m
+for loop in deck_loops:
+    for i in range(len(loop)):
+        a, c = loop[i], loop[(i + 1) % len(loop)]
+        if on_end(a) and on_end(c):
+            continue
+        ln = math.dist(a, c)
+        t = ((c[0] - a[0]) / ln, (c[1] - a[1]) / ln)
+        out = (t[1], -t[0])
+        for s_ in np.arange(2.0, ln - 1.0, 7.0 + rng_d.uniform(-2, 2)):
+            x, y = a[0] + t[0] * s_ + out[0] * 0.02, a[1] + t[1] * s_ + out[1] * 0.02
+            wall_decal('decal_waterstreak', x, y, SOFFIT_Z + 0.75, rng_d.uniform(0.8, 1.6), 1.6, math.degrees(math.atan2(out[0], out[1])), opacity=0.8)
+# grime along the base of the shop walls and the station front
+for (a, u, ln, zb, z0, bd) in SHOP_WALLS:
+    out = (u[1], -u[0])
+    for s_ in np.arange(3.0, ln - 2.0, 8.0):
+        x, y = a[0] + u[0] * s_ + out[0] * 0.02, a[1] + u[1] * s_ + out[1] * 0.02
+        wall_decal('decal_grime_base', x, y, z0 + 0.35, 8.0, 0.8, math.degrees(math.atan2(out[0], out[1])), opacity=0.7)
+print(f'  {ndec} decals')
+
+
 # =============================================================== vegetation
 # November 1993: bare birches in groups on the lawns, pines on the rocky east hill
 # and along the rock cut, scattered spruces, shrubs along building bases. No OSM
 # trees exist here, so placement is rule-based (free lawn, clearances, clumping).
 print('Planting...')
 TREE_ASSET = 'assets/testmap/{}.model.json'
+# Bare maples / limes for the parks and streets (built once; RILL_TREES=1 rebuilds them).
+import tempfile  # noqa: E402
+import trees as TREES  # noqa: E402
+for nm_, seed_ in (('tree_maple_a', 51), ('tree_maple_b', 52)):
+    if os.environ.get('RILL_TREES') or not os.path.exists(os.path.join(ASSET_DIR, f'{nm_}.model.json')):
+        TREES.build_tree(nm_, 'broadleaf', seed_, ASSET_DIR, tempfile.mkdtemp(prefix='rill_impostor_'))
+MAPLE_ASSET = ASSET_REL + '/{}.model.json'
 rng_v = random.Random(77)
 
 
@@ -1359,16 +1710,43 @@ for _ in range(26000):
     if hill or (is_cut(x, y + 6) or is_cut(x, y - 6)):
         sp = 'tree_pine_a' if r < 0.38 else 'tree_pine_b' if r < 0.76 else 'tree_spruce_a' if r < 0.84 else 'tree_birch_a'
     else:
-        sp = 'tree_birch_a' if r < 0.32 else 'tree_birch_b' if r < 0.62 else 'tree_pine_a' if r < 0.74 else \
-            'tree_pine_b' if r < 0.84 else 'tree_spruce_b' if r < 0.9 else 'shrub_a'
+        sp = 'tree_birch_a' if r < 0.22 else 'tree_birch_b' if r < 0.42 else 'tree_maple_a' if r < 0.55 else \
+            'tree_maple_b' if r < 0.66 else 'tree_spruce_a' if r < 0.73 else 'tree_spruce_b' if r < 0.79 else \
+            'tree_pine_b' if r < 0.87 else 'shrub_a'
     birch = 'birch' in sp
-    rad = 3.2 if birch else 5.0 if 'pine' in sp else 4.2 if 'spruce' in sp else 2.2
+    rad = 3.2 if birch else 5.0 if 'pine' in sp else 5.5 if 'maple' in sp else 4.2 if 'spruce' in sp else 2.2
     if 'shrub' not in sp and db < 5.0:
         continue
     if not sc.ok(x, y, rad):
         continue
-    s_ = rng_v.uniform(0.8, 1.15) if birch else rng_v.uniform(0.85, 1.25)
+    s_ = rng_v.uniform(0.95, 1.35) if birch else rng_v.uniform(0.9, 1.3)
     plant(sp, x, y, round(s_, 3), rad)
+
+# Trees in round concrete planters on the station forecourt and the courtyard.
+b = MeshBuilder('tree_planter')
+ring_o = [(1.05 * math.cos(2 * math.pi * k / 20), 1.05 * math.sin(2 * math.pi * k / 20)) for k in range(20)]
+ring_i = [(0.88 * x, 0.88 * y) for (x, y) in ring_o]
+for k in range(20):
+    k2 = (k + 1) % 20
+    b.quad((*ring_o[k], -0.1), (*ring_o[k2], -0.1), (*ring_o[k2], 0.45), (*ring_o[k], 0.45), 'concrete_cast')
+    b.quad((*ring_o[k], 0.45), (*ring_o[k2], 0.45), (*ring_i[k2], 0.45), (*ring_i[k], 0.45), 'concrete_cast')
+    b.quad((*ring_i[k2], 0.3), (*ring_i[k], 0.3), (*ring_i[k], 0.45), (*ring_i[k2], 0.45), 'concrete_cast')
+b.face([(x, y, 0.3) for (x, y) in ring_i], 'dirt')
+build(b, None)
+planters = []
+for (px, py) in [(-84, -34), (-74, -36), (-64, -37), (-54, -36), (-70, -10), (-82, -12), (-44, 110), (-28, 118), (-36, 128)]:
+    if HS.sample(g, d_bldg, px, py) < 3.0 or not sc.ok(px, py, 4.0) or HS.sample(g, d_road, px, py) < 2.5:
+        continue
+    if any((px - p[2]) ** 2 + (py - p[3]) ** 2 < 4.0 ** 2 for p in parked):
+        continue
+    planters.append((px, py))
+    sc.add(px, py, 4.0)
+    plants.setdefault('tree_maple_a' if len(planters) % 2 else 'tree_maple_b', []).append(
+        (px, py, H(px, py) + 0.25, rng_v.uniform(0, 360), round(rng_v.uniform(0.8, 0.95), 3)))
+if planters:
+    objects.append({'id': 'planters', 'name': 'Tree planters', 'type': 'instances', 'semantic': 'prop', 'asset': f'{ASSET_REL}/tree_planter.glb',
+                    'castShadow': True, 'transform': {'position': [0, 0, 0]},
+                    'instances': [[*to_engine((x, y, H(x, y) + 0.1)), 0.0, 1.0] for (x, y) in planters]})
 
 # Shrubs along building bases (foundation planting) and path edges.
 for bd in L['buildings']:
@@ -1389,7 +1767,7 @@ ntrees = 0
 for name, lst in sorted(plants.items()):
     objects.append({
         'id': f'veg_{name}', 'name': f'Vegetation ({name})', 'type': 'instances', 'semantic': 'vegetation',
-        'asset': TREE_ASSET.format(name), 'castShadow': True,
+        'asset': (MAPLE_ASSET if 'maple' in name else TREE_ASSET).format(name), 'castShadow': True,
         'transform': {'position': [0, 0, 0]},
         'instances': [[*to_engine((x, y, z)), round(yaw, 1), s_] for (x, y, z, yaw, s_) in lst],
     })
@@ -1406,7 +1784,7 @@ def write_doc():
         ('Astrakangatan under the bridge', (32, -62, gz(32, -62)), -10, 6),
         ('Courtyard, Hässelby torg 14-22', (-36, 126, gz(-36, 126)), 120, 4),
         ('Platform', (-34, 3.0, PLAT_Z), 68, 0),
-        ('Rock cut', (130, 50.5, BED_Z + 0.4), -100, 2),
+        ('Rock cut', (104, 47.5, BED_Z + 0.3), 78, 3),
         ('Overview', (-120, -120, 60), 45, -24),
     ]
     for i, (name, p, yaw, pitch) in enumerate(VIEWS):
@@ -1434,7 +1812,7 @@ def write_doc():
     doc = {
         'format': 'rill.map', 'version': 1, 'name': 'hasselby',
         'description': 'Hässelby torg, November 1993 (vertical slice). Layout © OpenStreetMap contributors (ODbL). Generated by tools/blender/build_hasselby.py.',
-        'environment': {'preset': 'overcast'},
+        'environment': {'preset': 'november'},
         'spawn': {'position': to_engine((-62, -30, H(-62, -30) + 0.12)), 'yaw': 30, 'pitch': 0},
         'objects': objects,
     }

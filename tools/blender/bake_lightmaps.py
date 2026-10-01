@@ -235,25 +235,33 @@ for o in doc['objects']:
 print(f'[bake] scene: {n_objects} objects, {len(lightmapped)} lightmapped, import {time.time() - t_start:.1f}s')
 
 # ------------------------------------------------------------------ atlas packing
-rects = sorted(lightmapped, key=lambda it: -it[2][1])
-pages = []  # list of placements per page
-placement = {}
-cur = {'x': 0, 'y': 0, 'shelf': 0, 'items': []}
-for ob, oid, (w, h) in rects:
+# Shelf packing with back-fill: each shelf takes the tallest remaining chart, then any
+# chart that still fits beside it (no taller than the shelf), so pages fill up.
+left = sorted(lightmapped, key=lambda it: (-it[2][1], -it[2][0]))
+for ob, oid, (w, h) in left:
     if w > PAGE or h > PAGE:
         raise SystemExit(f'{oid}: chart {w}x{h} larger than page {PAGE}')
-    if cur['x'] + w > PAGE:
-        cur['x'] = 0
-        cur['y'] += cur['shelf']
-        cur['shelf'] = 0
-    if cur['y'] + h > PAGE:
-        pages.append(cur['items'])
-        cur = {'x': 0, 'y': 0, 'shelf': 0, 'items': []}
-    placement[oid] = (len(pages), cur['x'], cur['y'], w, h)
-    cur['items'].append(oid)
-    cur['x'] += w
-    cur['shelf'] = max(cur['shelf'], h)
-pages.append(cur['items'])
+pages = []  # list of placements per page
+placement = {}
+while left:
+    items, y = [], 0
+    while left:
+        x, shelf = 0, 0
+        rest = []
+        for it in left:
+            ob, oid, (w, h) = it
+            if (shelf and h > shelf) or x + w > PAGE or y + h > PAGE:
+                rest.append(it)
+                continue
+            placement[oid] = (len(pages), x, y, w, h)
+            items.append(oid)
+            x += w
+            shelf = max(shelf, h)
+        if not shelf:
+            break
+        left = rest
+        y += shelf
+    pages.append(items)
 used = sum(w * h for _, _, (w, h) in lightmapped)
 print(f'[bake] atlas: {len(pages)} page(s) of {PAGE}^2, {used / 1e6:.2f} Mtexels used ({100 * used / (len(pages) * PAGE * PAGE):.0f}%)')
 

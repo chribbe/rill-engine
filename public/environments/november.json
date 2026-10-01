@@ -1,0 +1,106 @@
+{
+  "name": "november",
+  "sun": {
+    "azimuth": 205,
+    "elevation": 7,
+    "intensity": 1,
+    "angularDiameter": 0.53
+  },
+  "sky": {
+    "intensity": 1,
+    "turbidity": 2.0,
+    "cloudCover": 1,
+    "cloudAltitude": 900,
+    "cloudSharpness": 0.3,
+    "cloudDensity": 1,
+    "overcastLuminance": 2400,
+    "overcastTint": [
+      0.92,
+      0.96,
+      1.02
+    ],
+    "wind": [
+      0,
+      0
+    ]
+  },
+  "fog": {
+    "enabled": true,
+    "density": 0.0016,
+    "height": 0,
+    "falloff": 0.035,
+    "hazeVisibilityKm": 5,
+    "anisotropy": 0.3,
+    "albedo": [
+      0.86,
+      0.9,
+      0.95
+    ],
+    "sunScatter": 0.15,
+    "startDistance": 0,
+    "maxOpacity": 1
+  },
+  "exposure": {
+    "ev100": 11.4,
+    "compensation": 0.2,
+    "auto": true,
+    "min": 9.8,
+    "max": 12.8
+  },
+  "ambient": {
+    "groundAlbedo": [
+      0.08,
+      0.085,
+      0.08
+    ],
+    "lightmapSky": 1,
+    "lightmapSun": 1,
+    "indirect": 1,
+    "envSpecular": 1
+  },
+  "lights": {
+    "intensity": 0
+  },
+  "weather": {
+    "wetness": 0.5,
+    "puddles": 0.2,
+    "dry": 1
+  },
+  "post": {
+    "tonemapper": "agx",
+    "contrast": 1,
+    "saturation": 0.92,
+    "temperature": -0.05,
+    "grade": {
+      "saturation": 1.05,
+      "slope": [
+        1.0,
+        1.0,
+        1.01
+      ],
+      "offset": [
+        0.002,
+        0.002,
+        0.008
+      ],
+      "power": [
+        1.0,
+        0.99,
+        0.98
+      ],
+      "shadowTint": [
+        -0.004,
+        0,
+        0.01,
+        1
+      ],
+      "highlightTint": [
+        -0.008,
+        0,
+        0.018,
+        1
+      ]
+    }
+  },
+  "notes": "Stockholm, November afternoon: low grey cloud, damp streets, dormant lawns, early dusk light."
+}

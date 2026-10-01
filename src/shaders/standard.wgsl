@@ -589,7 +589,9 @@ fn interiorRadiance(uv: vec2f, uvDx: vec2f, uvDy: vec2f, dpx: vec3f, dpy: vec3f,
         let band = floor(hp.y / 0.13);
         let item = ihash(vec3f(floor(hp.x * 14.0), band, h.x * 91.0));
         let shelf = fract(hp.y / 0.13) < 0.12;
-        alb = select(mix(vec3f(0.5, 0.15, 0.1), vec3f(0.15, 0.3, 0.6), item.x) * (0.4 + 0.8 * item.y), vec3f(0.5), shelf);
+        // packaging: muted, varied colours (not toy primaries); shelf edges light grey
+        let pc = mix(mix(vec3f(0.46, 0.3, 0.22), vec3f(0.3, 0.36, 0.42), item.x), vec3f(0.55, 0.5, 0.36), item.z * 0.6);
+        alb = select(pc * (0.45 + 0.55 * item.y), vec3f(0.5), shelf);
       }
     } else if (style == 3u) {
       if (hp.y < 0.3 && abs(hp.x - 0.5) < 0.3) { alb = vec3f(0.3, 0.3, 0.32); }   // ticket counter
@@ -598,7 +600,7 @@ fn interiorRadiance(uv: vec2f, uvDx: vec2f, uvDy: vec2f, dpx: vec3f, dpy: vec3f,
     alb = wall;
     if (style == 1u && hp.y > 0.05 && hp.y < 0.62) {
       let item = ihash(vec3f(floor(hp.z * 10.0), floor(hp.y / 0.13), h.y * 53.0));
-      alb = mix(vec3f(0.45, 0.4, 0.2), vec3f(0.2, 0.35, 0.25), item.x) * (0.5 + 0.6 * item.z);
+      alb = mix(vec3f(0.42, 0.38, 0.28), vec3f(0.28, 0.33, 0.3), item.x) * (0.5 + 0.5 * item.z);
     }
   } else if (d.y < 0.0) {
     alb = floorC;

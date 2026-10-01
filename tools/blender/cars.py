@@ -53,13 +53,13 @@ SPECS = {
     # Saab 900 three-door lookalike: long sloping nose, wraparound windscreen, hatch.
     'saga900': dict(
         L=4.74, half=0.845, axles=(1.17, 3.69), r=0.31, track=1.43,
-        top=[(0, 0.93), (0.06, 0.98), (0.4, 1.0), (1.45, 1.39), (1.65, 1.42), (2.75, 1.42), (2.9, 1.39), (3.55, 0.98), (4.55, 0.8), (4.74, 0.71)],
-        belt=[(0, 0.92), (0.8, 0.96), (3.55, 0.93), (4.74, 0.7)],
-        bot=[(0, 0.38), (0.3, 0.3), (4.45, 0.3), (4.74, 0.38)],
-        width=[(0, 0.82), (0.3, 0.845), (4.3, 0.845), (4.74, 0.78)],
-        cabin=(0.4, 3.55), glass_top=[(0.45, 1.42), (2.92, 3.53)],
-        pillars=[(0.4, 1.3), (2.15, 2.28), (3.42, 3.55)],
-        tumble=0.18, bumper=(0.13, 0.33, 0.52), lights='saab',
+        top=[(0, 0.96), (0.05, 1.02), (0.3, 1.05), (1.3, 1.38), (1.55, 1.425), (2.6, 1.43), (2.8, 1.4), (3.6, 0.96), (4.3, 0.84), (4.62, 0.74), (4.74, 0.66)],
+        belt=[(0, 0.95), (0.8, 0.98), (3.6, 0.92), (4.74, 0.64)],
+        bot=[(0, 0.4), (0.3, 0.3), (4.4, 0.3), (4.74, 0.36)],
+        width=[(0, 0.8), (0.35, 0.845), (4.2, 0.845), (4.55, 0.82), (4.74, 0.74)],
+        cabin=(0.3, 3.6), glass_top=[(0.34, 1.28), (2.84, 3.58)],
+        pillars=[(0.3, 1.22), (2.1, 2.22), (3.5, 3.6)],
+        tumble=0.2, bumper=(0.13, 0.33, 0.52), lights='saab',
     ),
     # VW Golf II lookalike: two-box hatch.
     'gulf': dict(
@@ -191,6 +191,32 @@ def build_car(b, spec):
             if n.x * sgn < 0:
                 pts = pts[::-1]
             b.face(pts, mat)
+
+    # side rubbing strips and door shut lines (thin dark quads just proud of the side)
+    zs0, zs1 = spec['bumper'][1] + 0.12, spec['bumper'][1] + 0.18
+    for i in range(len(xs) - 1):
+        x0, x1 = xs[i], xs[i + 1]
+        if x0 < 0.3 or x1 > Lc - 0.3:
+            continue
+        if any(abs((x0 + x1) / 2 - ax) < ra for ax in spec['axles']):
+            continue
+        for side in (1, -1):
+            w0, w1 = secs[i][2][0] + 0.006, secs[i + 1][2][0] + 0.006
+            q = [(x0, w0 * side, zs0), (x1, w1 * side, zs0), (x1, w1 * side, zs1), (x0, w0 * side, zs1)]
+            b.face(q[::-1] if side > 0 else q, 'car_trim')
+    cuts = [spec['pillars'][-1][0] + 0.02]                  # front door leading edge (A pillar)
+    if len(spec['pillars']) > 2:
+        cuts.append((spec['pillars'][-2][0] + spec['pillars'][-2][1]) / 2)   # B pillar
+    if len(spec['pillars']) > 3 or spec.get('rear_glass'):
+        cuts.append(spec['pillars'][-3][1] - 0.03)          # rear door trailing edge
+    for xc in cuts:
+        i = min(range(len(xs)), key=lambda k: abs(xs[k] - xc))
+        sec = secs[i]
+        for side in (1, -1):
+            w = sec[3][0] + 0.004
+            zlo, zhi = sec[2][1] + 0.02, sec[4][1]
+            q = [(xc - 0.006, w * side, zlo), (xc + 0.006, w * side, zlo), (xc + 0.006, w * side, zhi), (xc - 0.006, w * side, zhi)]
+            b.face(q[::-1] if side > 0 else q, 'car_trim')
 
     # bumpers (black rubber / aluminium-capped boxes), wrapping the corners
     bd, bz0, bz1 = spec['bumper']

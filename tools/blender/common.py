@@ -300,17 +300,20 @@ def _uv_area(f, uv0):
 
 def _split_sparse(isl, uv0, min_fill=0.55):
     """Greedy region growing: splits an island whose faces fill its best bounding
-    rectangle poorly (e.g. a ribbon around a corner) into well-filled charts."""
-    faces = set(isl)
-    area = {f: _uv_area(f, uv0) for f in isl}
-    pts = {f: [(l[uv0].uv.x, l[uv0].uv.y) for l in f.loops] for f in isl}
+    rectangle poorly (e.g. a ribbon around a corner) into well-filled charts.
+    Deterministic: faces are visited in index order (never in set/hash order)."""
+    order = sorted(isl, key=lambda f: f.index)
+    pos = {f: k for k, f in enumerate(order)}
+    area = {f: _uv_area(f, uv0) for f in order}
+    pts = {f: [(l[uv0].uv.x, l[uv0].uv.y) for l in f.loops] for f in order}
+    left = dict.fromkeys(order)
     charts = []
-    left = set(isl)
+    nbrs = lambda f: sorted((g for e in f.edges for g in e.link_faces if g in left), key=lambda g: pos[g])
     while left:
-        seed = max(left, key=lambda f: area[f])
+        seed = max(left, key=lambda f: (area[f], -pos[f]))
         group, gpts, garea = [seed], list(pts[seed]), area[seed]
-        left.discard(seed)
-        frontier = [g for e in seed.edges for g in e.link_faces if g in left]
+        del left[seed]
+        frontier = nbrs(seed)
         while frontier:
             f = frontier.pop(0)
             if f not in left:
@@ -321,8 +324,8 @@ def _split_sparse(isl, uv0, min_fill=0.55):
             group.append(f)
             gpts += pts[f]
             garea += area[f]
-            left.discard(f)
-            frontier += [g for e in f.edges for g in e.link_faces if g in left and g in faces]
+            del left[f]
+            frontier += nbrs(f)
         charts.append(group)
     return charts
 
@@ -337,6 +340,7 @@ def pack_lightmap_uvs(bm, uv0, uv1, tpm, pad=2):
     on every side, and charts are rotated to landscape and shelf-packed.
     Returns (W, H) in texels; UV1 is normalised to that rectangle.
     """
+    bm.faces.index_update()
     islands = bmesh_utils.bmesh_linked_uv_islands(bm, uv0)
     # Islands sharing an explicit chart id are packed together (union-find).
     lay = bm.faces.layers.int.get('chart')
@@ -381,7 +385,7 @@ def pack_lightmap_uvs(bm, uv0, uv1, tpm, pad=2):
         if ra >= (max(xs) - min(xs)) * (max(ys) - min(ys)) * 0.98:
             ang = 0.0          # axis-aligned is (nearly) as good: keep texels on the world grid
         c, s_ = math.cos(-ang), math.sin(-ang)
-        loc = lambda u, v: (u * c - v * s_, u * s_ + v * c)
+        loc = lambda u, v, c=c, s_=s_: (u * c - v * s_, u * s_ + v * c)   # bind this chart's rotation
         lus = [loc(*p) for p in pts]
         u0, u1 = min(p[0] for p in lus), max(p[0] for p in lus)
         v0, v1 = min(p[1] for p in lus), max(p[1] for p in lus)
@@ -431,6 +435,9 @@ def pack_lightmap_uvs(bm, uv0, uv1, tpm, pad=2):
                     tx = (u - it['u0']) * tpm
                     ty = (v - it['v0']) * tpm
                 l[uv1].uv = ((it['x'] + pad + tx) / W, (it['y'] + pad + ty) / H)
+    bad = sum(1 for f in bm.faces for l in f.loops if not (-1e-4 <= l[uv1].uv.x <= 1.0001 and -1e-4 <= l[uv1].uv.y <= 1.0001))
+    if bad:
+        raise RuntimeError(f'lightmap packing produced {bad} UVs outside the atlas')
     return (W, H)
 
 

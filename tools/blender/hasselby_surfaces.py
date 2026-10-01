@@ -107,7 +107,7 @@ def subtract(a, b):
     return np.maximum(a, -b)
 
 
-def march(g, f):
+def march(g, f, split=0):
     """Marching squares of f < 0. Returns (polygons, boundary segments).
 
     Polygons are CCW lists of (x, y); interior cells are merged into row runs.
@@ -132,8 +132,11 @@ def march(g, f):
         ends = idx[np.r_[np.diff(idx) > 1, True]] + 1
         ya, yb = y0 + j * res, y0 + (j + 1) * res
         for s, e in zip(starts, ends):
-            xa, xb = x0 + s * res, x0 + e * res
-            polys.append([(xa, ya), (xb, ya), (xb, yb), (xa, yb)])
+            # optional breaks every `split` cells (seam lines that bound later merges)
+            cuts = [s] + ([c for c in range((s // split + 1) * split, e, split)] if split else []) + [e]
+            for a_, b_ in zip(cuts, cuts[1:]):
+                xa, xb = x0 + a_ * res, x0 + b_ * res
+                polys.append([(xa, ya), (xb, ya), (xb, yb), (xa, yb)])
     segs = []
     mixed = np.argwhere((case > 0) & (case < 15))
     for j, i in mixed:

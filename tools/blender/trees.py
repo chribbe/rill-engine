@@ -353,7 +353,59 @@ def shrub(seed, height=2.2):
     return sk
 
 
-SPECIES = {'pine': pine, 'spruce': spruce, 'birch': birch, 'birch_bare': lambda seed: birch(seed, bare=True), 'shrub': shrub}
+def broadleaf(seed, height=13.5):
+    """Bare deciduous park/street tree (Norway maple, lime): a short clear trunk,
+    scaffold limbs rising into an ovate crown, three orders of branching and
+    dead-twig cards at the tips (November)."""
+    rnd = random.Random(seed)
+    sk = Skeleton('broadleaf', height * rnd.uniform(0.9, 1.1))
+    sk.foliage, sk.bark = 'twigs_dead', 'bark_broadleaf'
+    H = sk.height
+    _trunk(rnd, sk, 0.24, 0.03, rnd.uniform(0.06, 0.14), seed)
+    clear = H * rnd.uniform(0.2, 0.27)
+
+    def branch(p0, d, L, r, level):
+        side = _rand_perp(rnd, d)
+        bend = rnd.uniform(0.05, 0.18)
+        pts = [p0 + d * (L * t) + side * (bend * L * math.sin(math.pi * t)) + UP * (0.06 * L * t * (1 - t)) for t in (0.0, 0.34, 0.68, 1.0)]
+        sk.limbs.append(Limb(pts, [r, r * 0.78, r * 0.58, max(0.006, r * 0.38)], min(level, 2)))
+        if level >= 3 or L < 0.9:
+            for _ in range(rnd.randint(2, 3)):
+                ax = (d * 0.8 + _rand_perp(rnd, d) * 0.6 + UP * 0.35).normalized()
+                ln = rnd.uniform(0.9, 1.4)
+                _card(rnd, sk, pts[-1] - d * 0.25, ax, ln, ln * 0.9, roll=rnd.uniform(-1.0, 1.0))
+            return
+        nk = 3 if level == 1 else 2
+        for k in range(nk):
+            u = rnd.uniform(0.45, 0.92) if k else rnd.uniform(0.85, 1.0)
+            p, tan = _sample(pts, u)
+            nd = (_rotate(tan, _rand_perp(rnd, tan), rnd.uniform(0.35, 0.75)) + UP * rnd.uniform(0.1, 0.35)).normalized()
+            branch(p, nd, L * rnd.uniform(0.5, 0.68), r * 0.62, level + 1)
+        if level >= 2:
+            p, tan = _sample(pts, 0.6)
+            ln = rnd.uniform(0.8, 1.2)
+            _card(rnd, sk, p, (tan + UP * 0.4).normalized(), ln, ln * 0.8)
+
+    n = rnd.randint(4, 6)
+    for i in range(n):
+        z = clear + (H * 0.55 - clear) * (i / max(1, n - 1)) + rnd.uniform(-0.2, 0.2)
+        c, rz = _trunk_at(sk, z)
+        az = i * 2.39996 + rnd.uniform(-0.35, 0.35)
+        out = Vector((math.cos(az), math.sin(az), 0))
+        lean = rnd.uniform(0.55, 0.95) - 0.25 * (i / n)
+        d = (out * math.sin(lean) + UP * math.cos(lean)).normalized()
+        L = (H - z) * rnd.uniform(0.55, 0.75)
+        branch(c + out * rz * 0.6, d, L, rz * 0.62, 1)
+    # leader crown
+    top, _r = _trunk_at(sk, H * 0.8)
+    branch(top, (UP + _rand_perp(rnd, UP) * 0.2).normalized(), H * 0.22, 0.05, 2)
+    sk.crown_center = (clear + H) * 0.55
+    sk.crown_squash = 0.8
+    return sk
+
+
+SPECIES = {'pine': pine, 'spruce': spruce, 'birch': birch, 'birch_bare': lambda seed: birch(seed, bare=True), 'shrub': shrub,
+           'broadleaf': broadleaf}
 
 
 # ------------------------------------------------------------ geometry

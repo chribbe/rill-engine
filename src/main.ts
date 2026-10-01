@@ -97,7 +97,7 @@ async function main() {
   const renderables: Renderable[] = world.renderables;
   const stressList: Renderable[] = [];
 
-  const presets = ['clear', 'overcast', 'foggy', 'dusk', 'winter', 'bluehour'];
+  const presets = ['clear', 'overcast', 'foggy', 'dusk', 'winter', 'bluehour', 'november', 'november_evening'];
   const setPreset = async (name: string) => {
     env.set(deepMerge(await loadPreset(name), name === world.doc.environment.preset ? world.doc.environment.overrides : undefined));
   };

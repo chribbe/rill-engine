@@ -1,0 +1,111 @@
+{
+  "name": "november_evening",
+  "sun": {
+    "azimuth": 235,
+    "elevation": -9,
+    "intensity": 1,
+    "angularDiameter": 0.53
+  },
+  "sky": {
+    "intensity": 1,
+    "turbidity": 1.2,
+    "cloudCover": 1,
+    "cloudAltitude": 900,
+    "cloudSharpness": 0.25,
+    "cloudDensity": 1,
+    "overcastLuminance": 6,
+    "overcastTint": [
+      0.75,
+      0.8,
+      0.95
+    ],
+    "wind": [
+      0,
+      0
+    ],
+    "tint": [
+      0.7,
+      0.8,
+      1.0
+    ]
+  },
+  "fog": {
+    "enabled": true,
+    "density": 0.005,
+    "height": 0,
+    "falloff": 0.04,
+    "hazeVisibilityKm": 3,
+    "anisotropy": 0.6,
+    "albedo": [
+      0.8,
+      0.82,
+      0.92
+    ],
+    "sunScatter": 0.2,
+    "startDistance": 0,
+    "maxOpacity": 1
+  },
+  "exposure": {
+    "ev100": 3.6,
+    "compensation": -0.6,
+    "auto": true,
+    "min": 2.0,
+    "max": 5.0
+  },
+  "ambient": {
+    "groundAlbedo": [
+      0.1,
+      0.1,
+      0.1
+    ],
+    "lightmapSky": 1,
+    "lightmapSun": 1,
+    "indirect": 1,
+    "envSpecular": 1
+  },
+  "lights": {
+    "intensity": 1
+  },
+  "weather": {
+    "wetness": 0.8,
+    "puddles": 0.4,
+    "dry": 1
+  },
+  "post": {
+    "tonemapper": "agx",
+    "contrast": 1,
+    "saturation": 1,
+    "temperature": -0.2,
+    "grade": {
+      "saturation": 1.3,
+      "slope": [
+        0.97,
+        1,
+        1.03
+      ],
+      "offset": [
+        -0.004,
+        0.01,
+        0.028
+      ],
+      "power": [
+        1.02,
+        0.98,
+        0.96
+      ],
+      "shadowTint": [
+        -0.02,
+        0,
+        0.025,
+        1
+      ],
+      "highlightTint": [
+        0.01,
+        0,
+        -0.01,
+        1
+      ]
+    }
+  },
+  "notes": "Stockholm, wet November evening (~17:00): rain-soaked streets under sodium lamps, lit shops and windows, low cloud."
+}

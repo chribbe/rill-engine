@@ -1,0 +1,21 @@
+{
+ "format": "rill.model",
+ "version": 1,
+ "name": "tree_maple_b",
+ "semantic": "vegetation",
+ "lods": [
+  {
+   "mesh": "tree_maple_b.glb",
+   "distance": 0.0
+  },
+  {
+   "mesh": "tree_maple_b_lod1.glb",
+   "distance": 21.0
+  },
+  {
+   "mesh": "tree_maple_b_lod2.glb",
+   "distance": 66.0
+  }
+ ],
+ "notes": "broadleaf (seed 52); LOD distances in metres at scale 1, scaled by instance size."
+}
