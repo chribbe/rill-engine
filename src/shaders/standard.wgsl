@@ -51,6 +51,8 @@ override USE_DIR_LIGHTMAP: bool = true;
 override USE_PROBE_VOLUME: bool = true;
 override USE_REFL_PROBES: bool = true;
 override USE_BLEND: bool = true;
+// Dithered LOD crossfade (only pipelines that draw instances inside a transition band).
+override USE_LOD_FADE: bool = false;
 
 // Half-Life 2 radiosity normal mapping basis (tangent space).
 const RNM0: vec3f = vec3f(0.81649658, 0.0, 0.57735027);
@@ -150,11 +152,15 @@ struct VSOut {
   @location(5) viewDepth: f32,
   @location(6) @interpolate(flat) slot: u32,
   @location(7) color: vec4f,
+  // LOD crossfade: 0 = none, t in (0,1] = incoming (visible where dither < t), -t = outgoing.
+  @location(8) @interpolate(flat) lodFade: f32,
 };
 
 @vertex
 fn vsMain(v: VSIn) -> VSOut {
-  let slot = visibleList[v.instance];
+  // Visible-list entry: slot (24 bits) | fade (6 bits) | mode (2 bits: 1 out, 2 in).
+  let e = visibleList[v.instance];
+  let slot = e & 0xFFFFFFu;
   let inst = instances[slot];
   let wp = inst.model * vec4f(v.position, 1.0);
   var o: VSOut;
@@ -167,7 +173,17 @@ fn vsMain(v: VSIn) -> VSOut {
   o.viewDepth = -(frame.view * wp).z;
   o.slot = slot;
   o.color = v.color;
+  let mode = e >> 30u;
+  let q = f32((e >> 24u) & 63u) / 63.0;
+  o.lodFade = select(select(0.0, -q, mode == 1u), q, mode == 2u);
   return o;
+}
+
+/** Complementary screen-space dither for LOD crossfades: each pixel shows exactly one LOD. */
+fn lodFadeKill(pos: vec2f, f: f32) -> bool {
+  if (f == 0.0) { return false; }
+  let d = ign(pos + vec2f(37.0, 17.0));
+  return select((d < -f), (d >= f), f > 0.0);
 }
 
 // ------------------------------------------------------------------ helpers
@@ -703,6 +719,7 @@ fn finalize(o: ShadeOut) -> vec4f {
 
 @fragment
 fn fsOpaque(in: VSOut, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+  if (USE_LOD_FADE && lodFadeKill(in.pos.xy, in.lodFade)) { discard; }
   return finalize(shade(in, front));
 }
 
@@ -715,6 +732,7 @@ struct MaskedOut {
 // alpha-to-coverage mask so the colour alpha stays free for the resolve weight.
 @fragment
 fn fsMasked(in: VSOut, @builtin(front_facing) front: bool) -> MaskedOut {
+  if (USE_LOD_FADE && lodFadeKill(in.pos.xy, in.lodFade)) { discard; }
   let uv = in.uv0 * material.uvTransform.xy + material.uvTransform.zw;
   let texSize = vec2f(textureDimensions(baseColorTex));
   let dUv = max(length(dpdx(uv) * texSize), length(dpdy(uv) * texSize));
@@ -752,6 +770,7 @@ struct DepthOut {
 
 @fragment
 fn fsDepthMasked(in: VSOut) -> DepthOut {
+  if (USE_LOD_FADE && lodFadeKill(in.pos.xy, in.lodFade)) { discard; }
   let uv = in.uv0 * material.uvTransform.xy + material.uvTransform.zw;
   let texSize = vec2f(textureDimensions(baseColorTex));
   let dUv = max(length(dpdx(uv) * texSize), length(dpdy(uv) * texSize));
@@ -781,6 +800,7 @@ fn fsDepthMasked(in: VSOut) -> DepthOut {
 // writes are masked off, so alpha only drives coverage.
 @fragment
 fn fsDepthA2C(in: VSOut) -> @location(0) vec4f {
+  if (USE_LOD_FADE && lodFadeKill(in.pos.xy, in.lodFade)) { discard; }
   let uv = in.uv0 * material.uvTransform.xy + material.uvTransform.zw;
   let texSize = vec2f(textureDimensions(baseColorTex));
   let dUv = max(length(dpdx(uv) * texSize), length(dpdy(uv) * texSize));

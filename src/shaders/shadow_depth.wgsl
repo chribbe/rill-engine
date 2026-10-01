@@ -32,13 +32,13 @@ struct VOut {
 
 @vertex
 fn vsMain(@location(0) position: vec3f, @builtin(instance_index) ii: u32) -> @builtin(position) vec4f {
-  let inst = instances[visibleList[ii]];
+  let inst = instances[visibleList[ii] & 0xFFFFFFu];
   return view.viewProj * (inst.model * vec4f(position, 1.0));
 }
 
 @vertex
 fn vsMasked(@location(0) position: vec3f, @location(3) uv0: vec2f, @builtin(instance_index) ii: u32) -> VOut {
-  let inst = instances[visibleList[ii]];
+  let inst = instances[visibleList[ii] & 0xFFFFFFu];
   var o: VOut;
   o.pos = view.viewProj * (inst.model * vec4f(position, 1.0));
   o.uv = uv0 * material.uvTransform.xy + material.uvTransform.zw;

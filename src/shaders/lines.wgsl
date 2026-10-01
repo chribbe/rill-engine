@@ -22,7 +22,7 @@ fn vsLines(@location(0) p: vec3f, @location(1) c: vec4f) -> VOut {
 // Wireframe: mesh edges via a line-list index buffer, instanced like the mesh.
 @vertex
 fn vsWire(@location(0) p: vec3f, @builtin(instance_index) ii: u32) -> VOut {
-  let inst = instances[visibleList[ii]];
+  let inst = instances[visibleList[ii] & 0xFFFFFFu];
   var o: VOut;
   o.pos = frame.viewProj * (inst.model * vec4f(p, 1.0));
   // Pull slightly toward the camera (reverse-Z: larger = closer).

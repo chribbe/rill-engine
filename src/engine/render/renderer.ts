@@ -129,6 +129,8 @@ export interface RenderSettings {
   showProbes: boolean;
   /** LOD distance multiplier (>1 keeps detail further away). */
   lodBias: number;
+  /** LOD crossfade band, ± fraction of each switch distance (0 = hard switches). */
+  lodFade: number;
 }
 
 export function defaultRenderSettings(): RenderSettings {
@@ -178,6 +180,7 @@ export function defaultRenderSettings(): RenderSettings {
     reflectionProbes: true,
     showProbes: false,
     lodBias: 1,
+    lodFade: 0.1,
   };
 }
 
@@ -201,12 +204,14 @@ interface Draw {
   count: number;
   masked: boolean;
   doubleSided: boolean;
+  /** Instances inside a LOD transition band (dithered crossfade pipeline variant). */
+  fade: boolean;
 }
 
 class Bucket {
   slots = new Uint32Array(64);
   count = 0;
-  constructor(public prim: GpuPrimitive, public material: Material) {}
+  constructor(public prim: GpuPrimitive, public material: Material, public fade = false) {}
   push(s: number) {
     if (this.count >= this.slots.length) {
       const n = new Uint32Array(this.slots.length * 2);
@@ -233,15 +238,16 @@ class DrawList {
     this.instances = 0;
   }
 
-  add(prim: GpuPrimitive, mat: Material, slot: number) {
-    const key = prim.id * 65536 + mat.id;
+  /** `entry` = instance slot, optionally with LOD-fade bits (see `fadeEntry`). */
+  add(prim: GpuPrimitive, mat: Material, entry: number, fade = false) {
+    const key = (prim.id * 65536 + mat.id) * 2 + (fade ? 1 : 0);
     let b = this.buckets.get(key);
     if (!b) {
-      b = new Bucket(prim, mat);
+      b = new Bucket(prim, mat, fade);
       this.buckets.set(key, b);
     }
     if (b.count === 0) this.active.push(b);
-    b.push(slot);
+    b.push(entry);
   }
 
   /** Sorts and appends instance slots to `out` starting at `offset`; returns the new offset. */
@@ -251,6 +257,7 @@ class DrawList {
       if (ma !== mb) return ma - mb;
       const da = a.material.doubleSided ? 1 : 0, db = b.material.doubleSided ? 1 : 0;
       if (da !== db) return da - db;
+      if (a.fade !== b.fade) return a.fade ? 1 : -1;
       if (a.material.id !== b.material.id) return a.material.id - b.material.id;
       return a.prim.id - b.prim.id;
     });
@@ -258,7 +265,7 @@ class DrawList {
     for (const b of this.active) {
       out.grow(o + b.count);
       out.data.set(b.slots.subarray(0, b.count), o);
-      this.draws.push({ prim: b.prim, material: b.material, first: o, count: b.count, masked: b.material.masked, doubleSided: b.material.doubleSided });
+      this.draws.push({ prim: b.prim, material: b.material, first: o, count: b.count, masked: b.material.masked, doubleSided: b.material.doubleSided, fade: b.fade });
       this.triangles += (b.prim.indexCount / 3) * b.count;
       this.instances += b.count;
       o += b.count;
@@ -607,9 +614,9 @@ export class Renderer {
   /** Diagnostic: replaces the opaque fragment entry point (e.g. 'fsDiagTrivial'). */
   diagFragment: string | null = null;
 
-  private stdPipeline(masked: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa): GPURenderPipeline {
+  private stdPipeline(masked: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa, fade = false): GPURenderPipeline {
     const v = this.variant(mat);
-    const key = `std:${masked}:${doubleSided}:${msaa}:${this.diagFragment}:${v.key}`;
+    const key = `std:${masked}:${doubleSided}:${msaa}:${this.diagFragment}:${v.key}:${fade}`;
     let p = this.pipelines.get(key);
     if (!p) {
       const mod = shaderModule(this.device, this.diagFragment ? 'standard_diag' : 'standard');
@@ -617,7 +624,7 @@ export class Renderer {
         label: key,
         layout: this.stdPipelineLayout,
         vertex: { module: mod, entryPoint: 'vsMain', buffers: VERTEX_LAYOUT_FULL },
-        fragment: { module: mod, entryPoint: this.diagFragment ?? (masked ? 'fsMasked' : 'fsOpaque'), targets: [{ format: this.hdrFormat }], constants: v.constants },
+        fragment: { module: mod, entryPoint: this.diagFragment ?? (masked ? 'fsMasked' : 'fsOpaque'), targets: [{ format: this.hdrFormat }], constants: { ...v.constants, USE_LOD_FADE: fade ? 1 : 0 } },
         primitive: { topology: 'triangle-list', cullMode: doubleSided ? 'none' : 'back', frontFace: 'ccw' },
         depthStencil: { format: this.depthFormat, depthWriteEnabled: true, depthCompare: 'greater' },
         multisample: { count: msaa ? 4 : 1 },
@@ -628,11 +635,13 @@ export class Renderer {
   }
 
   /** Masked geometry: depth/coverage prepass (colour writes off) or the equal-depth lit pass. */
-  private maskedPipeline(prepass: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa): GPURenderPipeline {
+  private maskedPipeline(prepass: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa, fade = false): GPURenderPipeline {
     // Hardware A2C when multisampled (fast path); discard-based test otherwise.
     const hwA2C = prepass && msaa && this.settings.alphaToCoverage && this.hwA2C;
     const v = this.variant(mat);
-    const key = `masked:${prepass}:${doubleSided}:${msaa}:${hwA2C}:${prepass ? '' : v.key}`;
+    // Only the prepass needs the fade variant: the equal-depth colour pass inherits its coverage.
+    const fadeV = prepass && fade;
+    const key = `masked:${prepass}:${doubleSided}:${msaa}:${hwA2C}:${prepass ? '' : v.key}:${fadeV}`;
     let p = this.pipelines.get(key);
     if (!p) {
       const mod = shaderModule(this.device, 'standard');
@@ -644,7 +653,7 @@ export class Renderer {
           module: mod,
           entryPoint: prepass ? (hwA2C ? 'fsDepthA2C' : 'fsDepthMasked') : 'fsMaskedColor',
           targets: [{ format: this.hdrFormat, writeMask: prepass ? 0 : GPUColorWrite.ALL }],
-          constants: v.constants,
+          constants: { ...v.constants, USE_LOD_FADE: fadeV ? 1 : 0 },
         },
         primitive: { topology: 'triangle-list', cullMode: doubleSided ? 'none' : 'back', frontFace: 'ccw' },
         depthStencil: prepass
@@ -1107,6 +1116,33 @@ export class Renderer {
     return lods[i];
   }
 
+  /**
+   * Inside a band of ±lodFade × switch distance, draws both neighbouring LODs with
+   * complementary dither masks (Source-style dithered transition, no popping).
+   * Returns false outside every band.
+   */
+  private addLodCrossfade(list: DrawList, r: Renderable, eye: ArrayLike<number>, k2: number): boolean {
+    const lods = r.lods!;
+    const dx = (r.worldMin[0] + r.worldMax[0]) * 0.5 - eye[0];
+    const dy = (r.worldMin[1] + r.worldMax[1]) * 0.5 - eye[1];
+    const dz = (r.worldMin[2] + r.worldMax[2]) * 0.5 - eye[2];
+    const d = Math.sqrt((dx * dx + dy * dy + dz * dz) * k2);
+    const band = this.settings.lodFade;
+    for (let k = 1; k < lods.length; k++) {
+      const b = Math.sqrt(lods[k].dist2), w = b * band;
+      if (d <= b - w || d >= b + w) continue;
+      const t = (d - (b - w)) / (2 * w);
+      const out = lods[k - 1], inc = lods[k];
+      const qo = Math.min(63, Math.round(t * 63)), qi = Math.max(1, Math.round(t * 63));
+      const eo = (r.slot | (qo << 24) | (1 << 30)) >>> 0, ei = (r.slot | (qi << 24) | (2 << 30)) >>> 0;
+      for (let p = 0; p < out.mesh.primitives.length; p++) list.add(out.mesh.primitives[p], out.materials[p], eo, true);
+      for (let p = 0; p < inc.mesh.primitives.length; p++) list.add(inc.mesh.primitives[p], inc.materials[p], ei, true);
+      this.lodCounts[t < 0.5 ? k - 1 : k]++;
+      return true;
+    }
+    return false;
+  }
+
   private buildLists(planes: Plane[], renderables: Renderable[], shadowsOn: boolean, eye: ArrayLike<number>, fovY: number) {
     const main = this.mainList;
     main.reset();
@@ -1119,6 +1155,7 @@ export class Renderer {
       if (!r.visible) continue;
       if (!aabbVisible(planes, r.worldMin, r.worldMax)) continue;
       visibleObjects++;
+      if (r.lods && this.settings.lodFade > 0 && this.addLodCrossfade(main, r, eye, k2)) continue;
       const l = this.selectLod(r, eye, k2);
       const prims = l.mesh.primitives;
       for (let k = 0; k < prims.length; k++) main.add(prims[k], l.materials[k], r.slot);
@@ -1219,11 +1256,11 @@ export class Renderer {
     if (overdraw) {
       drawList(() => true, (dr) => this.overdrawPipeline(dr.doubleSided));
     } else if (this.maskedMode === 'direct') {
-      drawList(() => true, (dr) => this.stdPipeline(dr.masked, dr.doubleSided, dr.material, msaa));
+      drawList(() => true, (dr) => this.stdPipeline(dr.masked, dr.doubleSided, dr.material, msaa, dr.fade));
     } else {
       // Opaque first (fills depth), then masked prepass, then masked colour at equal depth.
-      drawList((d) => !d.masked, (dr) => this.stdPipeline(false, dr.doubleSided, dr.material, msaa));
-      drawList((d) => d.masked, (dr) => this.maskedPipeline(true, dr.doubleSided, dr.material, msaa));
+      drawList((d) => !d.masked, (dr) => this.stdPipeline(false, dr.doubleSided, dr.material, msaa, dr.fade));
+      drawList((d) => d.masked, (dr) => this.maskedPipeline(true, dr.doubleSided, dr.material, msaa, dr.fade));
       if (this.maskedMode === 'prepass') drawList((d) => d.masked, (dr) => this.maskedPipeline(false, dr.doubleSided, dr.material, msaa));
     }
     if (!overdraw) {

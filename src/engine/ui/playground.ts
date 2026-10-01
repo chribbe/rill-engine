@@ -95,6 +95,7 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
   const rend = gui.addFolder('Rendering');
   rend.add(S, 'msaa').name('MSAA 4x');
   rend.add(S, 'lodBias', 0.25, 4, 0.05).name('LOD distance bias');
+  rend.add(S, 'lodFade', 0, 0.3, 0.01).name('LOD crossfade band');
   rend.add(S, 'alphaToCoverage').name('Alpha to coverage');
   rend.add(S, 'tonemapper', TONEMAPPERS).name('Tone mapper');
   rend.add(S, 'dither').name('Output dither');
