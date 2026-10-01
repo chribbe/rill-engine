@@ -49,6 +49,19 @@ export interface MaterialDef {
   /** How strongly the surface darkens / smooths when wet (0 = sealed, 1 = porous). */
   porosity?: number;
   translucency?: number;
+  /**
+   * Second layer blended by vertex colour R (0 = this material, 1 = layer B),
+   * sharpened by the layers' height maps (ORM alpha) and broken up by noise.
+   */
+  blend?: {
+    material: string;
+    /** Transition sharpness. */
+    contrast?: number;
+    /** How much height decides which layer wins (0 = pure vertex weight). */
+    height?: number;
+    /** Macro-noise perturbation of the weight. */
+    noise?: number;
+  };
   /** Offline bake hints (average albedo for bounce light). */
   bake?: { albedo?: Color; exclude?: boolean };
   /** Free-form notes for authors / tools. */
@@ -67,9 +80,10 @@ export const MF = {
   FOLIAGE: 256,
   UNLIT: 1024,
   DOUBLE_SIDED: 2048,
+  BLEND: 8192,
 } as const;
 
-export const MATERIAL_PARAM_BYTES = 144;
+export const MATERIAL_PARAM_BYTES = 208;
 
 export function parseColor(c: Color | undefined, fallback: [number, number, number, number]): [number, number, number, number] {
   if (c === undefined) return fallback;
@@ -92,7 +106,12 @@ export class Material {
     detailAlbedo: TextureHandle;
     detailNormal: TextureHandle;
     macro: TextureHandle;
+    bBaseColor: TextureHandle;
+    bNormal: TextureHandle;
+    bOrm: TextureHandle;
   };
+  /** Resolved definition of blend layer B (if any). */
+  blendDef: MaterialDef | null = null;
 
   constructor(
     readonly id: number,
@@ -101,8 +120,10 @@ export class Material {
     private device: GPUDevice,
     private layout: GPUBindGroupLayout,
     textures: Material['textures'],
+    blendDef: MaterialDef | null = null,
   ) {
     this.textures = textures;
+    this.blendDef = blendDef;
     this.params = device.createBuffer({
       label: `material:${name}`,
       size: MATERIAL_PARAM_BYTES,
@@ -132,6 +153,9 @@ export class Material {
         { binding: 4, resource: t.detailAlbedo.view },
         { binding: 5, resource: t.detailNormal.view },
         { binding: 6, resource: t.macro.view },
+        { binding: 7, resource: t.bBaseColor.view },
+        { binding: 8, resource: t.bNormal.view },
+        { binding: 9, resource: t.bOrm.view },
       ],
     });
   }
@@ -166,9 +190,19 @@ export class Material {
     if (d.shader === 'foliage') flags |= MF.FOLIAGE;
     if (d.shader === 'unlit') flags |= MF.UNLIT;
     if (this.doubleSided) flags |= MF.DOUBLE_SIDED;
+    if (this.blendDef) flags |= MF.BLEND;
     u[28] = flags;
     const rr = d.roughnessRange ?? [0, 1];
     f.set([rr[0], rr[1], d.triplanarSharpness ?? 4, mac?.stainStrength ?? 0], 32);
+    const b = this.blendDef;
+    if (b) {
+      f.set(parseColor(b.baseColorFactor, [1, 1, 1, 1]), 36);
+      const bps = Array.isArray(b.physicalSize) ? b.physicalSize : [b.physicalSize ?? 1, b.physicalSize ?? 1];
+      f.set([1 / bps[0], 1 / bps[1], 0, 0], 40);
+      const brr = b.roughnessRange ?? [0, 1];
+      f.set([b.roughness ?? 1, b.metallic ?? 0, b.normalStrength ?? 1, b.aoStrength ?? 1], 44);
+      f.set([d.blend?.contrast ?? 6, d.blend?.height ?? 0.6, d.blend?.noise ?? 0.3, brr[1] - brr[0]], 48);
+    }
     this.device.queue.writeBuffer(this.params, 0, f);
   }
 
@@ -235,17 +269,21 @@ export class MaterialLibrary {
     const T = this.textures;
     const tex = (path: string | undefined, kind: 'color' | 'linear' | 'normal', fallback: TextureHandle) =>
       path ? T.load(this.textureBase + path, kind).catch((e) => (console.warn(e), fallback)) : Promise.resolve(fallback);
-    const [baseColor, normal, orm, detailAlbedo, detailNormal, macro] = await Promise.all([
+    const blendDef = def.blend ? await this.resolve(await this.fetchDef(def.blend.material)) : null;
+    const [baseColor, normal, orm, detailAlbedo, detailNormal, macro, bBaseColor, bNormal, bOrm] = await Promise.all([
       tex(def.baseColor, 'color', T.white),
       tex(def.normal, 'normal', T.flatNormal),
       tex(def.orm, 'linear', T.defaultOrm),
       tex(def.detail?.albedo, 'linear', T.gray),
       tex(def.detail?.normal, 'normal', T.flatNormal),
       tex(def.macro?.texture, 'linear', T.gray),
+      tex(blendDef?.baseColor, 'color', T.white),
+      tex(blendDef?.normal, 'normal', T.flatNormal),
+      tex(blendDef?.orm, 'linear', T.defaultOrm),
     ]);
     const m = new Material(this.nextId++, name, def, this.device, this.layout, {
-      baseColor, normal, orm, detailAlbedo, detailNormal, macro,
-    });
+      baseColor, normal, orm, detailAlbedo, detailNormal, macro, bBaseColor, bNormal, bOrm,
+    }, blendDef);
     this.all.push(m);
     return m;
   }

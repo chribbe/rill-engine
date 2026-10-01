@@ -164,15 +164,37 @@ class MeshBuilder:
                     u, v = (-p.x if n.y > 0 else p.x), p.z
                 loop[uv].uv = (u, v)
 
-    def finish(self, lightmap_tpm=None, weld=True, custom_normals=None):
+    def finish(self, lightmap_tpm=None, weld=True, custom_normals=None, vertex_color=None, color_max_edge=None, foliage_normals=None):
+        """vertex_color(co, material_name) -> (r, g, b, a) linear; r = blend weight.
+        color_max_edge: subdivide faces of blend materials until edges are at most
+        this long (metres), so painted weights have vertices to live on."""
         bm = self.bm
         bm.normal_update()
         self._box_project()
         if weld:
             bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=0.0005)
+        if vertex_color is not None and color_max_edge:
+            blend_idx = {i for i, m in enumerate(self.mats) if is_blend_material(m)}
+            for _ in range(10):
+                long_edges = [e for e in bm.edges if e.calc_length() > color_max_edge * 1.001
+                              and any(f.material_index in blend_idx for f in e.link_faces)]
+                if not long_edges:
+                    break
+                bmesh.ops.subdivide_edges(bm, edges=long_edges, cuts=1, use_grid_fill=True)
         # Triangulate n-gons (caps) so MikkTSpace tangents can be computed on export.
         bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 4])
         bm.normal_update()
+        if vertex_color is not None:
+            col = bm.loops.layers.float_color.new('Col')
+            rng = {}
+            for f in bm.faces:
+                mname = self.mats[f.material_index]
+                for loop in f.loops:
+                    c = vertex_color(loop.vert.co, mname)
+                    loop[col] = c
+                    lo, hi = rng.get(mname, (9.0, -9.0))
+                    rng[mname] = (min(lo, c[0]), max(hi, c[0]))
+            print(f'  {self.name}: vertex colour R ' + ', '.join(f'{k} {lo:.2f}..{hi:.2f}' for k, (lo, hi) in rng.items()))
         res = None
         if lightmap_tpm:
             uv1 = bm.loops.layers.uv.new('Lightmap')
@@ -182,6 +204,22 @@ class MeshBuilder:
         bm.free()
         for m in self.mats:
             me.materials.append(material(m))
+        if vertex_color is not None and 'Col' in me.color_attributes:
+            ca = me.color_attributes
+            ca.active_color = ca['Col']
+            ca.render_color_index = list(ca.keys()).index('Col')
+        if foliage_normals is not None:
+            # (material names, fn(co) -> normal): bent normals on foliage faces only,
+            # every other corner keeps its smooth/flat normal.
+            fol_mats, fn = foliage_normals
+            fol_idx = {i for i, m in enumerate(self.mats) if m in fol_mats}
+            cn = [tuple(c.vector) for c in me.corner_normals]
+            loops = list(cn)
+            for poly in me.polygons:
+                if poly.material_index in fol_idx:
+                    for li in poly.loop_indices:
+                        loops[li] = tuple(fn(me.vertices[me.loops[li].vertex_index].co))
+            me.normals_split_custom_set(loops)
         if custom_normals is not None:
             try:
                 normals = [custom_normals(v.co) for v in me.vertices]
@@ -243,11 +281,76 @@ def pack_lightmap_uvs(bm, uv0, uv1, tpm, pad=2):
     return (W, H)
 
 
+def split_by_material(obj):
+    """One single-material object per slot (same name prefix). Works around the
+    Blender 5.2 glTF exporter writing white COLOR_0 for every material after the
+    first in a multi-material mesh."""
+    parts = []
+    for mi, mat in enumerate(obj.data.materials):
+        bm = bmesh.new()
+        bm.from_mesh(obj.data)
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.material_index != mi], context='FACES')
+        if not bm.faces:
+            bm.free()
+            continue
+        for f in bm.faces:
+            f.material_index = 0
+        me = bpy.data.meshes.new(f'{obj.name}.{mi}')
+        bm.to_mesh(me)
+        bm.free()
+        me.materials.append(mat)
+        ca = me.color_attributes
+        if 'Col' in ca:
+            ca.active_color = ca['Col']
+            ca.render_color_index = list(ca.keys()).index('Col')
+        part = bpy.data.objects.new(f'{obj.name}.{mi}', me)
+        bpy.context.scene.collection.objects.link(part)
+        parts.append(part)
+    return parts
+
+
+def material_def(name, depth=0):
+    """Resolved engine material JSON (inherits applied), {} when missing."""
+    p = os.path.join(PUBLIC, 'materials', name + '.json')
+    if not os.path.exists(p):
+        return {}
+    d = load_json(p)
+    if 'inherits' in d and depth < 8:
+        base = material_def(d['inherits'], depth + 1)
+        base.update({k: v for k, v in d.items() if k != 'inherits'})
+        d = base
+    return d
+
+
+_blend_cache = {}
+
+
+def is_blend_material(name):
+    """True when public/materials/<name>.json (or a parent) declares a blend layer."""
+    if name not in _blend_cache:
+        d, depth = {}, 0
+        n = name
+        while n and depth < 8:
+            p = os.path.join(PUBLIC, 'materials', n + '.json')
+            if not os.path.exists(p):
+                break
+            d = load_json(p)
+            if 'blend' in d:
+                break
+            n, depth = d.get('inherits'), depth + 1
+        _blend_cache[name] = 'blend' in d
+    return _blend_cache[name]
+
+
 def export_glb(obj, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    parts = [obj]
+    if len(obj.data.materials) > 1 and len(obj.data.color_attributes) > 0:
+        parts = split_by_material(obj)
     bpy.ops.object.select_all(action='DESELECT')
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
+    for p in parts:
+        p.select_set(True)
+    bpy.context.view_layer.objects.active = parts[0]
     bpy.ops.export_scene.gltf(
         filepath=path,
         export_format='GLB',
@@ -260,5 +363,10 @@ def export_glb(obj, path):
         export_image_format='NONE',
         export_extras=False,
         export_apply=False,
-        export_vertex_color='NONE',
+        export_vertex_color='ACTIVE',
     )
+    if parts[0] is not obj:
+        for p in parts:
+            me = p.data
+            bpy.data.objects.remove(p)
+            bpy.data.meshes.remove(me)

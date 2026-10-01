@@ -19,10 +19,20 @@ import type { Camera } from '../scene/camera';
 import { Environment, SUN_TOA_LUX } from '../scene/environment';
 import { parseColor } from './materials';
 
-export interface Renderable {
-  slot: number;
+/** One level of detail of a model; `dist2` = squared start distance (instance scale applied). */
+export interface LodLevel {
   mesh: GpuMesh;
   materials: Material[];
+  dist2: number;
+}
+
+export interface Renderable {
+  slot: number;
+  /** LOD0 (and the culling bounds). */
+  mesh: GpuMesh;
+  materials: Material[];
+  /** Optional LOD chain, ascending distance; lods[0] is mesh/materials. */
+  lods?: LodLevel[];
   worldMin: Float32Array;
   worldMax: Float32Array;
   castShadow: boolean;
@@ -117,6 +127,8 @@ export interface RenderSettings {
   probeVolume: boolean;
   reflectionProbes: boolean;
   showProbes: boolean;
+  /** LOD distance multiplier (>1 keeps detail further away). */
+  lodBias: number;
 }
 
 export function defaultRenderSettings(): RenderSettings {
@@ -165,6 +177,7 @@ export function defaultRenderSettings(): RenderSettings {
     probeVolume: true,
     reflectionProbes: true,
     showProbes: false,
+    lodBias: 1,
   };
 }
 
@@ -254,6 +267,9 @@ class DrawList {
   }
 }
 
+/** Minimum LOD level of shadow casters per cascade. */
+const SHADOW_MIN_LOD = [0, 1, 2, 2];
+
 const TU = GPUTextureUsage;
 const BU = GPUBufferUsage;
 const SS = GPUShaderStage;
@@ -263,6 +279,8 @@ export class Renderer {
   readonly frame = new FrameUniforms();
   readonly frameBuffer: GPUBuffer;
   readonly instances: InstanceStore;
+  /** Objects drawn per LOD level in the last main view. */
+  readonly lodCounts = new Uint32Array(4);
   readonly arena: GeometryArena;
   readonly textures: TextureManager;
   readonly materials: MaterialLibrary;
@@ -412,7 +430,7 @@ export class Renderer {
       label: 'material',
       entries: [
         { binding: 0, visibility: FV, buffer: { type: 'uniform' } },
-        ...[1, 2, 3, 4, 5, 6].map((b) => ({ binding: b, visibility: SS.FRAGMENT, texture: {} })),
+        ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((b) => ({ binding: b, visibility: SS.FRAGMENT, texture: {} })),
       ],
     });
     this.shadowLayout = d.createBindGroupLayout({
@@ -579,6 +597,7 @@ export class Renderer {
       USE_DIR_LIGHTMAP: on(g.dirLightmap && g.lightmap && !foliage),
       USE_PROBE_VOLUME: on(g.probeVolume),
       USE_REFL_PROBES: on(g.reflProbes),
+      USE_BLEND: on(!!m.blendDef),
     };
     let bits = 0;
     Object.values(constants).forEach((v, i) => (bits |= v << i));
@@ -1070,17 +1089,41 @@ export class Renderer {
   }
 
   /** Culls and buckets the main list + shadow cascades; uploads the visible list. */
-  private buildLists(planes: Plane[], renderables: Renderable[], shadowsOn: boolean) {
+  /**
+   * LOD by distance from the view to the bounds centre, normalised to the
+   * reference 60-degree field of view so zoomed views keep detail.
+   */
+  private selectLod(r: Renderable, eye: ArrayLike<number>, k2: number, minLod = 0): LodLevel | Renderable {
+    const lods = r.lods;
+    if (!lods) return r;
+    if (minLod >= lods.length - 1) return lods[lods.length - 1];
+    const dx = (r.worldMin[0] + r.worldMax[0]) * 0.5 - eye[0];
+    const dy = (r.worldMin[1] + r.worldMax[1]) * 0.5 - eye[1];
+    const dz = (r.worldMin[2] + r.worldMax[2]) * 0.5 - eye[2];
+    const d2 = (dx * dx + dy * dy + dz * dz) * k2;
+    let i = Math.min(minLod, lods.length - 1);
+    while (i + 1 < lods.length && lods[i + 1].dist2 <= d2) i++;
+    this.lodCounts[i]++;
+    return lods[i];
+  }
+
+  private buildLists(planes: Plane[], renderables: Renderable[], shadowsOn: boolean, eye: ArrayLike<number>, fovY: number) {
     const main = this.mainList;
     main.reset();
     let visibleObjects = 0;
+    const bias = Math.max(0.05, this.settings.lodBias);
+    const k = Math.tan(fovY / 2) / Math.tan(Math.PI / 6) / bias;
+    const k2 = k * k;
+    this.lodCounts.fill(0);
     for (const r of renderables) {
       if (!r.visible) continue;
       if (!aabbVisible(planes, r.worldMin, r.worldMax)) continue;
       visibleObjects++;
-      const prims = r.mesh.primitives;
-      for (let k = 0; k < prims.length; k++) main.add(prims[k], r.materials[k], r.slot);
+      const l = this.selectLod(r, eye, k2);
+      const prims = l.mesh.primitives;
+      for (let k = 0; k < prims.length; k++) main.add(prims[k], l.materials[k], r.slot);
     }
+    const mainLods = this.lodCounts.slice();
     let offset = main.finalize(this.visible, 0);
     let shadowDraws = 0, shadowTris = 0;
     if (shadowsOn) {
@@ -1091,8 +1134,11 @@ export class Renderer {
         for (const r of renderables) {
           if (!r.visible || !r.castShadow) continue;
           if (!aabbVisible(cp, r.worldMin, r.worldMax)) continue;
-          const prims = r.mesh.primitives;
-          for (let k = 0; k < prims.length; k++) list.add(prims[k], r.materials[k], r.slot);
+          // Camera LOD in the near cascades (self-shadowing matches what is seen),
+          // coarser casters further out where a shadow texel covers decimetres.
+          const l = this.selectLod(r, eye, k2, SHADOW_MIN_LOD[ci]);
+          const prims = l.mesh.primitives;
+          for (let k = 0; k < prims.length; k++) list.add(prims[k], l.materials[k], r.slot);
         }
         offset = list.finalize(this.visible, offset);
         shadowDraws += list.draws.length;
@@ -1108,6 +1154,7 @@ export class Renderer {
     this.instances.upload();
     if (this.instances.generation !== this.instanceGen) this.bindingsDirty = true;
     if (this.bindingsDirty) this.rebuildBindings();
+    this.lodCounts.set(mainLods);
     return { visibleObjects, shadowDraws, shadowTris };
   }
 
@@ -1205,7 +1252,7 @@ export class Renderer {
         this.shadows.update(v.position, v.forward, v.fovY, v.aspect, v.near, de.sunDir, S.shadows);
         this.writeFrameUniforms(this.captureFrame, this.captureFrameBuffer, v, PROBE_SIZE, PROBE_SIZE, env, de, CAPTURE_PRE_EXPOSURE, 10, flags, 0);
         const planes = extractPlanes(v.viewProj, { near: true, far: false, zeroToOne: true, reverseZ: true });
-        this.buildLists(planes, renderables, shadowsOn);
+        this.buildLists(planes, renderables, shadowsOn, v.position, v.fovY);
         const enc = d.createCommandEncoder({ label: `probe${p}:${face}` });
         if (shadowsOn) this.encodeShadows(enc, false);
         const pass = this.encodeMain(enc, { color: P.captureColor.createView(), depth: P.captureDepth.createView(), msaa: false }, this.captureFrameBG!, false, false);
@@ -1288,7 +1335,7 @@ export class Renderer {
       this.frozenViewProj = null;
     }
     const planes = this.frozenPlanes ?? extractPlanes(camera.viewProj, { near: true, far: false, zeroToOne: true, reverseZ: true });
-    const ls = this.buildLists(planes, renderables, shadowsOn);
+    const ls = this.buildLists(planes, renderables, shadowsOn, camera.position, camera.fovY);
     const tcEnd = performance.now();
 
     // ---- encode

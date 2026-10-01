@@ -1,0 +1,2 @@
+{ "inherits": "concrete_wall", "blend": { "material": "moss", "contrast": 7, "height": 1.2, "noise": 0.7 },
+  "notes": "Retaining wall: moss / algae creeping up from the base and along the top (vertex colour R)." }

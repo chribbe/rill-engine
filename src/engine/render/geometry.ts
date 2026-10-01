@@ -5,13 +5,14 @@
  *
  * Vertex streams:
  *   0: position   float32x3                      (12 B) - also used alone by depth/shadow passes
- *   1: attributes normal snorm16x4 | tangent snorm16x4 | uv0 float32x2 | uv1 unorm16x2 (28 B)
+ *   1: attributes normal snorm16x4 | tangent snorm16x4 | uv0 float32x2 | uv1 unorm16x2 | colour unorm8x4 (32 B)
+ *      colour.r = material blend weight (layer B), g/b/a reserved for future layers / masks
  * UV0 is in world metres by convention (materials declare their physical size).
  * UV1 is the lightmap chart layout in [0,1] (scaled/offset per instance into an atlas).
  */
 
 export const POS_STRIDE = 12;
-export const ATTR_STRIDE = 28;
+export const ATTR_STRIDE = 32;
 
 export const VERTEX_LAYOUT_FULL: GPUVertexBufferLayout[] = [
   { arrayStride: POS_STRIDE, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }] },
@@ -22,6 +23,7 @@ export const VERTEX_LAYOUT_FULL: GPUVertexBufferLayout[] = [
       { shaderLocation: 2, offset: 8, format: 'snorm16x4' },
       { shaderLocation: 3, offset: 16, format: 'float32x2' },
       { shaderLocation: 4, offset: 24, format: 'unorm16x2' },
+      { shaderLocation: 5, offset: 28, format: 'unorm8x4' },
     ],
   },
 ];
@@ -41,6 +43,8 @@ export interface PrimitiveData {
   tangents?: Float32Array;
   uv0?: Float32Array;
   uv1?: Float32Array;
+  /** Per-vertex RGBA in 0..1 (r = blend weight). */
+  colors?: Float32Array;
   indices: Uint32Array;
   /** Material slot name (glTF material name); resolved through the material library. */
   material: string;
@@ -140,8 +144,9 @@ export class GeometryArena {
       const i16 = new Int16Array(attr);
       const u16 = new Uint16Array(attr);
       const f32 = new Float32Array(attr);
+      const u8 = new Uint8Array(attr);
       for (let v = 0; v < vc; v++) {
-        const o16 = v * 14;
+        const o16 = v * 16;
         i16[o16 + 0] = snorm16(p.normals[v * 3]);
         i16[o16 + 1] = snorm16(p.normals[v * 3 + 1]);
         i16[o16 + 2] = snorm16(p.normals[v * 3 + 2]);
@@ -150,11 +155,15 @@ export class GeometryArena {
         i16[o16 + 5] = snorm16(tangents[v * 4 + 1]);
         i16[o16 + 6] = snorm16(tangents[v * 4 + 2]);
         i16[o16 + 7] = tangents[v * 4 + 3] < 0 ? -32767 : 32767;
-        const o32 = v * 7;
+        const o32 = v * 8;
         f32[o32 + 4] = p.uv0 ? p.uv0[v * 2] : 0;
         f32[o32 + 5] = p.uv0 ? p.uv0[v * 2 + 1] : 0;
         u16[o16 + 12] = p.uv1 ? unorm16(p.uv1[v * 2]) : 0;
         u16[o16 + 13] = p.uv1 ? unorm16(p.uv1[v * 2 + 1]) : 0;
+        if (p.colors) {
+          const o8 = v * 32 + 28;
+          for (let c = 0; c < 4; c++) u8[o8 + c] = Math.max(0, Math.min(255, Math.round(p.colors[v * 4 + c] * 255)));
+        }
       }
       const posOff = this.pos.alloc(vc * POS_STRIDE);
       const attrOff = this.attr.alloc(vc * ATTR_STRIDE);

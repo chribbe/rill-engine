@@ -1,0 +1,2 @@
+{ "inherits": "ground_grass", "blend": { "material": "ground_forest", "contrast": 4, "height": 0.9, "noise": 0.8 },
+  "notes": "Lawn -> forest floor, painted by vertex colour R in the map build." }

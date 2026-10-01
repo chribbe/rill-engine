@@ -1,0 +1,2 @@
+{ "baseColor": "moss_albedo.png", "normal": "moss_normal.png", "orm": "moss_orm.png", "physicalSize": 1, "roughness": 1, "porosity": 0.3,
+  "macro": { "texture": "macro_variation.png", "physicalSize": 11, "albedoStrength": 0.2 } }

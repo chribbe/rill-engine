@@ -14,6 +14,10 @@ struct MaterialParams {
   emissive: vec4f,         // rgb emissive (nits), w detail fade distance (m)
   flags: vec4u,            // x feature bits
   extra: vec4f,            // x roughness min, y roughness max, z triplanar sharpness, w macro stain strength
+  bBaseColor: vec4f,       // blend layer B
+  bUvTransform: vec4f,
+  bPbr: vec4f,             // x roughness, y metallic, z normal strength, w ao strength
+  blendParams: vec4f,      // x contrast, y height influence, z noise, w roughness range
 };
 
 const M_DETAIL_ALBEDO: u32 = 8u;
@@ -25,6 +29,7 @@ const M_FOLIAGE: u32 = 256u;
 const M_UNLIT: u32 = 1024u;
 const M_DOUBLE_SIDED: u32 = 2048u;
 const M_NO_LIGHTMAP_SH_RATIO: u32 = 4096u;
+const M_BLEND: u32 = 8192u;
 
 // Pipeline specialisation. The renderer compiles one variant per (material
 // features x active global features); disabled blocks are removed by the
@@ -45,6 +50,7 @@ override USE_SPEC_AA: bool = true;
 override USE_DIR_LIGHTMAP: bool = true;
 override USE_PROBE_VOLUME: bool = true;
 override USE_REFL_PROBES: bool = true;
+override USE_BLEND: bool = true;
 
 // Half-Life 2 radiosity normal mapping basis (tangent space).
 const RNM0: vec3f = vec3f(0.81649658, 0.0, 0.57735027);
@@ -116,6 +122,9 @@ fn shEvalProbe(i: u32, n: vec3f) -> vec3f {
 @group(1) @binding(4) var detailAlbedoTex: texture_2d<f32>;
 @group(1) @binding(5) var detailNormalTex: texture_2d<f32>;
 @group(1) @binding(6) var macroTex: texture_2d<f32>;
+@group(1) @binding(7) var bBaseColorTex: texture_2d<f32>;
+@group(1) @binding(8) var bNormalTex: texture_2d<f32>;
+@group(1) @binding(9) var bOrmTex: texture_2d<f32>;
 
 fn matFlag(bit: u32) -> bool { return (material.flags.x & bit) != 0u; }
 
@@ -125,6 +134,7 @@ struct VSIn {
   @location(2) tangent: vec4f,
   @location(3) uv0: vec2f,
   @location(4) uv1: vec2f,
+  @location(5) color: vec4f,
   @builtin(instance_index) instance: u32,
 };
 
@@ -139,6 +149,7 @@ struct VSOut {
   @location(4) lmUv: vec2f,
   @location(5) viewDepth: f32,
   @location(6) @interpolate(flat) slot: u32,
+  @location(7) color: vec4f,
 };
 
 @vertex
@@ -155,6 +166,7 @@ fn vsMain(v: VSIn) -> VSOut {
   o.lmUv = v.uv1 * inst.lmST.xy + inst.lmST.zw;
   o.viewDepth = -(frame.view * wp).z;
   o.slot = slot;
+  o.color = v.color;
   return o;
 }
 
@@ -331,6 +343,28 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
 
   // --- tangent-space normal with detail layer
   var tn = scaleNormal(nt.xyz, material.pbr.z * frame.mat0.w);
+
+  // --- second material layer, height-blended by vertex colour R
+  if (USE_BLEND && matFlag(M_BLEND)) {
+    let bs = material.bUvTransform.xy;
+    let buv = in.uv0 * bs;
+    let bb = texGrad(bBaseColorTex, buv, uv0Dx * bs, uv0Dy * bs) * material.bBaseColor;
+    let bn = decodeNormal(texGrad(bNormalTex, buv, uv0Dx * bs, uv0Dy * bs));
+    let bo = texGrad(bOrmTex, buv, uv0Dx * bs, uv0Dy * bs);
+    var noise = 0.0;
+    if (USE_MACRO) {
+      let ms = material.macroTransform.xy * 3.0 + vec2f(0.013);
+      noise = texGrad(macroTex, in.uv0 * ms + vec2f(0.37, 0.11), uv0Dx * ms, uv0Dy * ms).r - 0.5;
+    }
+    let x = (in.color.r - 0.5) * 2.0 + (bo.a - orm.a) * material.blendParams.y + noise * material.blendParams.z;
+    let t = saturate(x * material.blendParams.x * 0.5 + 0.5);
+    s.albedo = mix(s.albedo, bb.rgb, t);
+    s.roughness = mix(s.roughness, bo.g * material.bPbr.x, t);
+    s.metallic = mix(s.metallic, bo.b * material.bPbr.y, t);
+    s.ao = mix(s.ao, mix(1.0, bo.r, material.bPbr.w), t);
+    tn = normalize(mix(tn, scaleNormal(bn.xyz, material.bPbr.z * frame.mat0.w), t));
+    s.normalVariance = mix(s.normalVariance, bn.w, t);
+  }
   let detailFade = saturate(1.0 - dist / max(material.emissive.w, 0.01));
   if (USE_DETAIL && hasFlag(F_DETAIL) && detailFade > 0.0) {
     let duv = in.uv0 * material.detailTransform.xy;

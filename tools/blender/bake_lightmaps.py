@@ -109,6 +109,19 @@ def get_bake_material(name):
     dif = nt.nodes.new('ShaderNodeBsdfDiffuse')
     alb = bake_albedo(name)
     dif.inputs['Color'].default_value = (*alb, 1)
+    if d.get('blend'):
+        # Blend materials: bounce albedo follows the painted layer weight (COLOR_0.r).
+        alb_b = bake_albedo(d['blend']['material'])
+        attr = nt.nodes.new('ShaderNodeAttribute')
+        attr.attribute_name = 'Color'
+        sep = nt.nodes.new('ShaderNodeSeparateColor')
+        mix = nt.nodes.new('ShaderNodeMix')
+        mix.data_type = 'RGBA'
+        mix.inputs['A'].default_value = (*alb, 1)
+        mix.inputs['B'].default_value = (*alb_b, 1)
+        nt.links.new(attr.outputs['Color'], sep.inputs[0])
+        nt.links.new(sep.outputs[0], mix.inputs['Factor'])
+        nt.links.new(mix.outputs['Result'], dif.inputs['Color'])
     # Constant tangent-space normal (RNM basis); strength 0 = geometric normal.
     nmap = nt.nodes.new('ShaderNodeNormalMap')
     nmap.name = 'rnm_normal'
@@ -167,14 +180,23 @@ asset_cache = {}
 def import_asset(rel):
     if rel in asset_cache:
         return asset_cache[rel]
+    path = os.path.join(PUBLIC, rel)
+    if rel.endswith('.model.json'):
+        # Model descriptors: bake against LOD0.
+        model = load_json(path)
+        path = os.path.join(os.path.dirname(path), sorted(model['lods'], key=lambda l: l['distance'])[0]['mesh'])
     before = set(bpy.data.objects)
-    bpy.ops.import_scene.gltf(filepath=os.path.join(PUBLIC, rel))
+    bpy.ops.import_scene.gltf(filepath=path)
     new = [o for o in bpy.data.objects if o not in before]
     meshes = [o for o in new if o.type == 'MESH']
     for o in new:
         if o.type != 'MESH':
             bpy.data.objects.remove(o)
     src = meshes[0]
+    if len(meshes) > 1:
+        # Multi-material assets may be exported as one part per material: rejoin.
+        with bpy.context.temp_override(active_object=src, selected_editable_objects=meshes, selected_objects=meshes):
+            bpy.ops.object.join()
     # Bake materials by engine slot name.
     for i, slot in enumerate(src.material_slots):
         nm = slot.material.name.split('.')[0] if slot.material else 'default'
@@ -250,6 +272,53 @@ for ob, oid, _ in lightmapped:
 
 # ------------------------------------------------------------------ probe volumes
 probe_volumes = []
+
+
+def build_occluder_bvh():
+    """One BVH over all opaque static geometry (cutout foliage/fences excluded), Blender space."""
+    from mathutils.bvhtree import BVHTree
+    verts, tris = [], []
+    for ob in scene.collection.objects:
+        if ob.type != 'MESH':
+            continue
+        me = ob.data
+        masked = {i for i, m in enumerate(me.materials) if m and material_def(m.name[len('bake_'):]).get('alphaMode') == 'mask'}
+        me.calc_loop_triangles()
+        n = len(me.vertices)
+        co = np.empty(n * 3, dtype=np.float32)
+        me.vertices.foreach_get('co', co)
+        co = co.reshape(n, 3)
+        M = np.array(ob.matrix_world, dtype=np.float32)
+        co = co @ M[:3, :3].T + M[:3, 3]
+        nt = len(me.loop_triangles)
+        tv = np.empty(nt * 3, dtype=np.int32)
+        me.loop_triangles.foreach_get('vertices', tv)
+        mi = np.empty(nt, dtype=np.int32)
+        me.loop_triangles.foreach_get('material_index', mi)
+        keep = ~np.isin(mi, list(masked)) if masked else np.ones(nt, dtype=bool)
+        base = len(verts)
+        verts.extend(map(tuple, co.tolist()))
+        tris.extend(map(tuple, (tv.reshape(nt, 3)[keep] + base).tolist()))
+    print(f'[bake] occluder BVH: {len(tris)} triangles')
+    return BVHTree.FromPolygons(verts, tris, all_triangles=True)
+
+
+# 6 axes + 8 diagonals.
+_RAY_DIRS = [Vector(d).normalized() for d in [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
+             + [(x, y, z) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)]]
+
+
+def probe_inside(bvh, pb, max_dist=60.0):
+    """A probe is buried (inside terrain / a closed building) when many rays hit back faces."""
+    back = 0
+    for d in _RAY_DIRS:
+        hit, nrm, _, _ = bvh.ray_cast(pb, d, max_dist)
+        if hit is not None and nrm.dot(d) > 0:
+            back += 1
+    return back >= 5
+
+
+occluder_bvh = None
 PROBE_HALF = 0.15
 # Engine face order +X -X +Y -Y +Z -Z expressed as Blender axes (engine Y = Blender Z, engine Z = -Blender Y).
 FACES_B = [Vector((1, 0, 0)), Vector((-1, 0, 0)), Vector((0, 0, 1)), Vector((0, 0, -1)), Vector((0, -1, 0)), Vector((0, 1, 0))]
@@ -262,6 +331,9 @@ for o in doc['objects']:
     dims = [max(1, int(round(size[k] / sp[k])) + 1) for k in range(3)]
     origin = [c[k] - size[k] / 2 for k in range(3)]
     n = dims[0] * dims[1] * dims[2]
+    if occluder_bvh is None:
+        occluder_bvh = build_occluder_bvh()
+    inside = np.zeros(n, dtype=bool)
     pw = 1024
     ph = int(math.ceil(n * 6 / pw))
     import bmesh
@@ -273,6 +345,7 @@ for o in doc['objects']:
             for ix in range(dims[0]):
                 pe = (origin[0] + ix * sp[0], origin[1] + iy * sp[1], origin[2] + iz * sp[2])
                 pb = Vector((pe[0], -pe[2], pe[1]))
+                inside[(iz * dims[1] + iy) * dims[0] + ix] = probe_inside(occluder_bvh, pb)
                 for f, nrm in enumerate(FACES_B):
                     # Quad facing `nrm`, centred PROBE_HALF away from the probe centre.
                     a = Vector((0, 0, 1)) if abs(nrm.z) < 0.9 else Vector((1, 0, 0))
@@ -308,8 +381,8 @@ for o in doc['objects']:
     ptex.select = True
     pnt.nodes.active = ptex
     me.materials.append(pmat)
-    probe_volumes.append({'id': o['id'], 'obj': pob, 'mat': pmat, 'dims': dims, 'origin': origin, 'spacing': sp, 'n': n, 'pw': pw, 'ph': ph, 'result': {}})
-    print(f"[bake] probe volume {o['id']}: {dims[0]}x{dims[1]}x{dims[2]} = {n} probes")
+    probe_volumes.append({'id': o['id'], 'obj': pob, 'mat': pmat, 'dims': dims, 'origin': origin, 'spacing': sp, 'n': n, 'pw': pw, 'ph': ph, 'result': {}, 'inside': inside})
+    print(f"[bake] probe volume {o['id']}: {dims[0]}x{dims[1]}x{dims[2]} = {n} probes, {100 * inside.mean():.0f}% buried")
 
 
 def probe_samples(pv, img):
@@ -598,7 +671,7 @@ probe_out = []
 for pv in probe_volumes:
     sky = probe_samples(pv, pv['result']['sky'])
     sunv = probe_samples(pv, pv['result']['sunBounce'])
-    valid = sky.max(axis=(1, 2)) > 0.003
+    valid = (sky.max(axis=(1, 2)) > 0.003) & ~pv['inside']
     data = np.stack([sky, sunv], axis=1)  # (n, 2, 6, 3)
     data, ok = dilate_invalid(data, valid, pv['dims'])
     fname = f"probes_{pv['id']}.bin"

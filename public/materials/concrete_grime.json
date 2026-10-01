@@ -1,0 +1,2 @@
+{ "inherits": "concrete_wall", "blend": { "material": "dirt", "contrast": 6, "height": 0.8, "noise": 0.6 },
+  "notes": "Underpass walls: splash grime at the base (vertex colour R)." }

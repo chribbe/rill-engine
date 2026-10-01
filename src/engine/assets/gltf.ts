@@ -119,7 +119,7 @@ export function parseGlb(buf: ArrayBuffer, name = 'glb'): GltfAsset {
   };
 
   // Gather primitives per material in asset space.
-  const groups = new Map<string, { pos: number[]; nrm: number[]; tan: number[]; uv0: number[]; uv1: number[]; idx: number[]; hasTan: boolean; hasUv1: boolean }>();
+  const groups = new Map<string, { pos: number[]; nrm: number[]; tan: number[]; uv0: number[]; uv1: number[]; col: number[]; idx: number[]; hasTan: boolean; hasUv1: boolean; hasCol: boolean }>();
   const markers: GltfAsset['markers'] = [];
   const visit = (ni: number, parent: Mat4) => {
     const node = g.nodes![ni];
@@ -134,7 +134,7 @@ export function parseGlb(buf: ArrayBuffer, name = 'glb'): GltfAsset {
         const matName = prim.material !== undefined ? g.materials?.[prim.material]?.name ?? `material${prim.material}` : 'default';
         let grp = groups.get(matName);
         if (!grp) {
-          grp = { pos: [], nrm: [], tan: [], uv0: [], uv1: [], idx: [], hasTan: true, hasUv1: true };
+          grp = { pos: [], nrm: [], tan: [], uv0: [], uv1: [], col: [], idx: [], hasTan: true, hasUv1: true, hasCol: false };
           groups.set(matName, grp);
         }
         const P = read(prim.attributes.POSITION) as Float32Array;
@@ -142,6 +142,9 @@ export function parseGlb(buf: ArrayBuffer, name = 'glb'): GltfAsset {
         const Tn = prim.attributes.TANGENT !== undefined ? (read(prim.attributes.TANGENT) as Float32Array) : null;
         const U0 = prim.attributes.TEXCOORD_0 !== undefined ? (read(prim.attributes.TEXCOORD_0) as Float32Array) : null;
         const U1 = prim.attributes.TEXCOORD_1 !== undefined ? (read(prim.attributes.TEXCOORD_1) as Float32Array) : null;
+        const C0 = prim.attributes.COLOR_0 !== undefined ? read(prim.attributes.COLOR_0) : null;
+        const cN = C0 ? COMPONENTS[g.accessors[prim.attributes.COLOR_0].type] : 4;
+        if (C0) grp.hasCol = true;
         const vc = P.length / 3;
         const base = grp.pos.length / 3;
         if (!Tn) grp.hasTan = false;
@@ -163,6 +166,8 @@ export function parseGlb(buf: ArrayBuffer, name = 'glb'): GltfAsset {
           } else grp.tan.push(1, 0, 0, 1);
           grp.uv0.push(U0 ? U0[v * 2] : 0, U0 ? U0[v * 2 + 1] : 0);
           grp.uv1.push(U1 ? U1[v * 2] : 0, U1 ? U1[v * 2 + 1] : 0);
+          if (C0) grp.col.push(C0[v * cN], C0[v * cN + 1], C0[v * cN + 2], cN > 3 ? C0[v * cN + 3] : 1);
+          else grp.col.push(0, 0, 0, 0);
         }
         if (prim.indices !== undefined) {
           const I = read(prim.indices);
@@ -186,6 +191,7 @@ export function parseGlb(buf: ArrayBuffer, name = 'glb'): GltfAsset {
       tangents: grp.hasTan ? new Float32Array(grp.tan) : undefined,
       uv0: new Float32Array(grp.uv0),
       uv1: grp.hasUv1 ? new Float32Array(grp.uv1) : undefined,
+      colors: grp.hasCol ? new Float32Array(grp.col) : undefined,
       indices: new Uint32Array(grp.idx),
     });
   }
