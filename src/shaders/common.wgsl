@@ -67,6 +67,7 @@ struct Instance {
 // Instance flags
 const I_LIGHTMAPPED: u32 = 1u;
 const I_NO_DECALS: u32 = 2u;
+const I_VIEWMODEL: u32 = 4u;  // first-person weapon: depth squeezed in front of the world
 
 fn luminance(c: vec3f) -> f32 { return dot(c, vec3f(0.2126, 0.7152, 0.0722)); }
 

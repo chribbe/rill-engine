@@ -6,9 +6,12 @@ import { transformAabb } from '../render/culling';
 import { loadGlb } from '../assets/gltf';
 import { builtinMesh } from '../assets/primitives';
 import { loadLightmapSet, type LoadedLightmaps } from '../render/lightmaps';
-import { buildDecals } from '../render/decals';
+import { buildDecals, type DecalSet } from '../render/decals';
+
+/** Decal materials always present in the atlas for gameplay-spawned decals. */
+const RUNTIME_DECALS = ['decal_bullet', 'decal_bullet_metal'];
 import { ClutterSystem, type ClutterSource } from '../render/clutter';
-import { CollisionWorld } from './collision';
+import { CollisionWorld, Surface } from './collision';
 import type { DecalObject, MapDocument, MapObject, ReflectionProbeObject, Transform } from './mapformat';
 
 /**
@@ -67,10 +70,23 @@ export class World {
   private meshes = new Map<string, Promise<GpuMesh>>();
   private models = new Map<string, Promise<ModelLods>>();
   lightmaps: LoadedLightmaps | null = null;
+  decals: DecalSet | null = null;
   decalBytes = 0;
   loadMs = 0;
 
   constructor(readonly renderer: Renderer, readonly doc: MapDocument, readonly baseUrl: string) {}
+
+  private uploadDecals() {
+    const b = this.decals!.build();
+    this.renderer.setDecals(b.packed, b.count, b.cells, b.grid, this.decals!.atlas);
+  }
+
+  /** Runtime decal (bullet hole...) on the surface hit at `point` with outward `normal`. */
+  addDecal(material: string, point: ArrayLike<number>, normal: ArrayLike<number>, size: number) {
+    if (!this.decals?.has(material)) return;
+    this.decals.addDynamic(material, point, normal, size);
+    this.uploadDecals();
+  }
 
   static async load(renderer: Renderer, url: string, onProgress?: (msg: string) => void): Promise<World> {
     const t0 = performance.now();
@@ -89,10 +105,10 @@ export class World {
       }
     }
     const decals = doc.objects.filter((o): o is DecalObject => o.type === 'decal');
-    const db = await buildDecals(renderer.device, renderer.textures, decals);
-    if (db) {
-      renderer.setDecals(db.packed, db.count, db.cells, db.grid, db.atlas);
-      w.decalBytes = db.bytes;
+    w.decals = await buildDecals(renderer.device, renderer.textures, decals, RUNTIME_DECALS);
+    if (w.decals) {
+      w.uploadDecals();
+      w.decalBytes = w.decals.bytes;
     }
     renderer.setLights(w.lights);
     renderer.setReflectionProbes(w.reflectionProbes);
@@ -260,7 +276,7 @@ export class World {
           for (const p of mesh.primitives) {
             const m = mats[mesh.primitives.indexOf(p)];
             if (m.def.shader === 'foliage') continue;
-            this.collision.addMesh(p.positions, p.indices, model);
+            this.collision.addMesh(p.positions, p.indices, model, (m.def.metallic ?? 0) > 0.5 ? Surface.Metal : Surface.Default);
           }
         }
         break;

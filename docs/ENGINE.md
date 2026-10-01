@@ -40,10 +40,12 @@ World (runtime, derived) ───────────────┐       
    (transmittance, multi-scattering, sky-view), sky → cube (128²), mip chain, GGX prefilter
    (6 mips), L2 SH irradiance, BRDF LUT (once).
 4. **Shadow passes** — 4 cascades into a `depth32float` 2D array (default 2048²), depth clamp
-   ("pancaking") via `unclippedDepth`.
+   ("pancaking") via `unclippedDepth`; then up to 2 dynamic spot-light layers (1024²) for
+   gameplay lights (flashlight).
 5. **Main forward pass** — 4× MSAA `rgba16float` + `depth32float` (transient attachments),
-   reverse-Z infinite projection. Order: opaque → masked depth prepass → masked colour
-   (`depth == equal`) → sky (fullscreen at depth 0) → debug lines/wireframe. Hardware resolve.
+   reverse-Z infinite projection. Order: opaque → masked depth prepass → clutter prepass →
+   masked colour (`depth == equal`) → clutter colour → sky (fullscreen at depth 0) →
+   particles (alpha, then additive) → debug lines/wireframe. Hardware resolve.
 6. **Post** — weighted-resolve decode, tone mapping (AgX default; PBR Neutral, ACES, Reinhard),
    restrained grading (contrast/saturation/white balance, all neutral by default), sRGB encode, IGN dither.
 
@@ -61,6 +63,8 @@ World (runtime, derived) ───────────────┐       
 | Shadows | `render/shadows.ts`, `shaders/shadows.wgsl`, `shadow_depth.wgsl` |
 | Lightmaps | `render/lightmaps.ts`, `tools/blender/bake_lightmaps.py` |
 | Decals | `render/decals.ts` (+ `applyDecals` in `standard.wgsl`) |
+| Ground clutter | `render/clutter.ts`, `vsClutter` in `standard.wgsl`, `tools/blender/clutter.py` |
+| Action effects | `render/particles.ts` + `shaders/particles.wgsl`, `render/spotshadows.ts`, `shaders/lighting.wgsl`, `src/sandbox.ts` |
 | Map / world | `scene/mapformat.ts`, `scene/world.ts`, `scene/environment.ts` |
 | Player | `player/controller.ts`, `scene/collision.ts` |
 | UI | `ui/stats.ts`, `ui/playground.ts` |
@@ -217,6 +221,50 @@ World (runtime, derived) ───────────────┐       
     masked prepass; the equal-depth colour pass inherits the coverage). Costs 0.4–1.1 ms at
     1080p (double drawing inside the bands); shadows keep a single LOD.
 
+27. **Generic baked vertex AO + crown visibility.** Vertex colour G is AO for every mesh (default 1).
+    `trees.py` bakes each crown vertex's sky visibility by casting rays through the tree's own
+    cards with transmittance (1 − texture coverage) per card, so dense spruce interiors darken
+    and sparse twigs don't. It feeds indirect light (and part of the sun on foliage), the
+    impostors and the snow layer's sky exposure. Mask coverage is per material: dense sprays
+    keep the distance coverage boost, sparse twigs (`alphaDistance: "average"`) fade to haze.
+28. **Season layer in world space, not per material.** Snow, melt water and a dormant tint are
+    one shader block driven by the environment's `weather` (`snow`, `melt`, `dry`): cover from
+    sky exposure (lightmap sky layer, or vertex AO), slope and world noise; per-material
+    affinity (`snow`), dormant tint (`dryTint`). One global scanned snow set (2 fetches; shader
+    size, not fetch count, was the MSAA cost). Melt water reuses the wetness path.
+29. **Ground clutter as a renderer system, scattered at load.** Materials list clutter types;
+    the world scatters them on surfaces using that material (blend weight picks lawn vs forest
+    floor), rejects points under other geometry via the collision world, and the renderer
+    draws 8 m cells as one instanced draw per visible cell row (`vsClutter`, compact 32-byte
+    instances). Tufts are lit by the ground's lightmap at their root and sink under snow. No
+    shadows; fade with the LOD dither.
+30. **Grade after tone mapping, matched by numbers.** ASC-CDL + saturation + split tint on
+    display values (Source 2 colour-correction style), per environment `post.grade`, neutral by
+    default. Presets are tuned with `tools/grade_compare.mjs` (luma percentiles, chroma, casts
+    per tonal band) against the Insertion 2 references instead of by eye alone.
+31. **BC5 normals with variance in roughness; trimmed cards.** Every normal map is BC5
+    (z rebuilt in the shader) and its mip variance is folded into the paired ORM roughness
+    offline (r′ = (r⁴ + v)^¼, Source 2 style). Foliage/clutter cards are emitted as conservative
+    8-sided outlines of their opaque texels, because the masked depth prepass under MSAA
+    (per-sample depth on overdrawn cards) is the forest's dominant cost, not bandwidth.
+32. **Action rendering stays in the forward pass.**
+    - *Dynamic lights* (`renderer.dynamicLights`) are merged with the map's lights each frame;
+      shadowed spots get a 1024² depth layer each (≤ 2, casters culled against the light
+      frustum, 3×3 PCF), static lamps stay unshadowed (their occlusion is baked).
+    - *Particles* are camera-facing quads lit once per corner in the vertex stage (cascade sun
+      shadow + forward lobe, sky/probe-volume ambient, local lights with spot shadows, fog).
+      They blend straight into the weighted MSAA target: colour = src·dstα + dst·(1 − srcα)
+      (or + dst for additive) with the weight left untouched, which is exactly "over"/"add" in
+      the resolved rgb/w — no separate transparent target or resolve. CPU sim, sorted back to
+      front, one draw per blend mode. No soft-particle depth fade yet.
+    - *Runtime decals* (bullet holes) share the static decal buffer, grid and per-pixel loop: a
+      192-entry ring appended to the map's decals, grid rebuilt on the CPU when one is added.
+      Hits come from `CollisionWorld.raycast` (grid DDA + Möller–Trumbore, per-triangle surface
+      class: default → dust, metal → sparks). Crater relief is an analytic normal profile.
+    - *Viewmodel* uses the world projection (muzzle effects line up in world space) with clip
+      depth remapped into [0.75, 1] of reverse-Z (`I_VIEWMODEL` instance flag), so it never
+      clips into walls; no shadow casting, no decals, excluded from probe capture.
+
 ## 5. Content pipeline
 
 ```
@@ -274,6 +322,12 @@ see the measurement note below):
 CPU 0.3 ms/frame. Vegetation dominates: the forest path is 2.6 ms with trees hidden. MSAA
 costs ~2× on the forest (5.6 ms without). Impostors are ~2.2× cheaper than LOD1 at the same
 placement (overview: +3.3 ms vs +7.2 ms). Texture memory 156 MB (85 of 109 textures BC7).
+
+**After the Nordic/season/clutter/grade/performance items** (1080p, MSAA 4×, overcast, GPU span):
+road 8.2, retaining wall 9.2, underpass 7.5, forest path 10.7, overview 10.0 ms; *winter* adds
+≈ 1 ms (snow layer). Ground clutter 0.4–1.1 ms with 5–8 k tufts in view. Texture memory 137 MB
+(117/130 BC7/BC5) vs 520 MB uncompressed. **Action features** (road view): weapon + shadowed
+flashlight + ~70 live particles + bullet decals add ≈ 0.5 ms (8.7 → 9.2 ms).
 
 **Measurement note:** in the desktop app's browser pane, a hidden pane throttles presentation,
 so wall-clock frame time is meaningless there, and per-pass timestamps overlap on TBDR (their
@@ -339,15 +393,20 @@ Findings:
 - Lightmap bounce is baked for the reference sun direction (clear preset); other sun angles keep
   realtime direct light but approximate bounce.
 - Hidden browser pane → presentation throttled (use `rill.shot` / `rill.bench`, read `gpuSpanMs`).
+- Particles have no soft (depth) fade: smoke quads cut sharply where they intersect walls or
+  the ground. The muzzle flash sprite sits behind the viewmodel's depth range (the barrel
+  occludes its centre).
+- The flashlight shadow uses a 1024² perspective map: fine at room scale, soft/aliased on far
+  walls; no caster LOD selection beyond the camera's.
+- The sandbox viewmodel is a placeholder (flat boxes/cylinders, no hands, no animation set).
 
 ## 9. Technical debt
 
 - Lightmap atlas waste: ring-shaped charts (parapet caps) and curved path ribbons pack into
   their bounding boxes (building charts ~40 % empty, forest path 93 %). Split islands or use a
   better packer.
-- 11 normal maps stay RGBA8 (BC7 can't hold per-texel noise — most scanned ground normals fall
-  in this class). Plan: BC5 normals with the normal variance folded into the ORM roughness mips
-  (Source 2 style), then compress everything. Now the main GPU-memory item.
+- Decal textures stay RGBA8 PNG (the decal atlas copies rgba8 layers); a BC7 atlas would need
+  the layers compressed with matching formats.
 - BC7 encoder is single-pass PCA + LS (no exhaustive mode 7/4, no perceptual weighting) — fine
   for these textures, worth revisiting for scanned content. Impostor/tree-line textures are
   re-rendered (and so re-compressed) on every map build.
@@ -361,6 +420,11 @@ Findings:
 - `standard.wgsl` is still one large source; variants are specialised but the source should be
   split into smaller chunks as features grow.
 - Collision is a simple sphere/ray controller over a uniform grid (no proper capsule sweep).
+- Runtime decals share the static 8 m decal grid: a dense cluster of holes in one cell raises
+  the per-pixel loop for that whole cell, and far hits stretch the grid extent. A separate
+  fine-grained dynamic grid (or clustered decals) is the fix when it matters.
+- Particles are simulated on the CPU and lit per vertex (fine for hundreds; thousands of
+  large smoke quads would want GPU sim and per-pixel noise lighting).
 - Env/sky regeneration runs synchronously on any environment change (~<1 ms, fine for now).
 
 ## 10. Status against milestone 1 criteria
@@ -386,16 +450,21 @@ Findings:
 ## 11. Next steps (proposed order)
 
 Done: directional lightmaps, reflection probes, probe volume, blend materials, BC7, LOD
-vegetation with impostors, far scenery (decisions 18–24).
+vegetation with impostors, far scenery, scanned materials, LOD crossfade, Nordic conifers,
+season layer, ground clutter, graded mood presets, BC5 + card trimming, action rendering
+(decisions 18–32).
 
-1. **BC5 normals + variance-in-roughness**, so every texture compresses (scanned ground normals).
-2. **Anti-tiling for large scanned surfaces** (stochastic/texture-bombing or a second scan blended
-   by macro noise) and a scanned birch bark / tiles set.
-3. **Vegetation polish:** wind (trunk sway + spray flutter, shared by
-   prepass/shadow/lit vertex stages), octahedral impostors, undergrowth (blueberry/lingon, ferns).
-4. **Foliage shading variant** (no box-projected probes for rough foliage) and GPU culling +
-   indirect draws for the forest; hierarchical sectors.
-5. **Exposure**: optional local exposure for sun-vs-shade scenes.
+1. **GPU-driven culling + Hi-Z occlusion** and cached far shadow cascades (the forest and the
+   overview are the budget limits).
+2. **Soft particles** (depth fade; needs a depth copy or a resolved depth before the particle
+   draw) and a smoke texture atlas with lit normals.
+3. **Anti-tiling for large scanned surfaces** (stochastic/texture-bombing or a second scan blended
+   by macro noise).
+4. **Vegetation polish:** wind (trunk sway + spray flutter, shared by prepass/shadow/lit vertex
+   stages), octahedral impostors.
+5. **Signage**: a text/logo atlas helper (store fronts, street and traffic signs) when real
+   levels are built.
+6. **Exposure**: optional local exposure for sun-vs-shade scenes.
 
 ## 12. Automation API (precursor of future editor/AI tools)
 
@@ -403,5 +472,7 @@ vegetation with impostors, far scenery (decisions 18–24).
 `setCamera(pos, yawDeg, pitchDeg)`, `getCamera()`, `stats()`, `shot(name, w, h)` (writes
 `screenshots/<name>.png` via the dev server), `shotViews(prefix, w, h)`, `bench(frames)`,
 `stress(kind, n)`, `clearStress()`, `setSize(w, h)` (render-size override for benchmarks),
-plus the live `renderer`, `world`, `env` objects. `bench()` reports `gpuSpanMs`; the stats overlay
+`step(n)` (advance n manual 1/60 s frames), plus the live `renderer`, `world`, `env` and
+`sandbox` objects (`sandbox.toggleWeapon()`, `toggleFlashlight()`, `trigger = true` fires).
+In the app: **L** flashlight, **X** weapon, left click fires while the mouse is captured. `bench()` reports `gpuSpanMs`; the stats overlay
 shows per-LOD object counts and the BC7 share of texture memory.

@@ -9,6 +9,8 @@ import { SkySystem, ENV_SPEC_MIPS, PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM, AEROSOL_
 import { ShadowSystem, CASCADES, type ShadowSettings } from './shadows';
 import { InstanceStore } from './instances';
 import { ClutterSystem, type ClutterDraw } from './clutter';
+import { ParticleSystem } from './particles';
+import { SpotShadows, SPOT_LAYERS } from './spotshadows';
 import { GpuTimer } from './timing';
 import { ExposureController } from './exposure';
 import { ReflectionProbes, faceView, CAPTURE_PRE_EXPOSURE, PROBE_SIZE } from './reflections';
@@ -34,6 +36,8 @@ export interface Renderable {
   materials: Material[];
   /** Optional LOD chain, ascending distance; lods[0] is mesh/materials. */
   lods?: LodLevel[];
+  /** First-person viewmodel: depth squeezed in front of the world, never casts shadows, skipped by probe capture. */
+  viewmodel?: boolean;
   worldMin: Float32Array;
   worldMax: Float32Array;
   castShadow: boolean;
@@ -66,6 +70,8 @@ export interface LightData {
   outerAngle?: number;
   sourceRadius?: number;
   fogScatter?: number;
+  /** Dynamic spot lights may cast realtime shadows (first SPOT_LAYERS of them). */
+  shadow?: boolean;
 }
 
 export const DEBUG_VIEWS: Record<string, number> = {
@@ -134,6 +140,8 @@ export interface RenderSettings {
   lodFade: number;
   /** Ground clutter (detail props) on/off and distance multiplier. */
   clutter: boolean;
+  /** Realtime shadows for dynamic spot lights (flashlight). */
+  spotShadows: boolean;
   clutterDistance: number;
 }
 
@@ -186,6 +194,7 @@ export function defaultRenderSettings(): RenderSettings {
     lodBias: 1,
     lodFade: 0.1,
     clutter: true,
+    spotShadows: true,
     clutterDistance: 1,
   };
 }
@@ -323,12 +332,25 @@ export class Renderer {
   /** Instance slot with neutral per-object data used by clutter shading. */
   readonly clutterSlot: number;
   private shadowPipelineLayout: GPUPipelineLayout;
+  /** Effects particles (smoke, dust, muzzle flash, sparks), drawn after the sky in the main pass. */
+  readonly particles: ParticleSystem;
+  private particlePipelineLayout: GPUPipelineLayout;
+  private particleBG: GPUBindGroup;
   private pipelines = new Map<string, GPURenderPipeline>();
 
   private visible = { data: new Uint32Array(1 << 16), grow: (n: number) => this.growVisible(n) };
   private visibleBuffer: GPUBuffer;
   private lightBuffer: GPUBuffer;
   private lightCount = 0;
+  private staticLights: LightData[] = [];
+  /** Per-frame lights from gameplay (flashlight, muzzle flashes); appended to the map's lights. */
+  dynamicLights: LightData[] = [];
+  private lightsDirty = true;
+  private hadDynamicLights = false;
+  readonly spotShadows: SpotShadows;
+  private spotLists: DrawList[] = [];
+  private spotBGs: GPUBindGroup[] = [];
+  private spotCasterIndex: number[] = [];
   private decalBuffer: GPUBuffer;
   private decalCellBuffer: GPUBuffer;
   private decalCount = 0;
@@ -395,6 +417,7 @@ export class Renderer {
     this.shadows = new ShadowSystem(d);
     this.shadows.ensure(this.settings.shadows.resolution);
     for (let i = 0; i < CASCADES; i++) this.shadowLists.push(new DrawList());
+    for (let i = 0; i < SPOT_LAYERS; i++) this.spotLists.push(new DrawList());
 
     this.createAnisoSampler(this.settings.anisotropy);
     this.sampClamp = d.createSampler({ label: 'clamp', magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge', addressModeW: 'clamp-to-edge' });
@@ -402,6 +425,7 @@ export class Renderer {
 
     this.visibleBuffer = d.createBuffer({ label: 'visible', size: this.visible.data.byteLength, usage: BU.STORAGE | BU.COPY_DST });
     this.lightBuffer = d.createBuffer({ label: 'lights', size: 64 * 256, usage: BU.STORAGE | BU.COPY_DST });
+    this.spotShadows = new SpotShadows(d);
     this.decalBuffer = d.createBuffer({ label: 'decals', size: 96 * 16, usage: BU.STORAGE | BU.COPY_DST });
     this.decalCellBuffer = d.createBuffer({ label: 'decalCells', size: 64, usage: BU.STORAGE | BU.COPY_DST });
     this.postParams = d.createBuffer({ label: 'post', size: 144, usage: BU.UNIFORM | BU.COPY_DST });
@@ -430,13 +454,13 @@ export class Renderer {
         { binding: 2, visibility: FV, buffer: { type: 'read-only-storage' } },
         { binding: 3, visibility: FV, sampler: {} },
         { binding: 4, visibility: FV, sampler: {} },
-        { binding: 5, visibility: SS.FRAGMENT, sampler: { type: 'comparison' } },
-        { binding: 6, visibility: SS.FRAGMENT, texture: { sampleType: 'depth', viewDimension: '2d-array' } },
-        { binding: 7, visibility: SS.FRAGMENT, texture: { viewDimension: 'cube' } },
-        { binding: 8, visibility: SS.FRAGMENT, buffer: { type: 'read-only-storage' } },
+        { binding: 5, visibility: FV, sampler: { type: 'comparison' } },
+        { binding: 6, visibility: FV, texture: { sampleType: 'depth', viewDimension: '2d-array' } },
+        { binding: 7, visibility: FV, texture: { viewDimension: 'cube' } },
+        { binding: 8, visibility: FV, buffer: { type: 'read-only-storage' } },
         { binding: 9, visibility: SS.FRAGMENT, texture: {} },
         { binding: 10, visibility: FV, texture: { viewDimension: '2d-array' } },
-        { binding: 11, visibility: SS.FRAGMENT, buffer: { type: 'read-only-storage' } },
+        { binding: 11, visibility: FV, buffer: { type: 'read-only-storage' } },
         { binding: 12, visibility: SS.FRAGMENT, texture: {} },
         { binding: 13, visibility: SS.FRAGMENT, texture: {} },
         { binding: 14, visibility: SS.FRAGMENT, buffer: { type: 'read-only-storage' } },
@@ -444,12 +468,14 @@ export class Renderer {
         { binding: 16, visibility: SS.FRAGMENT, texture: { viewDimension: '2d-array' } },
         { binding: 17, visibility: SS.FRAGMENT, texture: {} },
         { binding: 18, visibility: FV, texture: {} },
-        { binding: 19, visibility: SS.FRAGMENT, texture: { viewDimension: '3d' } },
+        { binding: 19, visibility: FV, texture: { viewDimension: '3d' } },
         { binding: 20, visibility: SS.FRAGMENT, texture: { viewDimension: 'cube-array' } },
         { binding: 21, visibility: SS.FRAGMENT, buffer: { type: 'read-only-storage' } },
         { binding: 22, visibility: SS.FRAGMENT, texture: {} },
         { binding: 23, visibility: SS.FRAGMENT, texture: {} },
         { binding: 24, visibility: SS.FRAGMENT, texture: {} },
+        { binding: 25, visibility: FV, texture: { sampleType: 'depth', viewDimension: '2d-array' } },
+        { binding: 26, visibility: FV, buffer: { type: 'read-only-storage' } },
       ],
     });
     this.materialLayout = d.createBindGroupLayout({
@@ -505,6 +531,13 @@ export class Renderer {
     this.clutterSlot = this.instances.alloc();
     this.instances.set(this.clutterSlot, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], null, -1, 2, 0, 0);
     this.shadowPipelineLayout = d.createPipelineLayout({ bindGroupLayouts: [this.shadowLayout, this.materialLayout] });
+    const particleLayout = d.createBindGroupLayout({
+      label: 'particles',
+      entries: [{ binding: 0, visibility: SS.VERTEX, buffer: { type: 'read-only-storage' } }],
+    });
+    this.particlePipelineLayout = d.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, particleLayout] });
+    this.particles = new ParticleSystem(d);
+    this.particleBG = d.createBindGroup({ layout: particleLayout, entries: [{ binding: 0, resource: { buffer: this.particles.buffer } }] });
 
     this.materials = new MaterialLibrary(d, this.textures, this.materialLayout);
     this.sky = new SkySystem(d, this.sampClamp, this.sampAniso, this.cloudNoiseView);
@@ -561,7 +594,16 @@ export class Renderer {
   }
 
   setLights(lights: LightData[]) {
+    this.staticLights = lights;
+    this.lightsDirty = true;
+  }
+
+  /** Uploads map + dynamic lights; dynamic shadowed spots get spot-shadow layers. */
+  private uploadLights() {
+    const lights = this.dynamicLights.length ? [...this.staticLights, ...this.dynamicLights] : this.staticLights;
     const n = Math.min(lights.length, 256);
+    const spots: { position: ArrayLike<number>; direction: ArrayLike<number>; outerAngle: number; range: number }[] = [];
+    this.spotCasterIndex.length = 0;
     const f = new Float32Array(Math.max(1, n) * 16);
     for (let i = 0; i < n; i++) {
       const l = lights[i];
@@ -572,28 +614,37 @@ export class Renderer {
       const outer = ((l.outerAngle ?? 60) * Math.PI) / 180;
       const inner = ((l.innerAngle ?? 45) * Math.PI) / 180;
       f.set([dir[0], dir[1], dir[2], Math.cos(outer)], o + 8);
-      f.set([Math.cos(inner), l.type === 'spot' ? 1 : 0, l.sourceRadius ?? 0.1, 0], o + 12);
+      let layer = 0;
+      if (l.shadow && l.type === 'spot' && spots.length < SPOT_LAYERS && this.settings.spotShadows) {
+        spots.push({ position: l.position, direction: dir, outerAngle: l.outerAngle ?? 60, range: l.range });
+        layer = spots.length; // layer + 1
+      }
+      f.set([Math.cos(inner), l.type === 'spot' ? 1 : 0, l.sourceRadius ?? 0.1, layer], o + 12);
     }
     this.device.queue.writeBuffer(this.lightBuffer, 0, f);
     this.lightCount = n;
+    this.spotShadows.update(spots);
   }
 
   /** Decals: packed decal structs + a world-space XZ grid of per-cell index lists. */
   setDecals(packed: Float32Array, count: number, cells: Uint32Array, grid: { originX: number; originZ: number; cell: number; nx: number; nz: number; maxPer: number }, atlas: GPUTextureView) {
+    // Buffers grow geometrically (runtime decals re-upload often); bindings only change on growth.
     if (packed.byteLength > this.decalBuffer.size) {
       this.decalBuffer.destroy();
-      this.decalBuffer = this.device.createBuffer({ label: 'decals', size: packed.byteLength, usage: BU.STORAGE | BU.COPY_DST });
+      this.decalBuffer = this.device.createBuffer({ label: 'decals', size: Math.max(packed.byteLength, this.decalBuffer.size * 2), usage: BU.STORAGE | BU.COPY_DST });
+      this.bindingsDirty = true;
     }
     if (cells.byteLength > this.decalCellBuffer.size) {
       this.decalCellBuffer.destroy();
-      this.decalCellBuffer = this.device.createBuffer({ label: 'decalCells', size: cells.byteLength, usage: BU.STORAGE | BU.COPY_DST });
+      this.decalCellBuffer = this.device.createBuffer({ label: 'decalCells', size: Math.max(cells.byteLength, this.decalCellBuffer.size * 2), usage: BU.STORAGE | BU.COPY_DST });
+      this.bindingsDirty = true;
     }
     this.device.queue.writeBuffer(this.decalBuffer, 0, packed as Float32Array<ArrayBuffer>);
     this.device.queue.writeBuffer(this.decalCellBuffer, 0, cells as Uint32Array<ArrayBuffer>);
     this.decalCount = count;
     this.decalGrid = grid;
+    if (atlas !== this.decalAtlasView) this.bindingsDirty = true;
     this.decalAtlasView = atlas;
-    this.bindingsDirty = true;
   }
   private decalGrid = { originX: 0, originZ: 0, cell: 8, nx: 0, nz: 0, maxPer: 0 };
 
@@ -784,6 +835,39 @@ export class Renderer {
         fragment: { module: mod, entryPoint: 'fsMain', targets: [{ format: this.hdrFormat }] },
         primitive: { topology: 'triangle-list' },
         depthStencil: { format: this.depthFormat, depthWriteEnabled: false, depthCompare: 'greater-equal' },
+        multisample: { count: msaa ? 4 : 1 },
+      });
+      this.pipelines.set(key, p);
+    }
+    return p;
+  }
+
+  /**
+   * Particles blend into the weighted (rgb*w, w) target: the source is scaled
+   * by the destination weight and the weight itself is left untouched, which
+   * keeps the resolved rgb/w exactly "over" (alpha) or "add" (additive).
+   */
+  private particlePipeline(additive: boolean, msaa = this.settings.msaa): GPURenderPipeline {
+    const key = `particles:${additive}:${msaa}`;
+    let p = this.pipelines.get(key);
+    if (!p) {
+      const mod = shaderModule(this.device, 'particles');
+      p = this.device.createRenderPipeline({
+        label: key,
+        layout: this.particlePipelineLayout,
+        vertex: { module: mod, entryPoint: 'vsMain' },
+        fragment: {
+          module: mod, entryPoint: additive ? 'fsAdditive' : 'fsAlpha',
+          targets: [{
+            format: this.hdrFormat,
+            blend: {
+              color: { srcFactor: 'dst-alpha', dstFactor: additive ? 'one' : 'one-minus-src-alpha', operation: 'add' },
+              alpha: { srcFactor: 'zero', dstFactor: 'one', operation: 'add' },
+            },
+          }],
+        },
+        primitive: { topology: 'triangle-list' },
+        depthStencil: { format: this.depthFormat, depthWriteEnabled: false, depthCompare: 'greater' },
         multisample: { count: msaa ? 4 : 1 },
       });
       this.pipelines.set(key, p);
@@ -997,9 +1081,23 @@ export class Renderer {
         { binding: 22, resource: this.snowViews[0] },
         { binding: 23, resource: this.snowViews[1] },
         { binding: 24, resource: this.snowViews[2] },
+        { binding: 25, resource: this.spotShadows.arrayView },
+        { binding: 26, resource: { buffer: this.spotShadows.mats } },
       ];
     this.frameBG = d.createBindGroup({ label: 'frame', layout: this.frameLayout, entries: frameEntries(this.frameBuffer) });
     this.captureFrameBG = d.createBindGroup({ label: 'captureFrame', layout: this.frameLayout, entries: frameEntries(this.captureFrameBuffer) });
+    this.spotBGs = [];
+    for (let i = 0; i < SPOT_LAYERS; i++) {
+      this.spotBGs.push(d.createBindGroup({
+        layout: this.shadowLayout,
+        entries: [
+          { binding: 0, resource: { buffer: this.spotShadows.uniforms, offset: i * 256, size: 64 } },
+          { binding: 1, resource: { buffer: this.instances.buffer } },
+          { binding: 2, resource: { buffer: this.visibleBuffer } },
+          { binding: 3, resource: this.sampAniso },
+        ],
+      }));
+    }
     this.shadowBGs = [];
     for (let i = 0; i < CASCADES; i++) {
       this.shadowBGs.push(
@@ -1225,6 +1323,22 @@ export class Renderer {
         shadowTris += list.triangles;
       }
     }
+    // Dynamic spot-light shadows (flashlight): casters inside each light's frustum.
+    for (let si = 0; si < this.spotShadows.active; si++) {
+      const list = this.spotLists[si];
+      list.reset();
+      const sp = this.spotShadows.views[si].planes;
+      for (const r of renderables) {
+        if (!r.visible || !r.castShadow || r.viewmodel) continue;
+        if (!aabbVisible(sp, r.worldMin, r.worldMax)) continue;
+        const l = this.selectLod(r, eye, k2, 0);
+        const prims = l.mesh.primitives;
+        for (let k = 0; k < prims.length; k++) list.add(prims[k], l.materials[k], r.slot);
+      }
+      offset = list.finalize(this.visible, offset);
+      shadowDraws += list.draws.length;
+      shadowTris += list.triangles;
+    }
     if (offset * 4 > this.visibleBuffer.size) {
       this.visibleBuffer.destroy();
       this.visibleBuffer = this.device.createBuffer({ label: 'visible', size: this.visible.data.byteLength, usage: BU.STORAGE | BU.COPY_DST });
@@ -1261,11 +1375,36 @@ export class Renderer {
       }
       pass.end();
     }
+    this.encodeSpotShadows(enc);
+  }
+
+  private encodeSpotShadows(enc: GPUCommandEncoder) {
+    const arena = this.arena;
+    for (let si = 0; si < this.spotShadows.active; si++) {
+      const pass = enc.beginRenderPass({
+        label: `spotShadow${si}`,
+        colorAttachments: [],
+        depthStencilAttachment: { view: this.spotShadows.layerViews[si], depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' },
+      });
+      pass.setBindGroup(0, this.spotBGs[si]);
+      pass.setVertexBuffer(0, arena.pos.buffer);
+      pass.setVertexBuffer(1, arena.attr.buffer);
+      pass.setIndexBuffer(arena.index.buffer, 'uint32');
+      let cur: GPURenderPipeline | null = null;
+      let curMat: Material | null = null;
+      for (const dr of this.spotLists[si].draws) {
+        const p = this.shadowPipeline(dr.masked, dr.doubleSided);
+        if (p !== cur) { pass.setPipeline(p); cur = p; curMat = null; }
+        if (dr.material !== curMat) { pass.setBindGroup(1, dr.material.bindGroup); curMat = dr.material; }
+        pass.drawIndexed(dr.prim.indexCount, dr.count, dr.prim.firstIndex, dr.prim.baseVertex, dr.first);
+      }
+      pass.end();
+    }
   }
 
   /** Opaque, masked prepass + colour, sky. Returns the open pass for overlays. */
   private encodeMain(enc: GPUCommandEncoder, target: { color: GPUTextureView; resolve?: GPUTextureView; depth: GPUTextureView; msaa: boolean },
-    frameBG: GPUBindGroup, overdraw: boolean, timestamps: boolean, clutter: ClutterDraw[] = []): GPURenderPassEncoder {
+    frameBG: GPUBindGroup, overdraw: boolean, timestamps: boolean, clutter: ClutterDraw[] = [], particles = false): GPURenderPassEncoder {
     const arena = this.arena;
     const msaa = target.msaa;
     const pass = enc.beginRenderPass({
@@ -1328,6 +1467,18 @@ export class Renderer {
       pass.setPipeline(this.skyPipeline(msaa));
       pass.draw(3);
     }
+    const P = this.particles;
+    if (particles && !overdraw && P.alphaCount + P.addCount > 0) {
+      pass.setBindGroup(1, this.particleBG);
+      if (P.alphaCount > 0) {
+        pass.setPipeline(this.particlePipeline(false, msaa));
+        pass.draw(6, P.alphaCount, 0, 0);
+      }
+      if (P.addCount > 0) {
+        pass.setPipeline(this.particlePipeline(true, msaa));
+        pass.draw(6, P.addCount, 0, P.alphaCount);
+      }
+    }
     return pass;
   }
 
@@ -1376,6 +1527,12 @@ export class Renderer {
     camera.update();
     if (this.shadows.ensure(S.shadows.resolution)) this.bindingsDirty = true;
     if (this.bindingsDirty) this.rebuildBindings();
+    // Map lights + this frame's dynamic lights (flashlight, muzzle flashes).
+    if (this.lightsDirty || this.dynamicLights.length > 0 || this.hadDynamicLights) {
+      this.uploadLights();
+      this.lightsDirty = false;
+      this.hadDynamicLights = this.dynamicLights.length > 0;
+    }
 
     const envState = env.state;
     const de = env.derive();
@@ -1390,7 +1547,7 @@ export class Renderer {
       this.sky.encodeUpdate(enc0, this.frameBuffer, { mieScale: envState.sky.turbidity * AEROSOL_BASE, cameraAltitudeKm: 0.1, groundAlbedo: [ga[0], ga[1], ga[2]] }, de.sunDir);
       d.queue.submit([enc0.finish()]);
       this.lastEnvVersion = env.version;
-      if (this.probes && S.reflectionProbes) this.captureProbes(env, renderables);
+      if (this.probes && S.reflectionProbes) this.captureProbes(env, renderables.filter((r) => !r.viewmodel));
     }
 
     // ---- exposure + main view uniforms
@@ -1443,19 +1600,21 @@ export class Renderer {
     const ls = this.buildLists(planes, renderables, shadowsOn, camera.position, camera.fovY);
     if (this.clutter && S.clutter) this.clutter.collect(camera.position, planes, S.clutterDistance, this.clutterDraws);
     else this.clutterDraws.length = 0;
+    this.particles.upload(camera.position);
     const tcEnd = performance.now();
 
     // ---- encode
     const enc = d.createCommandEncoder({ label: 'frame' });
     this.timer.beginFrame();
     if (shadowsOn) this.encodeShadows(enc, true);
+    else this.encodeSpotShadows(enc);
     const overdraw = S.debugView === DEBUG_VIEWS.overdraw;
     const pass = this.encodeMain(enc, {
       color: S.msaa ? this.msaaColor!.createView() : this.resolved!.createView(),
       resolve: S.msaa ? this.resolved!.createView() : undefined,
       depth: this.depth!.createView(),
       msaa: S.msaa,
-    }, this.frameBG!, overdraw, true, this.clutterDraws);
+    }, this.frameBG!, overdraw, true, this.clutterDraws, S.debugView === 0);
     const arena = this.arena;
     // Debug overlays
     if (S.wireframe) {

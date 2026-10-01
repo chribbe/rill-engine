@@ -1113,6 +1113,52 @@ recipes.decals = () => {
     const fadeDown = Math.pow(1 - v, 0.6) * smoothstep(0, 0.05, v) * smoothstep(0, 0.15, Math.min(u, 1 - u));
     o[0] = 0.07; o[1] = 0.068; o[2] = 0.06; o[3] = streak * fadeDown * 0.7;
   });
+  // Bullet holes (centred, radius 1 = box edge). Relief comes from the shader's crater profile.
+  const rays = (u: number, v: number, seed: number, n: number, reach: number) => {
+    const rr = mulberry32(seed);
+    const ang = Math.atan2(v - 0.5, u - 0.5);
+    const r = Math.hypot(u - 0.5, v - 0.5) * 2;
+    let c = 0;
+    for (let k = 0; k < n; k++) {
+      const a0 = rr() * Math.PI * 2, len = reach * (0.6 + rr() * 0.4);
+      let da = Math.abs(ang - a0 - Math.sin(r * 9 + k) * 0.08);
+      da = Math.min(da, Math.PI * 2 - da);
+      c = Math.max(c, Math.exp(-((da * r * 90) ** 2)) * smoothstep(len, len * 0.4, r));
+    }
+    return c;
+  };
+  decal('bullet_hole', (u, v, o) => {
+    const dx = u - 0.5, dy = v - 0.5;
+    const r = Math.hypot(dx, dy) * 2;
+    const ca = (dx / Math.max(r, 1e-6)) * 2, sa = (dy / Math.max(r, 1e-6)) * 2;
+    // Irregular outlines: noise sampled around a circle (seamless in angle).
+    const chipR = 0.36 + fbm(0.5 + ca * 0.12, 0.5 + sa * 0.12, 6, 2, 315) * 0.2 + fbm(u, v, 24, 3, 319) * 0.08;
+    const holeR = 0.12 + fbm(0.5 + ca * 0.1, 0.5 + sa * 0.1, 8, 3, 316) * 0.07;
+    const chip = smoothstep(chipR + 0.025, chipR - 0.025, r);
+    const hole = smoothstep(holeR + 0.03, holeR - 0.02, r);
+    // Fractured facets of varying brightness, darker (occluded) towards the pit.
+    const cell = worley(u, v, 22, 317);
+    const facet = ((cell.id >>> 0) % 997) / 997;
+    const fracture = smoothstep(0.035, 0.0, cell.f2 - cell.f1) * 0.5;
+    const depthShade = 0.5 + 0.5 * smoothstep(holeR, chipR, r);
+    const fresh = (0.24 + facet * 0.13 + fbm(u, v, 48, 2, 318) * 0.05) * depthShade * (1 - fracture * 0.55);
+    const smudge = smoothstep(0.75, 0.3, r + fbm(u, v, 5, 3, 312) * 0.35) * 0.3;
+    const crack = rays(u, v, 313, 5, 0.85) * (1 - chip);
+    let k = chip * fresh + (1 - chip) * (crack > 0.05 ? 0.03 : 0.06);
+    k = k * (1 - hole) + 0.01 * hole;
+    o[0] = k; o[1] = k * 0.98; o[2] = k * 0.95;
+    o[3] = clamp01(Math.max(hole, chip * 0.95, crack * 0.85, smudge));
+  });
+  decal('bullet_hole_metal', (u, v, o) => {
+    const r = Math.hypot(u - 0.5, v - 0.5) * 2;
+    const n = fbm(u, v, 12, 3, 321);
+    const hole = smoothstep(0.15, 0.12, r + n * 0.02);
+    const bare = smoothstep(0.34, 0.26, r + n * 0.06);
+    const scorch = smoothstep(0.8, 0.3, r + n * 0.2) * 0.5;
+    const k = hole * 0.01 + (1 - hole) * (bare * 0.55 + (1 - bare) * 0.04);
+    o[0] = k; o[1] = k; o[2] = k * 1.02;
+    o[3] = clamp01(Math.max(hole, bare * 0.95, scorch));
+  });
   decal('grime_base', (u, v, o) => {
     // Ground-contact grime for wall bases (dark at the bottom edge, v=1).
     const n = fbm(u, v, 12, 4, 301);

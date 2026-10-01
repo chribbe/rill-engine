@@ -1,10 +1,24 @@
 /**
- * Static collision world: triangle soup in a uniform XZ grid. Used only by the
- * first-person controller (sphere pushes + ground rays). Not a physics engine.
+ * Static collision world: triangle soup in a uniform XZ grid. Used by the
+ * first-person controller (sphere pushes + ground rays) and hitscan rays.
+ * Not a physics engine.
  */
+
+/** Coarse surface class per triangle (impact effects). */
+export const Surface = { Default: 0, Metal: 1 } as const;
+export type Surface = (typeof Surface)[keyof typeof Surface];
+
+export interface RayHit {
+  t: number;
+  point: [number, number, number];
+  /** Unit geometric normal facing the ray origin. */
+  normal: [number, number, number];
+  surface: Surface;
+}
 
 export class CollisionWorld {
   private tris: number[] = []; // 9 floats per triangle
+  private surf: Surface[] = [];
   private grid = new Map<number, number[]>();
   readonly cell = 4;
   triangleCount = 0;
@@ -14,7 +28,7 @@ export class CollisionWorld {
   }
 
   /** Adds world-space triangles from positions (xyz) + indices, transformed by a column-major matrix. */
-  addMesh(pos: Float32Array, idx: Uint32Array, m: ArrayLike<number>) {
+  addMesh(pos: Float32Array, idx: Uint32Array, m: ArrayLike<number>, surface: Surface = Surface.Default) {
     const wp = new Float32Array(pos.length);
     for (let i = 0; i < pos.length; i += 3) {
       const x = pos[i], y = pos[i + 1], z = pos[i + 2];
@@ -31,6 +45,7 @@ export class CollisionWorld {
       if (cx * cx + cy * cy + cz * cz < 1e-14) continue;
       const ti = this.tris.length / 9;
       this.tris.push(wp[a], wp[a + 1], wp[a + 2], wp[b], wp[b + 1], wp[b + 2], wp[c], wp[c + 1], wp[c + 2]);
+      this.surf.push(surface);
       const minX = Math.min(wp[a], wp[b], wp[c]), maxX = Math.max(wp[a], wp[b], wp[c]);
       const minZ = Math.min(wp[a + 2], wp[b + 2], wp[c + 2]), maxZ = Math.max(wp[a + 2], wp[b + 2], wp[c + 2]);
       for (let ix = Math.floor(minX / this.cell); ix <= Math.floor(maxX / this.cell); ix++) {
@@ -79,6 +94,57 @@ export class CollisionWorld {
       if (ny <= 0) continue;
       const h = ay + u * (by - ay) + v * (cy - ay);
       if (h <= y + 1e-3 && h >= y - maxDrop && h > best) best = h;
+    }
+    return best;
+  }
+
+  /**
+   * Nearest hit along a ray (dir normalised) within maxT: walks the XZ grid
+   * cells the ray crosses (2D DDA) and tests their triangles (Moller-Trumbore).
+   */
+  raycast(o: ArrayLike<number>, d: ArrayLike<number>, maxT: number): RayHit | null {
+    const T = this.tris;
+    const tested = new Set<number>();
+    let best: RayHit | null = null;
+    const C = this.cell;
+    let ix = Math.floor(o[0] / C), iz = Math.floor(o[2] / C);
+    const sx = d[0] > 0 ? 1 : -1, sz = d[2] > 0 ? 1 : -1;
+    const idx = Math.abs(d[0]) > 1e-9 ? C / Math.abs(d[0]) : Infinity;
+    const idz = Math.abs(d[2]) > 1e-9 ? C / Math.abs(d[2]) : Infinity;
+    let tx = Math.abs(d[0]) > 1e-9 ? ((sx > 0 ? (ix + 1) * C - o[0] : o[0] - ix * C) / Math.abs(d[0])) : Infinity;
+    let tz = Math.abs(d[2]) > 1e-9 ? ((sz > 0 ? (iz + 1) * C - o[2] : o[2] - iz * C) / Math.abs(d[2])) : Infinity;
+    let tCell = 0;
+    for (let step = 0; step < 4096 && tCell <= maxT; step++) {
+      const l = this.grid.get(this.key(ix, iz));
+      if (l) {
+        for (const t of l) {
+          if (tested.has(t)) continue;
+          tested.add(t);
+          const k = t * 9;
+          const e1x = T[k + 3] - T[k], e1y = T[k + 4] - T[k + 1], e1z = T[k + 5] - T[k + 2];
+          const e2x = T[k + 6] - T[k], e2y = T[k + 7] - T[k + 1], e2z = T[k + 8] - T[k + 2];
+          const px = d[1] * e2z - d[2] * e2y, py = d[2] * e2x - d[0] * e2z, pz = d[0] * e2y - d[1] * e2x;
+          const det = e1x * px + e1y * py + e1z * pz;
+          if (Math.abs(det) < 1e-12) continue;
+          const inv = 1 / det;
+          const sxv = o[0] - T[k], syv = o[1] - T[k + 1], szv = o[2] - T[k + 2];
+          const u = (sxv * px + syv * py + szv * pz) * inv;
+          if (u < 0 || u > 1) continue;
+          const qx = syv * e1z - szv * e1y, qy = szv * e1x - sxv * e1z, qz = sxv * e1y - syv * e1x;
+          const v = (d[0] * qx + d[1] * qy + d[2] * qz) * inv;
+          if (v < 0 || u + v > 1) continue;
+          const th = (e2x * qx + e2y * qy + e2z * qz) * inv;
+          if (th <= 1e-4 || th > maxT || (best && th >= best.t)) continue;
+          let nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+          const nl = Math.hypot(nx, ny, nz);
+          nx /= nl; ny /= nl; nz /= nl;
+          if (nx * d[0] + ny * d[1] + nz * d[2] > 0) { nx = -nx; ny = -ny; nz = -nz; }
+          best = { t: th, point: [o[0] + d[0] * th, o[1] + d[1] * th, o[2] + d[2] * th], normal: [nx, ny, nz], surface: this.surf[t] as Surface };
+        }
+      }
+      // A hit inside the cells walked so far cannot be beaten by later cells.
+      if (best && best.t <= Math.min(tx, tz)) break;
+      if (tx < tz) { tCell = tx; tx += idx; ix += sx; } else { tCell = tz; tz += idz; iz += sz; }
     }
     return best;
   }

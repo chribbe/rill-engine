@@ -3,6 +3,7 @@
 #include "brdf"
 #include "shadows"
 #include "fog"
+#include "lighting"
 
 struct MaterialParams {
   baseColor: vec4f,
@@ -61,34 +62,6 @@ override USE_LOD_FADE: bool = false;
 const RNM0: vec3f = vec3f(0.81649658, 0.0, 0.57735027);
 const RNM1: vec3f = vec3f(-0.40824829, 0.70710678, 0.57735027);
 const RNM2: vec3f = vec3f(-0.40824829, -0.70710678, 0.57735027);
-
-// --- probe volume (ambient cubes, slab-packed 3D texture) ---------------------
-fn probeSlab(g: vec3f, slab: u32) -> vec3f {
-  let dims = vec3f(frame.pvDims.xyz);
-  let gz = clamp(g.z, 0.0, dims.z - 1.0);
-  let uvw = vec3f((g.x + 0.5) / dims.x, (g.y + 0.5) / dims.y, (f32(slab) * dims.z + gz + 0.5) / (dims.z * 12.0));
-  return textureSampleLevel(probeVolume, sampClamp, uvw, 0.0).rgb;
-}
-
-fn ambientCube(g: vec3f, n: vec3f, comp: u32) -> vec3f {
-  let n2 = n * n;
-  let b = comp * 6u;
-  return n2.x * probeSlab(g, b + select(1u, 0u, n.x >= 0.0))
-       + n2.y * probeSlab(g, b + select(3u, 2u, n.y >= 0.0))
-       + n2.z * probeSlab(g, b + select(5u, 4u, n.z >= 0.0));
-}
-
-/// Irradiance/PI from the probe volume (rgb) and coverage weight (a).
-fn probeVolumeIrradiance(wp: vec3f, n: vec3f, skyUp: vec3f) -> vec4f {
-  let g = (wp - frame.pvOrigin.xyz) * frame.pvInvSpacing.xyz;
-  let dims = vec3f(frame.pvDims.xyz);
-  let d = min(g + 0.5, dims - 0.5 - g);
-  let w = saturate(min(d.x, min(d.y, d.z)) * 0.5);
-  if (w <= 0.0) { return vec4f(0.0); }
-  let sky = ambientCube(g, n, 0u);
-  let sun = ambientCube(g, n, 1u);
-  return vec4f(sky * skyUp * frame.lmParams.z + sun * frame.sunColor.rgb * frame.lmParams.w, w);
-}
 
 // --- reflection probes ---------------------------------------------------------
 fn reflProbeWeight(i: u32, wp: vec3f) -> f32 {
@@ -168,6 +141,11 @@ fn vsMain(v: VSIn) -> VSOut {
   let wp = inst.model * vec4f(v.position, 1.0);
   var o: VSOut;
   o.pos = frame.viewProj * wp;
+  if ((inst.info.y & I_VIEWMODEL) != 0u) {
+    // Same projection as the world (muzzle effects line up), depth remapped into
+    // [0.75, 1] of reverse-Z so the weapon never clips into walls.
+    o.pos.z = o.pos.z * 0.25 + o.pos.w * 0.75;
+  }
   o.worldPos = wp.xyz;
   o.normal = normalize(normalMatrix(inst.model) * v.normal.xyz);
   // Not normalised here: a zero tangent must stay zero (the fragment stage orthonormalises with a fallback).
@@ -356,6 +334,19 @@ fn applyDecals(wp: vec3f, dpx: vec3f, dpy: vec3f, s: ptr<function, Surface>) {
     (*s).albedo = mix((*s).albedo, c.rgb * d.tint.rgb, a);
     if (d.params.w >= 0.0) { (*s).roughness = mix((*s).roughness, d.params.w, a); }
     (*s).ao = mix((*s).ao, 1.0, a * 0.5);
+    if (d.params.z > 0.0) {
+      // Bullet-hole relief from an analytic height profile: pit + raised lip.
+      let r = length(lp.xy) * 2.0;
+      let pit = exp(-r * r * 16.0);
+      let lip = exp(-(r - 0.42) * (r - 0.42) * 120.0);
+      let dhdr = 32.0 * r * pit - 0.15 * 240.0 * (r - 0.42) * lip;
+      let radial = normalize(d.row0.xyz) * lp.x + normalize(d.row1.xyz) * lp.y;
+      let rl = length(radial);
+      if (rl > 1e-5) {
+        let k = d.params.z * d.params.y * angleFade * edgeFade;
+        (*s).N = normalize((*s).N - radial / rl * dhdr * k);
+      }
+    }
   }
 }
 
@@ -366,7 +357,6 @@ struct ShadeOut {
   raw: bool,
 };
 
-fn skyUpRadiance() -> vec3f { return shEval(vec3f(0.0, 1.0, 0.0)); }
 
 fn shade(in: VSOut, front: bool) -> ShadeOut {
   let inst = instances[in.slot];
@@ -784,6 +774,7 @@ fn shade(in: VSOut, front: bool) -> ShadeOut {
       }
       let NoL = saturate(dot(N, Ld));
       if (att <= 0.0) { continue; }
+      if (l.params.w > 0.5) { att *= spotShadow(u32(l.params.w + 0.5) - 1u, wp, Ng, sqrt(d2)); }
       let H = normalize(V + Ld);
       let NoH = saturate(dot(N, H));
       let VoH = saturate(dot(V, H));

@@ -7,6 +7,7 @@ import { FirstPersonController } from './engine/player/controller';
 import { StatsOverlay } from './engine/ui/stats';
 import { createPlayground, tonemapperFromName } from './engine/ui/playground';
 import { runStress, clearStress } from './stress';
+import { Sandbox } from './sandbox';
 
 async function loadPreset(name: string): Promise<EnvironmentState> {
   const r = await fetch(`/environments/${name}.json`);
@@ -87,6 +88,7 @@ async function main() {
   renderer.settings.tonemapper = tonemapperFromName(env.state.post.tonemapper);
 
   const player = new FirstPersonController(camera, canvas, world.collision);
+  const sandbox = new Sandbox(renderer, camera, world);
   const sp = world.doc.spawn;
   player.teleport(sp.position, sp.yaw, sp.pitch);
 
@@ -123,6 +125,16 @@ async function main() {
     bookmarks,
   });
 
+  // Fire (sandbox weapon) while the mouse is captured.
+  canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 0 && document.pointerLockElement === canvas) sandbox.trigger = true;
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (e.button === 0) sandbox.trigger = false;
+  });
+  document.addEventListener('pointerlockchange', () => {
+    if (document.pointerLockElement !== canvas) sandbox.trigger = false;
+  });
   const viewNames = Object.keys(DEBUG_VIEWS);
   window.addEventListener('keydown', (e) => {
     if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
@@ -143,6 +155,8 @@ async function main() {
     if (e.code === 'KeyH') gui.show(gui._hidden);
     if (e.code === 'KeyP') capture();
     if (e.code === 'KeyB') renderer.settings.bounds = !renderer.settings.bounds;
+    if (e.code === 'KeyL') sandbox.toggleFlashlight();
+    if (e.code === 'KeyX') sandbox.toggleWeapon();
     if (e.code === 'KeyG') renderer.settings.wireframe = !renderer.settings.wireframe;
     if (e.code === 'KeyM') {
       renderer.settings.msaa = !renderer.settings.msaa;
@@ -161,8 +175,15 @@ async function main() {
   // Automation / tooling API: the same operations a future editor or AI agent
   // will use (structured, no screen clicking).
   const api = {
-    renderer, world, env, camera, player,
+    renderer, world, env, camera, player, sandbox,
     setPreset,
+    /** Advances `n` manual frames (1/60 s each), e.g. to simulate held fire before a shot. */
+    step: async (n = 1) => {
+      for (let i = 0; i < n; i++) {
+        frame(performance.now(), true);
+        await renderer.device.queue.onSubmittedWorkDone();
+      }
+    },
     setView: (name: string) => (renderer.settings.debugView = DEBUG_VIEWS[name] ?? 0),
     setCamera: (pos: [number, number, number], yawDeg: number, pitchDeg = 0, fly = true) => {
       player.fly = fly;
@@ -255,6 +276,7 @@ async function main() {
     const c0 = performance.now();
     applySize();
     player.update(dt);
+    sandbox.update(dt);
     env.advance(dt);
     const all = stressList.length ? renderables.concat(stressList) : renderables;
     renderer.render(camera, env, all, dt);
