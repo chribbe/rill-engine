@@ -730,5 +730,65 @@
    0.9,
    0.9
   ]
+ },
+ "dev_grey": {
+  "averageAlbedo": [
+   0.2089,
+   0.2127,
+   0.2165
+  ],
+  "size": 1024,
+  "physicalSize": [
+   4,
+   4
+  ]
+ },
+ "dev_orange": {
+  "averageAlbedo": [
+   0.5862,
+   0.1492,
+   0.0273
+  ],
+  "size": 1024,
+  "physicalSize": [
+   4,
+   4
+  ]
+ },
+ "dev_dark": {
+  "averageAlbedo": [
+   0.0466,
+   0.0514,
+   0.0599
+  ],
+  "size": 1024,
+  "physicalSize": [
+   4,
+   4
+  ]
+ },
+ "dev_blue": {
+  "averageAlbedo": [
+   0.0413,
+   0.1531,
+   0.3923
+  ],
+  "size": 1024,
+  "physicalSize": [
+   4,
+   4
+  ]
+ },
+ "dev_green": {
+  "averageAlbedo": [
+   0.0785,
+   0.2631,
+   0.0471
+  ],
+  "size": 1024,
+  "physicalSize": [
+   4,
+   4
+  ]
  }
 }

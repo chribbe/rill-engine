@@ -157,6 +157,41 @@ recipes.debug_grid = () => {
   saveMaterial('debug_grid', S, [P, P], { albedo, rough });
 };
 
+/**
+ * Hammer-style measured dev textures: flat colour, 25 cm thin lines, 1 m lines and a heavy
+ * line every 4 m (the tile edge), plus a faint 1 m checker so scale reads at a distance.
+ */
+function devGrid(name: string, base: string, line: string) {
+  const S = 1024, P = 4, ppm = S / P;
+  const albedo = new Img(S, S), rough = new Field(S, S);
+  const b = lin(base), l = lin(line);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const cell = (Math.floor(x / ppm) + Math.floor(y / ppm)) & 1;
+      // Distance (px) to the nearest line of each spacing, from the texel centre.
+      const d = (period: number) => {
+        const ax = (x + 0.5) % period, ay = (y + 0.5) % period;
+        return Math.min(ax, period - ax, ay, period - ay);
+      };
+      const d4 = Math.min(x + 0.5, S - x - 0.5, y + 0.5, S - y - 0.5);
+      let w = 0;
+      if (d(ppm / 4) < 0.75) w = 0.45;
+      if (d(ppm) < 1.25) w = 0.8;
+      if (d4 < 2.5) w = 1;
+      const k = cell ? 1.04 : 0.96;
+      const r = (b[0] * k) * (1 - w) + l[0] * w, g = (b[1] * k) * (1 - w) + l[1] * w, bb = (b[2] * k) * (1 - w) + l[2] * w;
+      albedo.set(x, y, r, g, bb, 1);
+      rough.data[y * S + x] = w > 0 ? 0.6 : 0.78;
+    }
+  }
+  saveMaterial(name, S, [P, P], { albedo, rough });
+}
+recipes.dev_grey = () => devGrid('dev_grey', '#7c7d7e', '#a9abad');
+recipes.dev_orange = () => devGrid('dev_orange', '#c8692a', '#e8a066');
+recipes.dev_dark = () => devGrid('dev_dark', '#3b3e43', '#61666e');
+recipes.dev_blue = () => devGrid('dev_blue', '#356aa6', '#78a6d6');
+recipes.dev_green = () => devGrid('dev_green', '#4c8a3a', '#86ba72');
+
 recipes.debug_checker = () => {
   const S = 1024, P = 2, ppm = S / P;
   const albedo = new Img(S, S);

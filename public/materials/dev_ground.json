@@ -1,0 +1,3 @@
+{ "inherits": "dev_grey", "blend": { "material": "ground_grass", "contrast": 3.5, "height": 0.6, "noise": 0.8 },
+  "snow": 1,
+  "notes": "Dev floor for sculpt tests; ground paint (vertex colour R) blends in grass." }

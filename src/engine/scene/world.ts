@@ -695,7 +695,7 @@ export class World {
   /** CPU copy of a terrain chunk's mesh data (all attributes, for re-deforming). */
   private async terrainData(rt: RuntimeObject): Promise<MeshData> {
     const ref = (rt.doc as MeshObject).asset;
-    const data = (await loadGlb('/' + ref.replace(/^\//, ''))).mesh;
+    const data = ref.startsWith('builtin:') ? builtinMesh(ref) : (await loadGlb('/' + ref.replace(/^\//, ''))).mesh;
     for (const p of data.primitives) p.material = slotName(p.material);
     return data;
   }

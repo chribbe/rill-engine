@@ -459,6 +459,19 @@ Limits: the deformation is sampled at the existing terrain vertices (the testmap
 terrain has ~2.5 m spacing, Hässelby ~1 m), so features smaller than that don't
 appear; a remeshed heightfield terrain is the next step for fine sculpting.
 
+### Dev sandbox (`?map=sandbox`)
+
+The simplest test level, for trying tools without a heavy map: a 200 × 200 m
+floor of 25 terrain tiles (`builtin:grid?x=40&z=40&seg=80&material=dev_ground`:
+shared vertices every 0.5 m, vertex colours for ground paint), an empty terrain
+layer, and a blockout set: orange walls, a tall block, 1 m and 2 m cubes, a
+17 cm stair to a 1.7 m landing, a 12° ramp and a 1.8 m human reference.
+Materials are Hammer-style measured dev textures (`dev_grey`, `dev_orange`,
+`dev_dark`, `dev_blue`, `dev_green`: 25 cm / 1 m / 4 m lines;
+`npm run textures -- dev_grey ...` regenerates them); `dev_ground` blends in
+grass where the ground is painted. Viewpoints: Overview, Stairs and ramp, Open
+field. No baked lighting (sky + sun only); 1.9 ms GPU.
+
 ### Lights and probes
 
 Light templates (Assets › entities) placed on a wall stand 0.4 m off it, on a

@@ -19,7 +19,7 @@ Open http://127.0.0.1:5173 in a WebGPU-capable desktop browser (Chrome 113+).
 
 | URL | |
 |---|---|
-| `/?map=testmap` | **editor** (default map: testmap; also `hasselby`, `sandbox`) |
+| `/?map=testmap` | **editor** (default map: testmap; also `hasselby`, and `sandbox`: a dev-texture blockout level for trying the tools) |
 | `/play.html?map=hasselby` | game view only (renderer playground, no editor) |
 
 ## Editor basics

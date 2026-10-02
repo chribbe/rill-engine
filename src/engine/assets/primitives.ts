@@ -76,6 +76,39 @@ export function planeMesh(sx: number, sz: number, material = 'default', segments
   return { name: `plane ${sx}x${sz}`, primitives: [finish(b, material)] };
 }
 
+/**
+ * Terrain grid on XZ: shared vertices ((n+1)^2), centred, UV0 = local metres (x, z) like
+ * planeMesh, UV1 = one chart, vertex colour (blend 0, AO 1) so ground paint has a layer
+ * to drive. Tiles whose size is a multiple of the texture period stay seamless.
+ */
+export function gridMesh(sx: number, sz: number, material = 'default', segments = 32): MeshData {
+  const n = Math.max(1, Math.round(segments));
+  const V = (n + 1) * (n + 1);
+  const pos = new Float32Array(V * 3), nrm = new Float32Array(V * 3), uv0 = new Float32Array(V * 2), uv1 = new Float32Array(V * 2), col = new Float32Array(V * 4);
+  for (let j = 0; j <= n; j++) {
+    for (let i = 0; i <= n; i++) {
+      const v = j * (n + 1) + i;
+      const x = -sx / 2 + (sx * i) / n, z = -sz / 2 + (sz * j) / n;
+      pos.set([x, 0, z], v * 3);
+      nrm.set([0, 1, 0], v * 3);
+      uv0.set([x, z], v * 2);
+      uv1.set([0.002 + 0.996 * (i / n), 0.002 + 0.996 * (j / n)], v * 2);
+      col.set([0, 1, 0, 1], v * 4);
+    }
+  }
+  const idx = new Uint32Array(n * n * 6);
+  let k = 0;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const a = j * (n + 1) + i, b = a + 1, d = a + n + 1, c = d + 1;
+      // Front faces: cross(e1, e2) along +Y.
+      idx.set([a, d, c, a, c, b], k);
+      k += 6;
+    }
+  }
+  return { name: `grid ${sx}x${sz}`, primitives: [{ material, positions: pos, normals: nrm, uv0, uv1, colors: col, indices: idx }] };
+}
+
 /** UV sphere (for material test spheres). UV0 = metres along the surface. */
 export function sphereMesh(radius: number, material = 'default', seg = 48, rings = 32): MeshData {
   const b = newB();
@@ -131,6 +164,7 @@ export function builtinMesh(ref: string): MeshData {
   switch (name) {
     case 'box': return boxMesh(num('x', 1), num('y', 1), num('z', 1), mat);
     case 'plane': return planeMesh(num('x', 10), num('z', 10), mat, num('seg', 1));
+    case 'grid': return gridMesh(num('x', 10), num('z', 10), mat, num('seg', 32));
     case 'sphere': return sphereMesh(num('r', 0.5), mat);
     case 'cylinder': return cylinderMesh(num('r', 0.1), num('h', 1), mat);
     default: throw new Error(`Unknown builtin mesh: ${ref}`);
