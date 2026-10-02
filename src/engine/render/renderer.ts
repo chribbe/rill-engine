@@ -1127,9 +1127,9 @@ export class Renderer {
     });
   }
 
-  private linePipeline(wire: boolean): GPURenderPipeline {
+  private linePipeline(wire: boolean, select = false): GPURenderPipeline {
     const msaa = this.settings.msaa;
-    const key = `lines:${wire}:${msaa}`;
+    const key = `lines:${wire}:${select}:${msaa}`;
     let p = this.pipelines.get(key);
     if (!p) {
       const mod = shaderModule(this.device, 'lines');
@@ -1137,7 +1137,7 @@ export class Renderer {
         label: key,
         layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.linesLayout] }),
         vertex: wire
-          ? { module: mod, entryPoint: 'vsWire', buffers: VERTEX_LAYOUT_POS }
+          ? { module: mod, entryPoint: select ? 'vsWireSelect' : 'vsWire', buffers: VERTEX_LAYOUT_POS }
           : {
               module: mod, entryPoint: 'vsLines',
               buffers: [{ arrayStride: 28, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x4' }] }],
@@ -1958,6 +1958,7 @@ export class Renderer {
         pass.drawIndexed(dr.prim.wireCount, dr.count, dr.prim.wireFirst, dr.prim.baseVertex, dr.first);
       }
     }
+    if (this.highlight.length) this.encodeHighlight(pass);
     this.lineVerts.length = 0;
     if (S.bounds) this.addBoundsLines(renderables, planes);
     if (this.frozenViewProj) this.addFrustumLines(this.frozenViewProj);
@@ -2020,6 +2021,50 @@ export class Renderer {
     st.culledObjects = renderables.length - ls.visibleObjects;
     st.cpuCullMs = tcEnd - tc;
     st.cpuEncodeMs = performance.now() - t0 - (tcEnd - tc);
+  }
+
+  /**
+   * Editor selection outline: every edge of the highlighted renderables (LOD0),
+   * depth tested over the lit image. Their slots go into a small list bound in
+   * place of the visible list, so each object is one instanced wire draw.
+   */
+  highlight: Renderable[] = [];
+  private highlightBuffer: GPUBuffer | null = null;
+  private highlightBG: GPUBindGroup | null = null;
+  private highlightKey = '';
+
+  private encodeHighlight(pass: GPURenderPassEncoder) {
+    const list = this.highlight.filter((r) => r.visible);
+    if (!list.length) return;
+    const d = this.device;
+    const bytes = Math.max(16, list.length * 4);
+    if (!this.highlightBuffer || this.highlightBuffer.size < bytes) {
+      this.highlightBuffer?.destroy();
+      this.highlightBuffer = d.createBuffer({ label: 'highlight', size: Math.max(256, bytes * 2), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+      this.highlightKey = '';
+    }
+    d.queue.writeBuffer(this.highlightBuffer, 0, new Uint32Array(list.map((r) => r.slot)));
+    const key = `${this.instanceGen}:${this.highlightBuffer.size}`;
+    if (!this.highlightBG || this.highlightKey !== key || this.bindingsDirty) {
+      this.highlightBG = d.createBindGroup({
+        layout: this.linesLayout,
+        entries: [
+          { binding: 0, resource: { buffer: this.frameBuffer } },
+          { binding: 1, resource: { buffer: this.instances.buffer } },
+          { binding: 2, resource: { buffer: this.highlightBuffer } },
+        ],
+      });
+      this.highlightKey = key;
+    }
+    const arena = this.arena;
+    for (const r of list) for (const p of r.mesh.primitives) arena.ensureWire(p);
+    pass.setPipeline(this.linePipeline(true, true));
+    pass.setBindGroup(0, this.highlightBG);
+    pass.setVertexBuffer(0, arena.pos.buffer);
+    pass.setIndexBuffer(arena.wire.buffer, 'uint32');
+    list.forEach((r, i) => {
+      for (const p of r.mesh.primitives) pass.drawIndexed(p.wireCount, 1, p.wireFirst, p.baseVertex, i);
+    });
   }
 
   private addProbeLines() {

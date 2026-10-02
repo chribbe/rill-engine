@@ -1,0 +1,3077 @@
+{
+  "format": "rill.assets",
+  "version": 1,
+  "categories": ["buildings", "structural", "props", "vegetation", "roads", "lighting", "vehicles", "terrain", "environment", "reference"],
+  "assets": [
+    {
+      "id": "hasselby/abutment_0",
+      "name": "Abutment 0",
+      "category": "structural",
+      "path": "assets/hasselby/abutment_0.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [217, 154] } },
+      "bounds": { "min": [-120.33, -0.125, 8.799], "max": [-101.943, 6.43, 46.1] }
+    },
+    {
+      "id": "hasselby/abutment_1",
+      "name": "Abutment 1",
+      "category": "structural",
+      "path": "assets/hasselby/abutment_1.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [208, 117] } },
+      "bounds": { "min": [70.645, 0.703, -59.991], "max": [88.891, 6.43, -27.301] }
+    },
+    {
+      "id": "hasselby/bench_park",
+      "name": "Bench park",
+      "category": "props",
+      "path": "assets/hasselby/bench_park.glb",
+      "semantic": "prop",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-0.9, 0, -0.22], "max": [0.9, 0.85, 0.3] }
+    },
+    {
+      "id": "hasselby/bike_rack",
+      "name": "Bike rack",
+      "category": "props",
+      "path": "assets/hasselby/bike_rack.glb",
+      "semantic": "prop",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-1.219, 0, -0.37], "max": [1.22, 0.768, 0.367] }
+    },
+    {
+      "id": "hasselby/bin_post",
+      "name": "Bin post",
+      "category": "props",
+      "path": "assets/hasselby/bin_post.glb",
+      "semantic": "prop",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-0.19, 0, -0.39], "max": [0.19, 1.05, 0.03] }
+    },
+    {
+      "id": "hasselby/bldg_001_slab",
+      "name": "Building 001 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_001_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [261, 350] } },
+      "bounds": { "min": [-21.308, 0.001, -16.647], "max": [21.312, 14.087, 16.641] }
+    },
+    {
+      "id": "hasselby/bldg_003_point",
+      "name": "Building 003 (point)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_003_point.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [145, 509] } },
+      "bounds": { "min": [-14.01, 0.005, -11.057], "max": [14.016, 37.82, 11.062] }
+    },
+    {
+      "id": "hasselby/bldg_007_slab",
+      "name": "Building 007 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_007_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [252, 342] } },
+      "bounds": { "min": [-21.216, -0.005, -13.531], "max": [21.215, 14.059, 13.532] }
+    },
+    {
+      "id": "hasselby/bldg_012_retail",
+      "name": "Building 012 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_012_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [209, 453] } },
+      "bounds": { "min": [-18.53, -0.005, -16.415], "max": [18.526, 8.353, 16.416] }
+    },
+    {
+      "id": "hasselby/bldg_014_school",
+      "name": "Building 014 (school)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_014_school.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [211, 381] } },
+      "bounds": { "min": [-18.168, 0.002, -13.989], "max": [18.165, 16.041, 13.99] }
+    },
+    {
+      "id": "hasselby/bldg_016_school",
+      "name": "Building 016 (school)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_016_school.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [419, 434] } },
+      "bounds": { "min": [-30.892, -0.003, -15.427], "max": [30.884, 15.842, 15.425] }
+    },
+    {
+      "id": "hasselby/bldg_022_pavilion",
+      "name": "Building 022 (pavilion)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_022_pavilion.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [427, 275] } },
+      "bounds": { "min": [-35.455, -0.001, -13.467], "max": [35.447, 9.844, 13.471] }
+    },
+    {
+      "id": "hasselby/bldg_024_slab",
+      "name": "Building 024 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_024_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [263, 369] } },
+      "bounds": { "min": [-22.086, -0.001, -11.731], "max": [22.081, 17.317, 11.737] }
+    },
+    {
+      "id": "hasselby/bldg_027_slab",
+      "name": "Building 027 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_027_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [216, 365] } },
+      "bounds": { "min": [-18.258, 0.002, -11.379], "max": [18.258, 17.175, 11.371] }
+    },
+    {
+      "id": "hasselby/bldg_028_point",
+      "name": "Building 028 (point)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_028_point.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [136, 426] } },
+      "bounds": { "min": [-11.11, 0.004, -12.61], "max": [11.108, 35.555, 12.615] }
+    },
+    {
+      "id": "hasselby/bldg_031_point",
+      "name": "Building 031 (point)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_031_point.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [134, 459] } },
+      "bounds": { "min": [-12.438, 0.004, -14.153], "max": [12.429, 35.027, 14.156] }
+    },
+    {
+      "id": "hasselby/bldg_032_slab",
+      "name": "Building 032 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_032_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [687, 414] } },
+      "bounds": { "min": [-50.685, -0.001, -27.594], "max": [50.683, 16.358, 27.599] }
+    },
+    {
+      "id": "hasselby/bldg_037_retail",
+      "name": "Building 037 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_037_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [256, 277] } },
+      "bounds": { "min": [-14.138, -0.004, -22.196], "max": [14.143, 8.283, 22.197] }
+    },
+    {
+      "id": "hasselby/bldg_040_pavilion",
+      "name": "Building 040 (pavilion)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_040_pavilion.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [678, 220] } },
+      "bounds": { "min": [-16.858, 0.002, -44.803], "max": [16.863, 7.468, 44.801] }
+    },
+    {
+      "id": "hasselby/bldg_042_point",
+      "name": "Building 042 (point)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_042_point.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [138, 489] } },
+      "bounds": { "min": [-13.316, -0.003, -10.963], "max": [13.326, 35.91, 10.957] }
+    },
+    {
+      "id": "hasselby/bldg_043_point",
+      "name": "Building 043 (point)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_043_point.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [131, 449] } },
+      "bounds": { "min": [-11.211, 0, -11.141], "max": [11.216, 34.27, 11.133] }
+    },
+    {
+      "id": "hasselby/bldg_046_point",
+      "name": "Building 046 (point)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_046_point.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [141, 438] } },
+      "bounds": { "min": [-11.632, 0, -12.161], "max": [11.63, 36.808, 12.158] }
+    },
+    {
+      "id": "hasselby/bldg_048_point",
+      "name": "Building 048 (point)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_048_point.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [131, 449] } },
+      "bounds": { "min": [-11.214, 0.004, -11.133], "max": [11.208, 34.251, 11.141] }
+    },
+    {
+      "id": "hasselby/bldg_052_slab",
+      "name": "Building 052 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_052_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [206, 311] } },
+      "bounds": { "min": [-17.78, -0.003, -10.023], "max": [17.78, 11.779, 10.016] }
+    },
+    {
+      "id": "hasselby/bldg_054_point",
+      "name": "Building 054 (point)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_054_point.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [132, 506] } },
+      "bounds": { "min": [-14.023, 0.002, -11.32], "max": [14.021, 34.409, 11.318] }
+    },
+    {
+      "id": "hasselby/bldg_056_retail",
+      "name": "Building 056 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_056_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "bounds": { "min": [-80.568, -0.332, -86.851], "max": [-22.104, 4.931, 26.872] }
+    },
+    {
+      "id": "hasselby/bldg_057_retail",
+      "name": "Building 057 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_057_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [266, 654] } },
+      "bounds": { "min": [-21.156, -0.001, -21.844], "max": [21.158, 14.61, 21.852] }
+    },
+    {
+      "id": "hasselby/bldg_058_tower",
+      "name": "Building 058 (tower)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_058_tower.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [187, 631] } },
+      "bounds": { "min": [-15.843, 0.005, -24.206], "max": [15.842, 48.33, 24.2] }
+    },
+    {
+      "id": "hasselby/bldg_066_garage",
+      "name": "Building 066 (garage)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_066_garage.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [87, 72] } },
+      "bounds": { "min": [-10.612, 0, -5.48], "max": [10.608, 2.997, 5.486] }
+    },
+    {
+      "id": "hasselby/bldg_079_pavilion",
+      "name": "Building 079 (pavilion)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_079_pavilion.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [198, 147] } },
+      "bounds": { "min": [-16.218, -0.001, -10.372], "max": [16.222, 3.552, 10.365] }
+    },
+    {
+      "id": "hasselby/bldg_081_school",
+      "name": "Building 081 (school)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_081_school.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [79, 264] } },
+      "bounds": { "min": [-5.821, -0.003, -6.623], "max": [5.813, 6.236, 6.617] }
+    },
+    {
+      "id": "hasselby/bldg_084_shed",
+      "name": "Building 084 (shed)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_084_shed.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [58, 32] } },
+      "bounds": { "min": [-2.803, 0.001, -2.256], "max": [2.796, 2.774, 2.254] }
+    },
+    {
+      "id": "hasselby/bldg_086_shed",
+      "name": "Building 086 (shed)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_086_shed.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [23, 71] } },
+      "bounds": { "min": [-2.528, -0.005, -2.097], "max": [2.538, 2.756, 2.092] }
+    },
+    {
+      "id": "hasselby/bldg_089_school",
+      "name": "Building 089 (school)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_089_school.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [265, 381] } },
+      "bounds": { "min": [-13.994, 0.001, -22.704], "max": [13.993, 15.566, 22.708] }
+    },
+    {
+      "id": "hasselby/bldg_093_retail",
+      "name": "Building 093 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_093_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [213, 229] } },
+      "bounds": { "min": [-12.93, 0.004, -17.819], "max": [12.929, 5.225, 17.819] }
+    },
+    {
+      "id": "hasselby/bldg_094_retail",
+      "name": "Building 094 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_094_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [202, 303] } },
+      "bounds": { "min": [-18.887, 0, -15.248], "max": [18.89, 5.311, 15.25] }
+    },
+    {
+      "id": "hasselby/bldg_095_retail",
+      "name": "Building 095 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_095_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [225, 634] } },
+      "bounds": { "min": [-19.805, 0.001, -22.437], "max": [19.81, 12.148, 22.442] }
+    },
+    {
+      "id": "hasselby/bldg_096_retail",
+      "name": "Building 096 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_096_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [222, 638] } },
+      "bounds": { "min": [-23.016, -0.003, -20.691], "max": [23.014, 12.578, 20.695] }
+    },
+    {
+      "id": "hasselby/bldg_097_retail",
+      "name": "Building 097 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_097_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [254, 259] } },
+      "bounds": { "min": [-22.659, 0.003, -16.51], "max": [22.65, 5.515, 16.519] }
+    },
+    {
+      "id": "hasselby/bldg_098_retail",
+      "name": "Building 098 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_098_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [201, 324] } },
+      "bounds": { "min": [-17.458, 0.003, -19.57], "max": [17.449, 5.136, 19.562] }
+    },
+    {
+      "id": "hasselby/bldg_099_retail",
+      "name": "Building 099 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_099_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [201, 226] } },
+      "bounds": { "min": [-18.039, 0.003, -12.689], "max": [18.036, 5.208, 12.691] }
+    },
+    {
+      "id": "hasselby/bldg_100_pavilion",
+      "name": "Building 100 (pavilion)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_100_pavilion.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [65, 158] } },
+      "bounds": { "min": [-5.565, 0.001, -5.061], "max": [5.558, 3.613, 5.064] }
+    },
+    {
+      "id": "hasselby/bldg_101_garage",
+      "name": "Building 101 (garage)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_101_garage.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [87, 75] } },
+      "bounds": { "min": [-10.609, 0.004, -5.479], "max": [10.605, 3.065, 5.476] }
+    },
+    {
+      "id": "hasselby/bldg_105_kiosk",
+      "name": "Building 105 (kiosk)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_105_kiosk.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "bounds": { "min": [-42.212, -0.095, 29.625], "max": [-35.808, 3.029, 35.727] }
+    },
+    {
+      "id": "hasselby/bldg_105_shed",
+      "name": "Building 105 (shed)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_105_shed.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "bounds": { "min": [-42.212, -0.095, 29.625], "max": [-35.808, 2.659, 35.727] }
+    },
+    {
+      "id": "hasselby/bldg_106_kiosk",
+      "name": "Building 106 (kiosk)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_106_kiosk.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [45, 85] } },
+      "bounds": { "min": [-3.267, 0.005, -5.409], "max": [3.267, 3.206, 5.401] }
+    },
+    {
+      "id": "hasselby/bldg_106_shed",
+      "name": "Building 106 (shed)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_106_shed.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "bounds": { "min": [-60.647, -0.315, 22.031], "max": [-54.113, 2.516, 32.841] }
+    },
+    {
+      "id": "hasselby/bldg_107_point",
+      "name": "Building 107 (point)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_107_point.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [125, 446] } },
+      "bounds": { "min": [-12.336, -0.005, -8.598], "max": [12.338, 32.638, 8.591] }
+    },
+    {
+      "id": "hasselby/bldg_108_point",
+      "name": "Building 108 (point)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_108_point.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [129, 447] } },
+      "bounds": { "min": [-12.314, -0.004, -8.276], "max": [12.309, 33.745, 8.283] }
+    },
+    {
+      "id": "hasselby/bldg_109_slab",
+      "name": "Building 109 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_109_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [186, 163] } },
+      "bounds": { "min": [-8.774, -0.001, -6.626], "max": [8.765, 6.627, 6.628] }
+    },
+    {
+      "id": "hasselby/bldg_110_slab",
+      "name": "Building 110 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_110_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [173, 199] } },
+      "bounds": { "min": [-8.954, 0.003, -6.65], "max": [8.959, 8.779, 6.659] }
+    },
+    {
+      "id": "hasselby/bldg_111_slab",
+      "name": "Building 111 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_111_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [157, 269] } },
+      "bounds": { "min": [-13.24, 0.004, -8.079], "max": [13.232, 7.479, 8.082] }
+    },
+    {
+      "id": "hasselby/bldg_112_slab",
+      "name": "Building 112 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_112_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [195, 216] } },
+      "bounds": { "min": [-10.678, 0.005, -7.16], "max": [10.673, 9.095, 7.155] }
+    },
+    {
+      "id": "hasselby/bldg_113_slab",
+      "name": "Building 113 (slab)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_113_slab.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [139, 421] } },
+      "bounds": { "min": [-10.91, -0.002, -13.429], "max": [10.911, 7.626, 13.432] }
+    },
+    {
+      "id": "hasselby/bldg_114_kiosk",
+      "name": "Building 114 (kiosk)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_114_kiosk.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "bounds": { "min": [-73.154, -0.21, -3.261], "max": [-67.056, 2.94, 0.752] }
+    },
+    {
+      "id": "hasselby/bldg_114_shed",
+      "name": "Building 114 (shed)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_114_shed.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "bounds": { "min": [-73.154, -0.21, -3.261], "max": [-67.056, 2.57, 0.752] }
+    },
+    {
+      "id": "hasselby/bldg_900_retail",
+      "name": "Building 900 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_900_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [115, 218] } },
+      "bounds": { "min": [-10.966, 0.004, -9.096], "max": [10.972, 5.121, 9.092] }
+    },
+    {
+      "id": "hasselby/bldg_901_retail",
+      "name": "Building 901 (retail)",
+      "category": "buildings",
+      "path": "assets/hasselby/bldg_901_retail.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [404, 517] } },
+      "bounds": { "min": [-29.212, -0.002, -40.412], "max": [29.221, 5.253, 40.402] }
+    },
+    {
+      "id": "hasselby/bus_shelter",
+      "name": "Bus shelter",
+      "category": "props",
+      "path": "assets/hasselby/bus_shelter.glb",
+      "semantic": "prop",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-1.9, 0, -0.8], "max": [1.9, 2.45, 0.8] }
+    },
+    {
+      "id": "hasselby/car_gulf",
+      "name": "Car gulf",
+      "category": "vehicles",
+      "path": "assets/hasselby/car_gulf.glb",
+      "semantic": "vehicle",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-0.964, 0, -2.115], "max": [0.964, 1.41, 2.115] }
+    },
+    {
+      "id": "hasselby/car_saga900",
+      "name": "Car saga900",
+      "category": "vehicles",
+      "path": "assets/hasselby/car_saga900.glb",
+      "semantic": "vehicle",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-0.975, 0, -2.5], "max": [0.975, 1.43, 2.5] }
+    },
+    {
+      "id": "hasselby/car_volta244",
+      "name": "Car volta244",
+      "category": "vehicles",
+      "path": "assets/hasselby/car_volta244.glb",
+      "semantic": "vehicle",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-0.984, 0, -2.555], "max": [0.984, 1.43, 2.555] }
+    },
+    {
+      "id": "hasselby/car_volta245",
+      "name": "Car volta245",
+      "category": "vehicles",
+      "path": "assets/hasselby/car_volta245.glb",
+      "semantic": "vehicle",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-0.984, 0, -2.555], "max": [0.984, 1.46, 2.555] }
+    },
+    {
+      "id": "hasselby/car_volta744",
+      "name": "Car volta744",
+      "category": "vehicles",
+      "path": "assets/hasselby/car_volta744.glb",
+      "semantic": "vehicle",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-1.004, 0, -2.535], "max": [1.004, 1.41, 2.535] }
+    },
+    {
+      "id": "hasselby/lamp_path",
+      "name": "Lamp path",
+      "category": "lighting",
+      "path": "assets/hasselby/lamp_path.glb",
+      "semantic": "streetlight",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "children": [
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [0, 4.1, 0] },
+          "light": {
+            "kind": "point",
+            "color": [0.8, 0.9, 1],
+            "intensity": 260,
+            "range": 12,
+            "outerAngle": 60,
+            "innerAngle": 30,
+            "sourceRadius": 0.23,
+            "fogScatter": 0.6
+          }
+        }
+      ],
+      "bounds": { "min": [-0.23, 0, -0.23], "max": [0.23, 4.3, 0.23] }
+    },
+    {
+      "id": "hasselby/lamp_street",
+      "name": "Lamp street",
+      "category": "lighting",
+      "path": "assets/hasselby/lamp_street.glb",
+      "semantic": "streetlight",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "children": [
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [0.0002, 8.6, -1.95], "rotation": [0, -0.828061, 0, 0.560639] },
+          "light": {
+            "kind": "spot",
+            "color": [1, 0.6, 0.28],
+            "intensity": 2600,
+            "range": 24,
+            "outerAngle": 64,
+            "innerAngle": 34,
+            "sourceRadius": 0.15,
+            "fogScatter": 1
+          }
+        }
+      ],
+      "bounds": { "min": [-0.17, 0, -2.32], "max": [0.17, 8.77, 0.095] }
+    },
+    {
+      "id": "hasselby/phone_booth",
+      "name": "Phone booth",
+      "category": "props",
+      "path": "assets/hasselby/phone_booth.glb",
+      "semantic": "prop",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-0.51, 0, -0.51], "max": [0.51, 2.55, 0.51] }
+    },
+    {
+      "id": "hasselby/platform",
+      "name": "Platform",
+      "category": "structural",
+      "path": "assets/hasselby/platform.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [811, 145] } },
+      "bounds": { "min": [-53.691, 6.45, -43.699], "max": [75.002, 8.25, 10.2] }
+    },
+    {
+      "id": "hasselby/platform_canopy",
+      "name": "Platform canopy",
+      "category": "structural",
+      "path": "assets/hasselby/platform_canopy.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [365, 181] } },
+      "bounds": { "min": [-49.867, 8.25, -23], "max": [9.492, 11.75, 8.571] }
+    },
+    {
+      "id": "hasselby/platform_canopy_lights",
+      "name": "Platform canopy lights",
+      "category": "structural",
+      "path": "assets/hasselby/platform_canopy_lights.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": false, "collision": false },
+      "bounds": { "min": [-25.603, 0, -11.526], "max": [25.602, 0.08, 11.533] }
+    },
+    {
+      "id": "hasselby/resenarer",
+      "name": "Resenarer",
+      "category": "props",
+      "path": "assets/hasselby/resenarer.glb",
+      "semantic": "artwork",
+      "tags": ["sculpture"],
+      "defaults": { "castShadow": true, "collision": true },
+      "bounds": { "min": [-3.4, -0.3, -0.75], "max": [3.4, 1.872, 0.75] }
+    },
+    {
+      "id": "hasselby/sign_pole",
+      "name": "Sign pole",
+      "category": "props",
+      "path": "assets/hasselby/sign_pole.glb",
+      "semantic": "prop",
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-0.035, 0, -0.035], "max": [0.035, 2.95, 0.035] }
+    },
+    {
+      "id": "hasselby/station_barrier",
+      "name": "Station barrier",
+      "category": "structural",
+      "path": "assets/hasselby/station_barrier.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [121, 98] } },
+      "bounds": { "min": [-3.741, 0.003, -10.11], "max": [3.735, 2.603, 10.104] }
+    },
+    {
+      "id": "hasselby/station_canopy",
+      "name": "Station canopy",
+      "category": "structural",
+      "path": "assets/hasselby/station_canopy.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [114, 50] } },
+      "bounds": { "min": [-59.528, 3.443, -4.476], "max": [-51.088, 3.793, 13.4] }
+    },
+    {
+      "id": "hasselby/station_canopy_lights",
+      "name": "Station canopy lights",
+      "category": "structural",
+      "path": "assets/hasselby/station_canopy_lights.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "bounds": { "min": [-30.577, 2.704, -0.737], "max": [-16.052, 5.135, 5.216] }
+    },
+    {
+      "id": "hasselby/station_hall",
+      "name": "Station hall",
+      "category": "structural",
+      "path": "assets/hasselby/station_hall.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [137, 202] } },
+      "children": [
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [-4.6879, 3.6929, 8.0683] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 750,
+            "range": 9,
+            "outerAngle": 85,
+            "innerAngle": 60,
+            "sourceRadius": 0.15,
+            "fogScatter": 0,
+            "always": true
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [1.3189, 3.6929, 5.8595] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 750,
+            "range": 9,
+            "outerAngle": 85,
+            "innerAngle": 60,
+            "sourceRadius": 0.15,
+            "fogScatter": 0,
+            "always": true
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [7.3256, 3.6929, 3.6507] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 750,
+            "range": 9,
+            "outerAngle": 85,
+            "innerAngle": 60,
+            "sourceRadius": 0.15,
+            "fogScatter": 0,
+            "always": true
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [-6.7586, 3.6929, 2.4369] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 750,
+            "range": 9,
+            "outerAngle": 85,
+            "innerAngle": 60,
+            "sourceRadius": 0.15,
+            "fogScatter": 0,
+            "always": true
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [-8.8294, 3.6929, -3.1944] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 750,
+            "range": 9,
+            "outerAngle": 85,
+            "innerAngle": 60,
+            "sourceRadius": 0.15,
+            "fogScatter": 0,
+            "always": true
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [-2.8226, 3.6929, -5.4032] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 750,
+            "range": 9,
+            "outerAngle": 85,
+            "innerAngle": 60,
+            "sourceRadius": 0.15,
+            "fogScatter": 0,
+            "always": true
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [3.1842, 3.6929, -7.612] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 750,
+            "range": 9,
+            "outerAngle": 85,
+            "innerAngle": 60,
+            "sourceRadius": 0.15,
+            "fogScatter": 0,
+            "always": true
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [0.234, 2.9429, 2.6193] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 750,
+            "range": 9,
+            "outerAngle": 85,
+            "innerAngle": 60,
+            "sourceRadius": 0.15,
+            "fogScatter": 0,
+            "always": true
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [-2.7956, 2.7429, 6.8397] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 750,
+            "range": 9,
+            "outerAngle": 85,
+            "innerAngle": 60,
+            "sourceRadius": 0.15,
+            "fogScatter": 0,
+            "always": true
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [-6.7308, 3.5929, 10.5242] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 600,
+            "range": 10,
+            "outerAngle": 80,
+            "innerAngle": 55,
+            "sourceRadius": 0.15,
+            "fogScatter": 0.4
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [-8.3874, 3.5929, 6.0191] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 600,
+            "range": 10,
+            "outerAngle": 80,
+            "innerAngle": 55,
+            "sourceRadius": 0.15,
+            "fogScatter": 0.4
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [-10.044, 3.5929, 1.5141] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 600,
+            "range": 10,
+            "outerAngle": 80,
+            "innerAngle": 55,
+            "sourceRadius": 0.15,
+            "fogScatter": 0.4
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [-11.7006, 3.5929, -2.991] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 600,
+            "range": 10,
+            "outerAngle": 80,
+            "innerAngle": 55,
+            "sourceRadius": 0.15,
+            "fogScatter": 0.4
+          }
+        }
+      ],
+      "bounds": { "min": [-12.032, 0.005, -13.085], "max": [12.036, 4.963, 13.091] }
+    },
+    {
+      "id": "hasselby/station_interior",
+      "name": "Station interior",
+      "category": "structural",
+      "path": "assets/hasselby/station_interior.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [134, 314] } },
+      "bounds": { "min": [-11.711, 0.003, -12.765], "max": [11.715, 3.403, 12.77] }
+    },
+    {
+      "id": "hasselby/station_interior_lights",
+      "name": "Station interior lights",
+      "category": "structural",
+      "path": "assets/hasselby/station_interior_lights.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": false, "collision": false },
+      "bounds": { "min": [-11.024, 0.003, -11.252], "max": [11.033, 8.01, 11.248] }
+    },
+    {
+      "id": "hasselby/station_stairhouse",
+      "name": "Station stairhouse",
+      "category": "structural",
+      "path": "assets/hasselby/station_stairhouse.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [61, 230] } },
+      "children": [
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [2.3346, 2.88, 0.8386] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 700,
+            "range": 11,
+            "outerAngle": 80,
+            "innerAngle": 55,
+            "sourceRadius": 0.15,
+            "fogScatter": 0.4
+          }
+        },
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [-2.3933, 2.45, -0.315] },
+          "light": {
+            "kind": "spot",
+            "color": [0.9, 0.96, 1],
+            "intensity": 750,
+            "range": 9,
+            "outerAngle": 85,
+            "innerAngle": 60,
+            "sourceRadius": 0.15,
+            "fogScatter": 0,
+            "always": true
+          }
+        }
+      ],
+      "bounds": { "min": [-5.322, 0, -4.123], "max": [5.319, 3.02, 4.132] }
+    },
+    {
+      "id": "hasselby/station_stairs",
+      "name": "Station stairs",
+      "category": "structural",
+      "path": "assets/hasselby/station_stairs.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [59, 783] } },
+      "bounds": { "min": [-48.442, 0.243, -1.444], "max": [-38.7, 9.25, 5.912] }
+    },
+    {
+      "id": "hasselby/street_kerb_0_0",
+      "name": "Street kerb 0 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_0_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [175, 90] } },
+      "bounds": { "min": [-170, -0.082, 65.123], "max": [-85.03, 5.402, 127.883] }
+    },
+    {
+      "id": "hasselby/street_kerb_0_1",
+      "name": "Street kerb 0 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_0_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [244, 96] } },
+      "bounds": { "min": [-121.712, -0.206, -18.667], "max": [-85.031, 2.596, 64.752] }
+    },
+    {
+      "id": "hasselby/street_kerb_0_2",
+      "name": "Street kerb 0 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_0_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [246, 95] } },
+      "bounds": { "min": [-170, 1.28, -90.036], "max": [-112.831, 5.337, -21.904] }
+    },
+    {
+      "id": "hasselby/street_kerb_1_0",
+      "name": "Street kerb 1 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_1_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [168, 141] } },
+      "bounds": { "min": [-85.1, -0.16, 65.021], "max": [0.02, 0.252, 107.706] }
+    },
+    {
+      "id": "hasselby/street_kerb_1_1",
+      "name": "Street kerb 1 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_1_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [90, 75] } },
+      "bounds": { "min": [-85.1, -0.238, 8.335], "max": [0.1, 0.11, 65.1] }
+    },
+    {
+      "id": "hasselby/street_kerb_1_2",
+      "name": "Street kerb 1 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_1_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [6, 225] } },
+      "bounds": { "min": [-45.266, -0.054, -62.407], "max": [-0.182, 0.221, -46.482] }
+    },
+    {
+      "id": "hasselby/street_kerb_2_0",
+      "name": "Street kerb 2 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_2_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [163, 166] } },
+      "bounds": { "min": [0.347, -0.173, 64.905], "max": [85, 4.871, 150] }
+    },
+    {
+      "id": "hasselby/street_kerb_2_1",
+      "name": "Street kerb 2 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_2_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [308, 91] } },
+      "bounds": { "min": [0.1, -0.218, -20.1], "max": [85, 4.796, 64.985] }
+    },
+    {
+      "id": "hasselby/street_kerb_2_2",
+      "name": "Street kerb 2 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_2_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [149, 61] } },
+      "bounds": { "min": [0.343, -0.158, -105], "max": [35.524, 0.289, -20.1] }
+    },
+    {
+      "id": "hasselby/street_kerb_2_3",
+      "name": "Street kerb 2 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_2_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [190, 75] } },
+      "bounds": { "min": [20.42, -0.109, -189.9], "max": [85, 5.765, -105] }
+    },
+    {
+      "id": "hasselby/street_kerb_2_4",
+      "name": "Street kerb 2 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_2_4.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [127, 50] } },
+      "bounds": { "min": [20.7, 0.908, -214.096], "max": [84.468, 5.683, -189.9] }
+    },
+    {
+      "id": "hasselby/street_kerb_3_0",
+      "name": "Street kerb 3 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_3_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [247, 95] } },
+      "bounds": { "min": [85, 4.551, 80.937], "max": [170.138, 10.13, 150] }
+    },
+    {
+      "id": "hasselby/street_kerb_3_1",
+      "name": "Street kerb 3 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_3_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [168, 120] } },
+      "bounds": { "min": [85, 4.606, -2.76], "max": [170.011, 10.207, 40.551] }
+    },
+    {
+      "id": "hasselby/street_kerb_3_2",
+      "name": "Street kerb 3 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_3_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [60, 60] } },
+      "bounds": { "min": [86.749, 5.084, -105], "max": [170.073, 10.187, -94.411] }
+    },
+    {
+      "id": "hasselby/street_kerb_3_3",
+      "name": "Street kerb 3 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_3_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [311, 121] } },
+      "bounds": { "min": [85, 4.548, -189.074], "max": [167.064, 10.195, -105] }
+    },
+    {
+      "id": "hasselby/street_kerb_4_0",
+      "name": "Street kerb 4 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_4_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [5, 25] } },
+      "bounds": { "min": [169.9, 9.884, 111.516], "max": [170.2, 10.127, 119.184] }
+    },
+    {
+      "id": "hasselby/street_kerb_4_1",
+      "name": "Street kerb 4 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_4_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [5, 15] } },
+      "bounds": { "min": [170.172, 9.982, 6.889], "max": [170.2, 10.173, 6.922] }
+    },
+    {
+      "id": "hasselby/street_kerb_4_2",
+      "name": "Street kerb 4 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_kerb_4_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [5, 15] } },
+      "bounds": { "min": [170.028, 9.964, -95.431], "max": [170.2, 10.155, -95.347] }
+    },
+    {
+      "id": "hasselby/street_parking_0_0",
+      "name": "Street parking 0 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_0_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [169, 42] } },
+      "bounds": { "min": [-170, -0.156, 120.108], "max": [-86.553, 5.331, 150] }
+    },
+    {
+      "id": "hasselby/street_parking_0_1",
+      "name": "Street parking 0 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_0_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [216, 51] } },
+      "bounds": { "min": [-111.867, -0.152, -19.065], "max": [-84.2, 1.249, 49.581] }
+    },
+    {
+      "id": "hasselby/street_parking_0_2",
+      "name": "Street parking 0 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_0_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [30, 10] } },
+      "bounds": { "min": [-170, 0.199, -105], "max": [-97.696, 5.318, -22.486] }
+    },
+    {
+      "id": "hasselby/street_parking_0_3",
+      "name": "Street parking 0 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_0_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [42, 39] } },
+      "bounds": { "min": [-170, 5.274, -117.624], "max": [-160.027, 5.318, -105] }
+    },
+    {
+      "id": "hasselby/street_parking_1_0",
+      "name": "Street parking 1 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_1_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [102, 41] } },
+      "bounds": { "min": [-64.139, -0.148, 102.238], "max": [-33.713, 0.067, 122.777] }
+    },
+    {
+      "id": "hasselby/street_parking_1_1",
+      "name": "Street parking 1 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_1_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [82, 35] } },
+      "bounds": { "min": [-86, -0.152, 22.2], "max": [-72.988, -0.06, 48] }
+    },
+    {
+      "id": "hasselby/street_parking_1_2",
+      "name": "Street parking 1 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_1_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [168, 123] } },
+      "bounds": { "min": [-51.116, -0.063, -72.9], "max": [1, 0.109, -40.44] }
+    },
+    {
+      "id": "hasselby/street_parking_1_4",
+      "name": "Street parking 1 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_1_4.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [205, 55] } },
+      "bounds": { "min": [-65.631, 1.13, -215.1], "max": [1, 1.639, -191.742] }
+    },
+    {
+      "id": "hasselby/street_parking_2_0",
+      "name": "Street parking 2 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_2_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [35, 48] } },
+      "bounds": { "min": [32.969, -0.11, 83.1], "max": [44.806, 0.109, 124.753] }
+    },
+    {
+      "id": "hasselby/street_parking_2_1",
+      "name": "Street parking 2 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_2_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [141, 45] } },
+      "bounds": { "min": [42.765, -0.16, -20.1], "max": [85, 4.659, 1.971] }
+    },
+    {
+      "id": "hasselby/street_parking_2_2",
+      "name": "Street parking 2 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_2_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [155, 84] } },
+      "bounds": { "min": [-0.8, -0.068, -98.756], "max": [85, 4.66, -20.1] }
+    },
+    {
+      "id": "hasselby/street_parking_2_3",
+      "name": "Street parking 2 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_2_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [72, 50] } },
+      "bounds": { "min": [69.953, 1.686, -187.096], "max": [85, 4.798, -165.549] }
+    },
+    {
+      "id": "hasselby/street_parking_2_4",
+      "name": "Street parking 2 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_2_4.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [56, 28] } },
+      "bounds": { "min": [-0.5, 1.372, -215.1], "max": [16.758, 1.521, -208.951] }
+    },
+    {
+      "id": "hasselby/street_parking_3_1",
+      "name": "Street parking 3 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_3_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [37, 17] } },
+      "bounds": { "min": [85, 4.65, -20.1], "max": [87.4, 5.209, -9.146] }
+    },
+    {
+      "id": "hasselby/street_parking_3_2",
+      "name": "Street parking 3 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_3_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [7, 5] } },
+      "bounds": { "min": [85, 4.659, -20.827], "max": [85.311, 4.733, -20.1] }
+    },
+    {
+      "id": "hasselby/street_parking_3_3",
+      "name": "Street parking 3 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_parking_3_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [126, 52] } },
+      "bounds": { "min": [85, 4.764, -167.137], "max": [139.651, 8.841, -107.284] }
+    },
+    {
+      "id": "hasselby/street_path_0_0",
+      "name": "Street path 0 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_0_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [95, 29] } },
+      "bounds": { "min": [-112.738, -0.099, 109.311], "max": [-84.2, 1.353, 120.336] }
+    },
+    {
+      "id": "hasselby/street_path_0_1",
+      "name": "Street path 0 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_0_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [167, 127] } },
+      "bounds": { "min": [-170, 4.094, -15.837], "max": [-133.38, 6.266, 38.822] }
+    },
+    {
+      "id": "hasselby/street_path_0_2",
+      "name": "Street path 0 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_0_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [104, 50] } },
+      "bounds": { "min": [-170, 2.929, -95.866], "max": [-125.719, 5.302, -24.26] }
+    },
+    {
+      "id": "hasselby/street_path_0_3",
+      "name": "Street path 0 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_0_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [82, 78] } },
+      "bounds": { "min": [-110.3, 0.483, -190.19], "max": [-84.2, 1.968, -179.995] }
+    },
+    {
+      "id": "hasselby/street_path_0_4",
+      "name": "Street path 0 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_0_4.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [189, 64] } },
+      "bounds": { "min": [-161.183, 0.8, -215.1], "max": [-84.2, 6.631, -189.9] }
+    },
+    {
+      "id": "hasselby/street_path_1_0",
+      "name": "Street path 1 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_1_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [213, 156] } },
+      "bounds": { "min": [-85.4, -0.2, 80.363], "max": [1, 0.127, 150] }
+    },
+    {
+      "id": "hasselby/street_path_1_1",
+      "name": "Street path 1 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_1_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [71, 49] } },
+      "bounds": { "min": [-26.833, -0.232, -14.768], "max": [1, 0.042, 22.301] }
+    },
+    {
+      "id": "hasselby/street_path_1_3",
+      "name": "Street path 1 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_1_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [75, 28] } },
+      "bounds": { "min": [-86, 0.567, -190.063], "max": [-63.5, 1.068, -182.444] }
+    },
+    {
+      "id": "hasselby/street_path_1_4",
+      "name": "Street path 1 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_1_4.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [72, 24] } },
+      "bounds": { "min": [-86, 0.972, -215.1], "max": [-61.444, 1.501, -189.9] }
+    },
+    {
+      "id": "hasselby/street_path_2_0",
+      "name": "Street path 2 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_2_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [158, 162] } },
+      "bounds": { "min": [-0.053, -0.163, 65.023], "max": [85, 4.722, 144.363] }
+    },
+    {
+      "id": "hasselby/street_path_2_1",
+      "name": "Street path 2 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_2_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [151, 139] } },
+      "bounds": { "min": [0.1, -0.234, 0.563], "max": [85, 4.682, 64.903] }
+    },
+    {
+      "id": "hasselby/street_path_2_2",
+      "name": "Street path 2 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_2_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [25, 42] } },
+      "bounds": { "min": [47.447, 0.002, -105], "max": [54.426, 0.106, -100.163] }
+    },
+    {
+      "id": "hasselby/street_path_2_3",
+      "name": "Street path 2 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_2_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [71, 49] } },
+      "bounds": { "min": [31.152, 0.01, -189.902], "max": [51.454, 1.081, -105] }
+    },
+    {
+      "id": "hasselby/street_path_2_4",
+      "name": "Street path 2 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_2_4.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [152, 56] } },
+      "bounds": { "min": [37, 0.982, -215.1], "max": [80.885, 4.868, -189.9] }
+    },
+    {
+      "id": "hasselby/street_path_3_0",
+      "name": "Street path 3 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_3_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [94, 61] } },
+      "bounds": { "min": [85, 4.606, 65.068], "max": [170.2, 9.961, 150] }
+    },
+    {
+      "id": "hasselby/street_path_3_1",
+      "name": "Street path 3 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_3_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [183, 236] } },
+      "bounds": { "min": [85, 4.578, 4.359], "max": [170.2, 10.095, 65.1] }
+    },
+    {
+      "id": "hasselby/street_path_3_3",
+      "name": "Street path 3 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_3_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [52, 74] } },
+      "bounds": { "min": [98.029, 6.754, -190.109], "max": [116.831, 7.971, -154.489] }
+    },
+    {
+      "id": "hasselby/street_path_3_4",
+      "name": "Street path 3 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_3_4.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [50, 32] } },
+      "bounds": { "min": [108.015, 7.759, -215.1], "max": [117.146, 8.769, -189.9] }
+    },
+    {
+      "id": "hasselby/street_path_4_0",
+      "name": "Street path 4 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_4_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [11, 5] } },
+      "bounds": { "min": [169.9, 9.788, 66.9], "max": [170.2, 9.881, 67.245] }
+    },
+    {
+      "id": "hasselby/street_path_4_1",
+      "name": "Street path 4 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_path_4_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [16, 15] } },
+      "bounds": { "min": [169.9, 9.803, 9.478], "max": [170.2, 10.094, 64.2] }
+    },
+    {
+      "id": "hasselby/street_road_0_0",
+      "name": "Street road 0 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_0_0.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [261, 195] } },
+      "bounds": { "min": [-170, -0.182, 65.1], "max": [-84.5, 5.331, 150] }
+    },
+    {
+      "id": "hasselby/street_road_0_1",
+      "name": "Street road 0 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_0_1.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [281, 93] } },
+      "bounds": { "min": [-121.792, -0.149, -20.1], "max": [-84.2, 2.472, 65.1] }
+    },
+    {
+      "id": "hasselby/street_road_0_2",
+      "name": "Street road 0 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_0_2.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [311, 69] } },
+      "bounds": { "min": [-170, 0.161, -89.985], "max": [-94.958, 5.207, -20.1] }
+    },
+    {
+      "id": "hasselby/street_road_1_0",
+      "name": "Street road 1 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_1_0.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [265, 270] } },
+      "bounds": { "min": [-86, -0.148, 64.935], "max": [1, 0.122, 150] }
+    },
+    {
+      "id": "hasselby/street_road_1_1",
+      "name": "Street road 1 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_1_1.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [152, 55] } },
+      "bounds": { "min": [-86, -0.187, 8.4], "max": [1, 0.016, 65.1] }
+    },
+    {
+      "id": "hasselby/street_road_1_2",
+      "name": "Street road 1 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_1_2.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [129, 40] } },
+      "bounds": { "min": [-39.163, -0.062, -64.936], "max": [1, 0.105, -48.516] }
+    },
+    {
+      "id": "hasselby/street_road_1_4",
+      "name": "Street road 1 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_1_4.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [203, 36] } },
+      "bounds": { "min": [-63.337, 1.097, -215.1], "max": [1, 1.622, -191.732] }
+    },
+    {
+      "id": "hasselby/street_road_2_0",
+      "name": "Street road 2 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_2_0.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [259, 212] } },
+      "bounds": { "min": [0.1, -0.124, 65.1], "max": [85, 4.74, 150] }
+    },
+    {
+      "id": "hasselby/street_road_2_1",
+      "name": "Street road 2 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_2_1.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [261, 270] } },
+      "bounds": { "min": [-0.5, -0.187, -20.1], "max": [85, 4.702, 65.1] }
+    },
+    {
+      "id": "hasselby/street_road_2_2",
+      "name": "Street road 2 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_2_2.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [254, 138] } },
+      "bounds": { "min": [-0.2, -0.098, -105], "max": [85, 4.745, -20.1] }
+    },
+    {
+      "id": "hasselby/street_road_2_3",
+      "name": "Street road 2 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_2_3.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [260, 118] } },
+      "bounds": { "min": [20.364, -0.048, -189.9], "max": [85, 5.617, -105] }
+    },
+    {
+      "id": "hasselby/street_road_2_4",
+      "name": "Street road 2 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_2_4.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [77, 110] } },
+      "bounds": { "min": [-0.8, 0.968, -215.1], "max": [84.521, 5.544, -189.9] }
+    },
+    {
+      "id": "hasselby/street_road_3_0",
+      "name": "Street road 3 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_3_0.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [283, 60] } },
+      "bounds": { "min": [85, 4.611, 81.048], "max": [170.2, 9.997, 150] }
+    },
+    {
+      "id": "hasselby/street_road_3_1",
+      "name": "Street road 3 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_3_1.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [289, 70] } },
+      "bounds": { "min": [85, 4.641, -8.528], "max": [170.2, 10.077, 40.498] }
+    },
+    {
+      "id": "hasselby/street_road_3_2",
+      "name": "Street road 3 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_3_2.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [178, 57] } },
+      "bounds": { "min": [85, 4.741, -105], "max": [170.2, 10.058, -93.847] }
+    },
+    {
+      "id": "hasselby/street_road_3_3",
+      "name": "Street road 3 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_3_3.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [354, 181] } },
+      "bounds": { "min": [85, 4.611, -188.617], "max": [166.821, 10.064, -105] }
+    },
+    {
+      "id": "hasselby/street_road_4_0",
+      "name": "Street road 4 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_4_0.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [5, 10] } },
+      "bounds": { "min": [169.9, 9.945, 111.6], "max": [170.2, 9.996, 119.122] }
+    },
+    {
+      "id": "hasselby/street_road_4_1",
+      "name": "Street road 4 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_4_1.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [11, 5] } },
+      "bounds": { "min": [169.9, 10.04, -2.774], "max": [170.2, 10.079, 6.9] }
+    },
+    {
+      "id": "hasselby/street_road_4_2",
+      "name": "Street road 4 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_road_4_2.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [11, 5] } },
+      "bounds": { "min": [169.9, 10.024, -103.17], "max": [170.2, 10.041, -95.431] }
+    },
+    {
+      "id": "hasselby/street_walk_0_0",
+      "name": "Street walk 0 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_0_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [305, 188] } },
+      "bounds": { "min": [-170, -0.093, 64.919], "max": [-84.2, 5.39, 127.828] }
+    },
+    {
+      "id": "hasselby/street_walk_0_1",
+      "name": "Street walk 0 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_0_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [277, 76] } },
+      "bounds": { "min": [-161.052, -0.204, -20.1], "max": [-84.8, 5.291, 65.1] }
+    },
+    {
+      "id": "hasselby/street_walk_0_2",
+      "name": "Street walk 0 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_0_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [260, 325] } },
+      "bounds": { "min": [-170, -0.17, -98.967], "max": [-84.8, 5.357, -20.1] }
+    },
+    {
+      "id": "hasselby/street_walk_0_3",
+      "name": "Street walk 0 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_0_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [107, 23] } },
+      "bounds": { "min": [-95.076, -0.013, -182.961], "max": [-84.2, 0.746, -149.7] }
+    },
+    {
+      "id": "hasselby/street_walk_1_0",
+      "name": "Street walk 1 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_1_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [248, 152] } },
+      "bounds": { "min": [-86, -0.174, 64.85], "max": [1, 0.253, 109.311] }
+    },
+    {
+      "id": "hasselby/street_walk_1_1",
+      "name": "Street walk 1 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_1_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [261, 311] } },
+      "bounds": { "min": [-85.4, -0.238, -20.1], "max": [1, 0.303, 65.1] }
+    },
+    {
+      "id": "hasselby/street_walk_1_2",
+      "name": "Street walk 1 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_1_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [336, 241] } },
+      "bounds": { "min": [-86, -0.231, -105], "max": [1, 0.232, -20.1] }
+    },
+    {
+      "id": "hasselby/street_walk_1_3",
+      "name": "Street walk 1 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_1_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [171, 83] } },
+      "bounds": { "min": [-86, -0.127, -157.8], "max": [-13.47, 0.236, -105] }
+    },
+    {
+      "id": "hasselby/street_walk_2_0",
+      "name": "Street walk 2 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_2_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [163, 269] } },
+      "bounds": { "min": [-0.5, -0.172, 64.874], "max": [85, 4.865, 150] }
+    },
+    {
+      "id": "hasselby/street_walk_2_1",
+      "name": "Street walk 2 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_2_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [165, 243] } },
+      "bounds": { "min": [-0.8, -0.224, -20.1], "max": [85, 4.823, 65.1] }
+    },
+    {
+      "id": "hasselby/street_walk_2_2",
+      "name": "Street walk 2 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_2_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [205, 98] } },
+      "bounds": { "min": [-0.8, -0.162, -105], "max": [85, 4.843, -20.1] }
+    },
+    {
+      "id": "hasselby/street_walk_2_3",
+      "name": "Street walk 2 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_2_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [244, 118] } },
+      "bounds": { "min": [4.934, -0.13, -189.996], "max": [85, 5.787, -105] }
+    },
+    {
+      "id": "hasselby/street_walk_2_4",
+      "name": "Street walk 2 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_2_4.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [81, 120] } },
+      "bounds": { "min": [20.032, 0.898, -215.1], "max": [85, 5.904, -189.9] }
+    },
+    {
+      "id": "hasselby/street_walk_3_0",
+      "name": "Street walk 3 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_3_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [278, 93] } },
+      "bounds": { "min": [85, 4.548, 78.497], "max": [170.2, 10.134, 150] }
+    },
+    {
+      "id": "hasselby/street_walk_3_1",
+      "name": "Street walk 3 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_3_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [282, 75] } },
+      "bounds": { "min": [85, 4.592, -5.233], "max": [170.2, 10.21, 43.078] }
+    },
+    {
+      "id": "hasselby/street_walk_3_2",
+      "name": "Street walk 3 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_3_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [91, 32] } },
+      "bounds": { "min": [85, 4.644, -105], "max": [170.2, 10.176, -92.7] }
+    },
+    {
+      "id": "hasselby/street_walk_3_3",
+      "name": "Street walk 3 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_3_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [216, 95] } },
+      "bounds": { "min": [85, 4.52, -189.9], "max": [170.2, 10.193, -105] }
+    },
+    {
+      "id": "hasselby/street_walk_3_4",
+      "name": "Street walk 3 4",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_3_4.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [67, 40] } },
+      "bounds": { "min": [85, 5.724, -211.018], "max": [116.94, 8.815, -189.9] }
+    },
+    {
+      "id": "hasselby/street_walk_4_0",
+      "name": "Street walk 4 0",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_4_0.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [15, 15] } },
+      "bounds": { "min": [169.9, 9.874, 109.025], "max": [170.2, 10.134, 121.672] }
+    },
+    {
+      "id": "hasselby/street_walk_4_1",
+      "name": "Street walk 4 1",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_4_1.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [21, 10] } },
+      "bounds": { "min": [169.9, 9.98, -5.351], "max": [170.2, 10.211, 9.584] }
+    },
+    {
+      "id": "hasselby/street_walk_4_2",
+      "name": "Street walk 4 2",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_4_2.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [20, 10] } },
+      "bounds": { "min": [169.9, 9.964, -103.8], "max": [170.2, 10.164, -92.639] }
+    },
+    {
+      "id": "hasselby/street_walk_4_3",
+      "name": "Street walk 4 3",
+      "category": "roads",
+      "path": "assets/hasselby/street_walk_4_3.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [5, 10] } },
+      "bounds": { "min": [169.9, 9.992, -105.9], "max": [170.2, 10.173, -105.6] }
+    },
+    {
+      "id": "hasselby/terrain_0_0",
+      "name": "Terrain 0 0",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_0_0.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [-170, -0.235, 65], "max": [-85, 6.313, 150] }
+    },
+    {
+      "id": "hasselby/terrain_0_1",
+      "name": "Terrain 0 1",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_0_1.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 191] } },
+      "bounds": { "min": [-170, -0.192, -20], "max": [-85, 6.54, 65] }
+    },
+    {
+      "id": "hasselby/terrain_0_2",
+      "name": "Terrain 0 2",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_0_2.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [-170, -0.182, -105], "max": [-85, 5.278, -20] }
+    },
+    {
+      "id": "hasselby/terrain_0_3",
+      "name": "Terrain 0 3",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_0_3.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [-170, -0.182, -190], "max": [-85, 6.053, -105] }
+    },
+    {
+      "id": "hasselby/terrain_0_4",
+      "name": "Terrain 0 4",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_0_4.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 54] } },
+      "bounds": { "min": [-170, 0.823, -215], "max": [-85, 6.557, -190] }
+    },
+    {
+      "id": "hasselby/terrain_1_0",
+      "name": "Terrain 1 0",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_1_0.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [-85, -0.188, 65], "max": [0, 0.115, 150] }
+    },
+    {
+      "id": "hasselby/terrain_1_1",
+      "name": "Terrain 1 1",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_1_1.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [-85, -0.227, -20], "max": [0, 0.144, 65] }
+    },
+    {
+      "id": "hasselby/terrain_1_2",
+      "name": "Terrain 1 2",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_1_2.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [-85, -0.218, -105], "max": [0, 0.14, -20] }
+    },
+    {
+      "id": "hasselby/terrain_1_3",
+      "name": "Terrain 1 3",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_1_3.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [-85, -0.176, -190], "max": [0, 1.023, -105] }
+    },
+    {
+      "id": "hasselby/terrain_1_4",
+      "name": "Terrain 1 4",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_1_4.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 54] } },
+      "bounds": { "min": [-85, 0.837, -215], "max": [0, 1.599, -190] }
+    },
+    {
+      "id": "hasselby/terrain_2_0",
+      "name": "Terrain 2 0",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_2_0.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [0, -0.165, 65], "max": [85, 4.708, 150] }
+    },
+    {
+      "id": "hasselby/terrain_2_1",
+      "name": "Terrain 2 1",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_2_1.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [0, -0.227, -20], "max": [85, 4.663, 65] }
+    },
+    {
+      "id": "hasselby/terrain_2_2",
+      "name": "Terrain 2 2",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_2_2.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 188] } },
+      "bounds": { "min": [0, -0.142, -105], "max": [85, 6.54, -20] }
+    },
+    {
+      "id": "hasselby/terrain_2_3",
+      "name": "Terrain 2 3",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_2_3.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [0, -0.183, -190], "max": [85, 5.631, -105] }
+    },
+    {
+      "id": "hasselby/terrain_2_4",
+      "name": "Terrain 2 4",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_2_4.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 54] } },
+      "bounds": { "min": [0, 0.911, -215], "max": [85, 6.111, -190] }
+    },
+    {
+      "id": "hasselby/terrain_3_0",
+      "name": "Terrain 3 0",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_3_0.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [85, 4.556, 65], "max": [170, 10, 150] }
+    },
+    {
+      "id": "hasselby/terrain_3_1",
+      "name": "Terrain 3 1",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_3_1.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [85, 4.555, -20], "max": [170, 10.06, 65] }
+    },
+    {
+      "id": "hasselby/terrain_3_2",
+      "name": "Terrain 3 2",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_3_2.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 185] } },
+      "bounds": { "min": [85, 4.489, -105], "max": [170, 10.036, -20] }
+    },
+    {
+      "id": "hasselby/terrain_3_3",
+      "name": "Terrain 3 3",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_3_3.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 174] } },
+      "bounds": { "min": [85, 4.515, -190], "max": [170, 10.909, -105] }
+    },
+    {
+      "id": "hasselby/terrain_3_4",
+      "name": "Terrain 3 4",
+      "category": "terrain",
+      "path": "assets/hasselby/terrain_3_4.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [174, 54] } },
+      "bounds": { "min": [85, 5.631, -215], "max": [170, 11.418, -190] }
+    },
+    {
+      "id": "hasselby/track_0",
+      "name": "Track 0",
+      "category": "structural",
+      "path": "assets/hasselby/track_0.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [-111.765, 6.43, -48.196], "max": [76.878, 7.28, 22.775] }
+    },
+    {
+      "id": "hasselby/track_1",
+      "name": "Track 1",
+      "category": "structural",
+      "path": "assets/hasselby/track_1.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [-107.542, 6.43, -40.953], "max": [80.564, 7.28, 34.527] }
+    },
+    {
+      "id": "hasselby/track_2",
+      "name": "Track 2",
+      "category": "structural",
+      "path": "assets/hasselby/track_2.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [-150.875, 6.43, 19.618], "max": [-111.415, 7.28, 39.465] }
+    },
+    {
+      "id": "hasselby/track_3",
+      "name": "Track 3",
+      "category": "structural",
+      "path": "assets/hasselby/track_3.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [76.459, 6.43, -66.305], "max": [162.513, 7.28, -44.457] }
+    },
+    {
+      "id": "hasselby/track_4",
+      "name": "Track 4",
+      "category": "structural",
+      "path": "assets/hasselby/track_4.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [-164.242, 6.43, 31.146], "max": [-106.939, 7.28, 57.086] }
+    },
+    {
+      "id": "hasselby/track_5",
+      "name": "Track 5",
+      "category": "structural",
+      "path": "assets/hasselby/track_5.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [79.848, 6.43, -56.143], "max": [139.439, 7.28, -37.33] }
+    },
+    {
+      "id": "hasselby/track_6",
+      "name": "Track 6",
+      "category": "structural",
+      "path": "assets/hasselby/track_6.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [138.958, 6.43, -66.008], "max": [162.852, 7.28, -52.762] }
+    },
+    {
+      "id": "hasselby/tree_maple_a",
+      "name": "Tree maple A",
+      "category": "vegetation",
+      "path": "assets/hasselby/tree_maple_a.model.json",
+      "semantic": "vegetation",
+      "tags": ["broadleaf"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-5.471, -0.308, -5.153], "max": [9.961, 14.904, 5.754] }
+    },
+    {
+      "id": "hasselby/tree_maple_b",
+      "name": "Tree maple B",
+      "category": "vegetation",
+      "path": "assets/hasselby/tree_maple_b.model.json",
+      "semantic": "vegetation",
+      "tags": ["broadleaf"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-6.072, -0.305, -6.484], "max": [9.369, 16.733, 5.203] }
+    },
+    {
+      "id": "hasselby/tree_planter",
+      "name": "Tree planter",
+      "category": "vegetation",
+      "path": "assets/hasselby/tree_planter.glb",
+      "semantic": "vegetation",
+      "tags": ["broadleaf"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-1.05, -0.1, -1.05], "max": [1.05, 0.45, 1.05] }
+    },
+    {
+      "id": "hasselby/turnstile_rotor",
+      "name": "Turnstile rotor",
+      "category": "props",
+      "path": "assets/hasselby/turnstile_rotor.glb",
+      "semantic": "turnstile",
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [-0.5, -0.385, -0.32], "max": [0.064, 0.064, 0.32] }
+    },
+    {
+      "id": "hasselby/viaduct_bents",
+      "name": "Viaduct bents",
+      "category": "structural",
+      "path": "assets/hasselby/viaduct_bents.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [110, 785] } },
+      "bounds": { "min": [-93.797, -0.45, -46.715], "max": [75.349, 5.4, 27.676] }
+    },
+    {
+      "id": "hasselby/viaduct_deck",
+      "name": "Viaduct deck",
+      "category": "structural",
+      "path": "assets/hasselby/viaduct_deck.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [1203, 361] } },
+      "bounds": { "min": [-112.174, 5.35, -48.606], "max": [80.4, 7.92, 34.928] }
+    },
+    {
+      "id": "hasselby/viaduct_railing",
+      "name": "Viaduct railing",
+      "category": "structural",
+      "path": "assets/hasselby/viaduct_railing.glb",
+      "semantic": "railing",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [-111.945, 6.77, -48.268], "max": [80.214, 7.794, 34.674] }
+    },
+    {
+      "id": "testmap/bench",
+      "name": "Bench",
+      "category": "props",
+      "path": "assets/testmap/bench.glb",
+      "semantic": "prop",
+      "defaults": { "castShadow": true, "collision": true },
+      "bounds": { "min": [-0.95, 0, -0.2], "max": [0.95, 0.46, 0.2] }
+    },
+    {
+      "id": "testmap/bollard",
+      "name": "Bollard",
+      "category": "props",
+      "path": "assets/testmap/bollard.glb",
+      "semantic": "prop",
+      "defaults": { "castShadow": true, "collision": true },
+      "bounds": { "min": [-0.1, 0, -0.1], "max": [0.1, 0.9, 0.1] }
+    },
+    {
+      "id": "testmap/building_large",
+      "name": "Building large",
+      "category": "buildings",
+      "path": "assets/testmap/building_large.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [921, 1132] } },
+      "bounds": { "min": [-22.5, 0, -6], "max": [22.5, 15.1, 6] }
+    },
+    {
+      "id": "testmap/building_small",
+      "name": "Building small",
+      "category": "buildings",
+      "path": "assets/testmap/building_small.glb",
+      "semantic": "building",
+      "tags": ["architecture"],
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [369, 434] } },
+      "bounds": { "min": [-6, 0, -5.55], "max": [6, 7.5, 5.55] }
+    },
+    {
+      "id": "testmap/car_placeholder",
+      "name": "Car placeholder",
+      "category": "vehicles",
+      "path": "assets/testmap/car_placeholder.glb",
+      "semantic": "vehicle",
+      "defaults": { "castShadow": true, "collision": true },
+      "bounds": { "min": [-0.93, 0, -2.25], "max": [0.93, 1.45, 2.25] }
+    },
+    {
+      "id": "testmap/clutter_dwarf",
+      "name": "Clutter dwarf",
+      "category": "vegetation",
+      "path": "assets/testmap/clutter_dwarf.glb",
+      "semantic": "vegetation",
+      "tags": ["ground clutter"],
+      "bounds": { "min": [-0.129, -0.03, -0.155], "max": [0.168, 0.228, 0.118] }
+    },
+    {
+      "id": "testmap/clutter_fern",
+      "name": "Clutter fern",
+      "category": "vegetation",
+      "path": "assets/testmap/clutter_fern.glb",
+      "semantic": "vegetation",
+      "tags": ["ground clutter"],
+      "bounds": { "min": [-0.425, -0.03, -0.425], "max": [0.425, 0.393, 0.425] }
+    },
+    {
+      "id": "testmap/clutter_grass",
+      "name": "Clutter grass",
+      "category": "vegetation",
+      "path": "assets/testmap/clutter_grass.glb",
+      "semantic": "vegetation",
+      "tags": ["ground clutter"],
+      "bounds": { "min": [-0.145, -0.03, -0.141], "max": [0.116, 0.357, 0.165] }
+    },
+    {
+      "id": "testmap/far_buildings",
+      "name": "Far buildings",
+      "category": "environment",
+      "path": "assets/testmap/far_buildings.glb",
+      "semantic": "scenery",
+      "tags": ["distant"],
+      "unique": true,
+      "defaults": { "castShadow": false, "collision": false },
+      "bounds": { "min": [-1120.291, -0.004, -1247.14], "max": [1120.284, 41.183, 1247.145] }
+    },
+    {
+      "id": "testmap/far_treeline",
+      "name": "Far treeline",
+      "category": "environment",
+      "path": "assets/testmap/far_treeline.glb",
+      "semantic": "scenery",
+      "tags": ["distant"],
+      "unique": true,
+      "defaults": { "castShadow": false, "collision": false },
+      "bounds": { "min": [-2013.103, -2.715, -2071.282], "max": [1994.049, 63.856, 2051.709] }
+    },
+    {
+      "id": "testmap/far_water",
+      "name": "Far water",
+      "category": "environment",
+      "path": "assets/testmap/far_water.glb",
+      "semantic": "scenery",
+      "tags": ["distant"],
+      "unique": true,
+      "defaults": { "castShadow": false, "collision": false },
+      "bounds": { "min": [-1537.511, 5.107, -1187.849], "max": [1503.8, 16.734, 1084.859] }
+    },
+    {
+      "id": "testmap/fence_segment",
+      "name": "Fence segment",
+      "category": "structural",
+      "path": "assets/testmap/fence_segment.glb",
+      "semantic": "fence",
+      "defaults": { "castShadow": true, "collision": true },
+      "bounds": { "min": [-0.03, 0, -0.03], "max": [2.5, 1.9, 0.03] }
+    },
+    {
+      "id": "testmap/human_reference",
+      "name": "Human reference",
+      "category": "reference",
+      "path": "assets/testmap/human_reference.glb",
+      "semantic": "reference",
+      "defaults": { "castShadow": true, "collision": true },
+      "bounds": { "min": [-0.19, 0, -0.19], "max": [0.19, 1.8, 0.19] }
+    },
+    {
+      "id": "testmap/landscape_far",
+      "name": "Landscape far",
+      "category": "environment",
+      "path": "assets/testmap/landscape_far.glb",
+      "semantic": "scenery",
+      "tags": ["distant"],
+      "unique": true,
+      "defaults": { "castShadow": false, "collision": false },
+      "bounds": { "min": [-2835.4, -2.859, -2835.4], "max": [2835.4, 54.785, 2835.4] }
+    },
+    {
+      "id": "testmap/parking",
+      "name": "Parking",
+      "category": "roads",
+      "path": "assets/testmap/parking.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [139, 119] } },
+      "bounds": { "min": [-45, 0, 7], "max": [-18, 0, 30] }
+    },
+    {
+      "id": "testmap/path_forest",
+      "name": "Path forest",
+      "category": "roads",
+      "path": "assets/testmap/path_forest.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": false, "collision": true, "lightmap": { "resolution": [433, 279] } },
+      "bounds": { "min": [20.196, 3.041, -100.571], "max": [75.168, 15.872, -14.776] }
+    },
+    {
+      "id": "testmap/path_light",
+      "name": "Path light",
+      "category": "lighting",
+      "path": "assets/testmap/path_light.glb",
+      "semantic": "streetlight",
+      "defaults": { "castShadow": true, "collision": true },
+      "children": [
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [0, 4, 0] },
+          "light": {
+            "kind": "spot",
+            "color": [1, 0.72, 0.45],
+            "intensity": 800,
+            "range": 14,
+            "outerAngle": 68,
+            "innerAngle": 35,
+            "sourceRadius": 0.15,
+            "fogScatter": 1
+          }
+        }
+      ],
+      "bounds": { "min": [-0.16, 0, -0.16], "max": [0.16, 4.18, 0.16] }
+    },
+    {
+      "id": "testmap/path_north",
+      "name": "Path north",
+      "category": "roads",
+      "path": "assets/testmap/path_north.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": false, "collision": true, "lightmap": { "resolution": [351, 70] } },
+      "bounds": { "min": [-19.617, -0.626, -100.22], "max": [-6.516, 1.1, -30.882] }
+    },
+    {
+      "id": "testmap/path_south",
+      "name": "Path south",
+      "category": "roads",
+      "path": "assets/testmap/path_south.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": false, "collision": true, "lightmap": { "resolution": [351, 101] } },
+      "bounds": { "min": [-29.473, -0.339, 30.975], "max": [-10.205, 1.789, 100.281] }
+    },
+    {
+      "id": "testmap/plaza",
+      "name": "Plaza",
+      "category": "roads",
+      "path": "assets/testmap/plaza.glb",
+      "semantic": "path",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [124, 39] } },
+      "bounds": { "min": [-40, 0, -12], "max": [-16, 0.12, -7] }
+    },
+    {
+      "id": "testmap/retaining_wall",
+      "name": "Retaining wall",
+      "category": "structural",
+      "path": "assets/testmap/retaining_wall.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [397, 212] } },
+      "bounds": { "min": [-31, 0, -0.4], "max": [31, 3.3, 0.4] }
+    },
+    {
+      "id": "testmap/road_0",
+      "name": "Road 0",
+      "category": "roads",
+      "path": "assets/testmap/road_0.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [129, 102] } },
+      "bounds": { "min": [-100, 0, -7], "max": [-75, 0.12, 7] }
+    },
+    {
+      "id": "testmap/road_1",
+      "name": "Road 1",
+      "category": "roads",
+      "path": "assets/testmap/road_1.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [129, 102] } },
+      "bounds": { "min": [-75, 0, -7], "max": [-50, 0.12, 7] }
+    },
+    {
+      "id": "testmap/road_2",
+      "name": "Road 2",
+      "category": "roads",
+      "path": "assets/testmap/road_2.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [129, 102] } },
+      "bounds": { "min": [-50, 0, -7], "max": [-25, 0.12, 7] }
+    },
+    {
+      "id": "testmap/road_3",
+      "name": "Road 3",
+      "category": "roads",
+      "path": "assets/testmap/road_3.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [129, 102] } },
+      "bounds": { "min": [-25, 0, -7], "max": [0, 0.12, 7] }
+    },
+    {
+      "id": "testmap/road_4",
+      "name": "Road 4",
+      "category": "roads",
+      "path": "assets/testmap/road_4.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [129, 102] } },
+      "bounds": { "min": [0, 0, -7], "max": [25, 0.12, 7] }
+    },
+    {
+      "id": "testmap/road_5",
+      "name": "Road 5",
+      "category": "roads",
+      "path": "assets/testmap/road_5.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [129, 102] } },
+      "bounds": { "min": [25, 0, -7], "max": [50, 0.12, 7] }
+    },
+    {
+      "id": "testmap/road_6",
+      "name": "Road 6",
+      "category": "roads",
+      "path": "assets/testmap/road_6.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [129, 102] } },
+      "bounds": { "min": [50, 0, -7], "max": [75, 0.12, 7] }
+    },
+    {
+      "id": "testmap/road_7",
+      "name": "Road 7",
+      "category": "roads",
+      "path": "assets/testmap/road_7.glb",
+      "semantic": "road",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [129, 102] } },
+      "bounds": { "min": [75, 0, -7], "max": [100, 0.12, 7] }
+    },
+    {
+      "id": "testmap/rock_a",
+      "name": "Rock A",
+      "category": "environment",
+      "path": "assets/testmap/rock_a.glb",
+      "semantic": "rock",
+      "tags": ["bedrock"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-2.993, -1.808, -2.465], "max": [3.369, 1.032, 2.651] }
+    },
+    {
+      "id": "testmap/rock_b",
+      "name": "Rock B",
+      "category": "environment",
+      "path": "assets/testmap/rock_b.glb",
+      "semantic": "rock",
+      "tags": ["bedrock"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-6.068, -2.653, -4.079], "max": [6.15, 1.117, 3.642] }
+    },
+    {
+      "id": "testmap/rock_c",
+      "name": "Rock C",
+      "category": "environment",
+      "path": "assets/testmap/rock_c.glb",
+      "semantic": "rock",
+      "tags": ["bedrock"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-1.873, -1.576, -1.543], "max": [2.043, 0.774, 1.694] }
+    },
+    {
+      "id": "testmap/shrub_a",
+      "name": "Shrub A",
+      "category": "vegetation",
+      "path": "assets/testmap/shrub_a.model.json",
+      "semantic": "vegetation",
+      "tags": ["broadleaf"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-1.384, -0.1, -1.14], "max": [1.93, 2.536, 1.962] }
+    },
+    {
+      "id": "testmap/shrub_b",
+      "name": "Shrub B",
+      "category": "vegetation",
+      "path": "assets/testmap/shrub_b.model.json",
+      "semantic": "vegetation",
+      "tags": ["broadleaf"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-1.521, -0.1, -1.527], "max": [1.631, 2.769, 1.167] }
+    },
+    {
+      "id": "testmap/stair_rails",
+      "name": "Stair rails",
+      "category": "structural",
+      "path": "assets/testmap/stair_rails.glb",
+      "semantic": "railing",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [-1.402, 0, -3.44], "max": [1.402, 3.922, 3.43] }
+    },
+    {
+      "id": "testmap/stairs",
+      "name": "Stairs",
+      "category": "structural",
+      "path": "assets/testmap/stairs.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [220, 312] } },
+      "bounds": { "min": [-1.75, 0, -3.55], "max": [1.75, 3.25, 3.55] }
+    },
+    {
+      "id": "testmap/streetlight",
+      "name": "Streetlight",
+      "category": "lighting",
+      "path": "assets/testmap/streetlight.glb",
+      "semantic": "streetlight",
+      "defaults": { "castShadow": true, "collision": true },
+      "children": [
+        {
+          "type": "light",
+          "semantic": "light",
+          "transform": { "position": [0, 7.73, 2.05] },
+          "light": {
+            "kind": "spot",
+            "color": [1, 0.78, 0.55],
+            "intensity": 3000,
+            "range": 24,
+            "outerAngle": 56,
+            "innerAngle": 28,
+            "sourceRadius": 0.15,
+            "fogScatter": 1
+          }
+        }
+      ],
+      "bounds": { "min": [-0.16, 0, -0.09], "max": [0.16, 8.05, 2.35] }
+    },
+    {
+      "id": "testmap/terrain_0_0",
+      "name": "Terrain 0 0",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_0_0.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [233, 245] } },
+      "bounds": { "min": [-100, -3.084, 50], "max": [-50, 1.252, 100] }
+    },
+    {
+      "id": "testmap/terrain_0_1",
+      "name": "Terrain 0 1",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_0_1.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [207, 193] } },
+      "bounds": { "min": [-100, -3.202, 0], "max": [-50, 1.256, 50] }
+    },
+    {
+      "id": "testmap/terrain_0_2",
+      "name": "Terrain 0 2",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_0_2.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [207, 193] } },
+      "bounds": { "min": [-100, -2, -50], "max": [-50, 1.045, 0] }
+    },
+    {
+      "id": "testmap/terrain_0_3",
+      "name": "Terrain 0 3",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_0_3.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [232, 243] } },
+      "bounds": { "min": [-100, -3.416, -100], "max": [-50, 1.257, -50] }
+    },
+    {
+      "id": "testmap/terrain_1_0",
+      "name": "Terrain 1 0",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_1_0.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [224, 227] } },
+      "bounds": { "min": [-50, -3.128, 50], "max": [0, 1.881, 100] }
+    },
+    {
+      "id": "testmap/terrain_1_1",
+      "name": "Terrain 1 1",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_1_1.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [204, 176] } },
+      "bounds": { "min": [-50, -1.764, 7], "max": [0, 1.867, 50] }
+    },
+    {
+      "id": "testmap/terrain_1_2",
+      "name": "Terrain 1 2",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_1_2.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [204, 176] } },
+      "bounds": { "min": [-50, -0.016, -50], "max": [0, 5.638, -7] }
+    },
+    {
+      "id": "testmap/terrain_1_3",
+      "name": "Terrain 1 3",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_1_3.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [228, 234] } },
+      "bounds": { "min": [-50, -2.482, -100], "max": [0, 5.769, -50] }
+    },
+    {
+      "id": "testmap/terrain_2_0",
+      "name": "Terrain 2 0",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_2_0.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [221, 220] } },
+      "bounds": { "min": [0, -1.82, 50], "max": [50, 1.954, 100] }
+    },
+    {
+      "id": "testmap/terrain_2_1",
+      "name": "Terrain 2 1",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_2_1.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [204, 176] } },
+      "bounds": { "min": [0, -1.764, 7], "max": [50, 0.917, 50] }
+    },
+    {
+      "id": "testmap/terrain_2_2",
+      "name": "Terrain 2 2",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_2_2.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [204, 181] } },
+      "bounds": { "min": [0, 0, -50], "max": [50, 15.575, -7] }
+    },
+    {
+      "id": "testmap/terrain_2_3",
+      "name": "Terrain 2 3",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_2_3.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [239, 259] } },
+      "bounds": { "min": [0, 1.974, -100], "max": [50, 18.131, -50] }
+    },
+    {
+      "id": "testmap/terrain_3_0",
+      "name": "Terrain 3 0",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_3_0.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [231, 241] } },
+      "bounds": { "min": [50, -2.738, 50], "max": [100, 1.673, 100] }
+    },
+    {
+      "id": "testmap/terrain_3_1",
+      "name": "Terrain 3 1",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_3_1.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [206, 192] } },
+      "bounds": { "min": [50, -2.043, 0], "max": [100, 0.938, 50] }
+    },
+    {
+      "id": "testmap/terrain_3_2",
+      "name": "Terrain 3 2",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_3_2.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [221, 221] } },
+      "bounds": { "min": [50, -2.116, -50], "max": [100, 15.425, 0] }
+    },
+    {
+      "id": "testmap/terrain_3_3",
+      "name": "Terrain 3 3",
+      "category": "terrain",
+      "path": "assets/testmap/terrain_3_3.glb",
+      "semantic": "terrain",
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [243, 266] } },
+      "bounds": { "min": [50, 4.709, -100], "max": [100, 17.966, -50] }
+    },
+    {
+      "id": "testmap/tree_birch_a",
+      "name": "Tree birch A",
+      "category": "vegetation",
+      "path": "assets/testmap/tree_birch_a.model.json",
+      "semantic": "vegetation",
+      "tags": ["broadleaf"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-3.255, -0.305, -3.512], "max": [2.491, 13.775, 2.904] }
+    },
+    {
+      "id": "testmap/tree_birch_b",
+      "name": "Tree birch B",
+      "category": "vegetation",
+      "path": "assets/testmap/tree_birch_b.model.json",
+      "semantic": "vegetation",
+      "tags": ["broadleaf"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-2.9, -0.308, -2.457], "max": [2.316, 14.33, 2.969] }
+    },
+    {
+      "id": "testmap/tree_pine_a",
+      "name": "Tree pine A",
+      "category": "vegetation",
+      "path": "assets/testmap/tree_pine_a.model.json",
+      "semantic": "vegetation",
+      "tags": ["conifer"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-3.05, -0.311, -3.037], "max": [4.106, 20.298, 3.803] }
+    },
+    {
+      "id": "testmap/tree_pine_b",
+      "name": "Tree pine B",
+      "category": "vegetation",
+      "path": "assets/testmap/tree_pine_b.model.json",
+      "semantic": "vegetation",
+      "tags": ["conifer"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-3.752, -0.314, -3.047], "max": [3.719, 20.451, 3.179] }
+    },
+    {
+      "id": "testmap/tree_spruce_a",
+      "name": "Tree spruce A",
+      "category": "vegetation",
+      "path": "assets/testmap/tree_spruce_a.model.json",
+      "semantic": "vegetation",
+      "tags": ["conifer"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-3.394, -0.989, -3.524], "max": [3.235, 16.743, 3.257] }
+    },
+    {
+      "id": "testmap/tree_spruce_b",
+      "name": "Tree spruce B",
+      "category": "vegetation",
+      "path": "assets/testmap/tree_spruce_b.model.json",
+      "semantic": "vegetation",
+      "tags": ["conifer"],
+      "defaults": { "collision": false, "receiveDecals": false },
+      "bounds": { "min": [-3.754, -0.734, -3.488], "max": [3.497, 18.963, 3.665] }
+    },
+    {
+      "id": "testmap/underpass",
+      "name": "Underpass",
+      "category": "structural",
+      "path": "assets/testmap/underpass.glb",
+      "semantic": "structure",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": true, "lightmap": { "resolution": [748, 265] } },
+      "bounds": { "min": [-3, 0, -31], "max": [3, 3.5, 31] }
+    },
+    {
+      "id": "testmap/underpass_rails",
+      "name": "Underpass rails",
+      "category": "structural",
+      "path": "assets/testmap/underpass_rails.glb",
+      "semantic": "railing",
+      "tags": ["architecture"],
+      "unique": true,
+      "defaults": { "castShadow": true, "collision": false },
+      "bounds": { "min": [-2.78, 0, -31.025], "max": [2.78, 1.03, 31.025] }
+    },
+    {
+      "id": "testmap/utility_box",
+      "name": "Utility box",
+      "category": "props",
+      "path": "assets/testmap/utility_box.glb",
+      "semantic": "prop",
+      "defaults": { "castShadow": true, "collision": true },
+      "bounds": { "min": [-0.4, 0, -0.2], "max": [0.4, 1.25, 0.2] }
+    }
+  ]
+}

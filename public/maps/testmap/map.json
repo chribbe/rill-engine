@@ -108,7 +108,7 @@
       "yaw": 95,
       "pitch": 0
     },
-    { "id": "grp_terrain", "name": "Terrain", "type": "group" },
+    { "id": "grp_terrain", "name": "Terrain", "type": "group", "locked": true },
     {
       "id": "terrain_0_0",
       "name": "Terrain chunk 0,0",
@@ -329,7 +329,7 @@
       "castShadow": false,
       "collision": false
     },
-    { "id": "grp_streets", "name": "Streets, paths & ground", "type": "group" },
+    { "id": "grp_streets", "name": "Streets, paths & ground", "type": "group", "locked": true },
     {
       "id": "road_0",
       "name": "Main road segment 0",
@@ -499,7 +499,7 @@
       "collision": true,
       "lightmap": { "resolution": [351, 101] }
     },
-    { "id": "grp_distant", "name": "Distant scenery", "type": "group" },
+    { "id": "grp_distant", "name": "Distant scenery", "type": "group", "locked": true },
     {
       "id": "far_water",
       "name": "Distant lakes",

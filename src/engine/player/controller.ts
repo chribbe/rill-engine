@@ -31,7 +31,7 @@ export class FirstPersonController {
     window.addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
       this.keys.add(e.code);
-      if (e.code === 'KeyF' && !e.repeat) this.toggleFly();
+      if (e.code === 'KeyF' && !e.repeat && this.enabled) this.toggleFly();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());

@@ -36,6 +36,18 @@ function fmt(v: unknown, indent: string): string {
   return `{\n${entries.map(([k, x]) => `${next}${JSON.stringify(k)}: ${fmt(x, next)}`).join(',\n')}\n${indent}}`;
 }
 
+/** Entity fields in canonical order: identity, hierarchy, placement, then type data as authored. */
+const ENTITY_KEYS = ['id', 'name', 'type', 'semantic', 'tags', 'parent', 'visible', 'locked', 'asset', 'transform'];
+
+function canonicalEntity(e: Record<string, unknown>) {
+  const o: Record<string, unknown> = {};
+  for (const k of ENTITY_KEYS) if (e[k] !== undefined) o[k] = e[k];
+  for (const k of Object.keys(e)) if (!(k in o) && e[k] !== undefined) o[k] = e[k];
+  return o;
+}
+
 export function formatMapJson(doc: unknown): string {
-  return fmt(doc, '') + '\n';
+  const d = doc as { entities?: Record<string, unknown>[] };
+  const out = Array.isArray(d?.entities) ? { ...d, entities: d.entities.map(canonicalEntity) } : doc;
+  return fmt(out, '') + '\n';
 }

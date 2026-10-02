@@ -118,7 +118,7 @@
       "yaw": 69.810691,
       "pitch": 0
     },
-    { "id": "grp_terrain", "name": "Terrain", "type": "group" },
+    { "id": "grp_terrain", "name": "Terrain", "type": "group", "locked": true },
     {
       "id": "terrain_0_0",
       "name": "Terrain 0,0",
@@ -379,7 +379,7 @@
       "collision": true,
       "lightmap": { "resolution": [174, 54] }
     },
-    { "id": "grp_streets", "name": "Streets, paths & ground", "type": "group" },
+    { "id": "grp_streets", "name": "Streets, paths & ground", "type": "group", "locked": true },
     {
       "id": "street_road_0_0",
       "name": "Street road (0, 0)",

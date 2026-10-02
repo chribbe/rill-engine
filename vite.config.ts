@@ -2,6 +2,7 @@ import { defineConfig, type Plugin } from 'vite';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
+import { editorServer } from './tools/dev/editor_server.ts';
 
 /**
  * Dev-only capture endpoint: the page POSTs PNGs to /__capture?name=... and
@@ -43,7 +44,11 @@ function captureEndpoint(): Plugin {
 export default defineConfig({
   // No SPA fallback: missing assets must 404 instead of returning index.html.
   appType: 'mpa',
-  plugins: [captureEndpoint()],
+  plugins: [captureEndpoint(), editorServer()],
   server: { port: 5173, strictPort: true, host: '127.0.0.1' },
-  build: { target: 'es2023', sourcemap: true },
+  build: {
+    target: 'es2023',
+    sourcemap: true,
+    rollupOptions: { input: { editor: 'index.html', play: 'play.html' } },
+  },
 });

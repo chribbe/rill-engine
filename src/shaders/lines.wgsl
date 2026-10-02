@@ -31,6 +31,17 @@ fn vsWire(@location(0) p: vec3f, @builtin(instance_index) ii: u32) -> VOut {
   return o;
 }
 
+// Editor selection: the selected objects' edges, depth tested, in the selection colour.
+@vertex
+fn vsWireSelect(@location(0) p: vec3f, @builtin(instance_index) ii: u32) -> VOut {
+  let inst = instances[visibleList[ii] & 0xFFFFFFu];
+  var o: VOut;
+  o.pos = frame.viewProj * (inst.model * vec4f(p, 1.0));
+  o.pos.z += 4e-5 * o.pos.w;
+  o.color = vec4f(1.0, 0.5, 0.08, 1.0);
+  return o;
+}
+
 @fragment
 fn fsMain(in: VOut) -> @location(0) vec4f {
   // Unlit overlay: written with weight 1 so the resolve leaves it as-is (pre-exposure ignored).

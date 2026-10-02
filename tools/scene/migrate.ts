@@ -257,6 +257,7 @@ const CATEGORIES: [string, string, (e: Obj) => boolean][] = [
   ['grp_reference', 'Reference & material gallery', (e) => ['gallery', 'reference'].includes(e.semantic)],
 ];
 const OTHER: [string, string] = ['grp_other', 'Other'];
+const LOCKED_GROUPS = new Set(['grp_terrain', 'grp_streets', 'grp_distant']);
 const buckets = new Map<string, Obj[]>();
 for (const e of out) {
   if (e.parent) continue;
@@ -276,7 +277,8 @@ const emit = (e: Obj) => {
 for (const [gid, name] of [...CATEGORIES.map((c) => [c[0], c[1]] as [string, string]), OTHER]) {
   const list = buckets.get(gid);
   if (!list?.length) continue;
-  ordered.push({ id: gid, name, type: 'group' });
+  // World surfaces are locked: clicking the ground deselects instead of grabbing a terrain chunk.
+  ordered.push({ id: gid, name, type: 'group', ...(LOCKED_GROUPS.has(gid) ? { locked: true } : {}) });
   report.groups++;
   for (const e of list) {
     e.parent = gid;

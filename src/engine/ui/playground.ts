@@ -18,8 +18,8 @@ export interface PlaygroundHooks {
 
 export const TONEMAPPERS: Record<string, number> = { AgX: 0, 'AgX Punchy': 5, 'PBR Neutral': 1, 'ACES (Hill)': 2, 'Reinhard (luma)': 3, Clamp: 4 };
 
-export function createPlayground(r: Renderer, env: Environment, player: FirstPersonController, hooks: PlaygroundHooks): GUI {
-  const gui = new GUI({ title: 'Rill renderer playground', width: 320 });
+export function createPlayground(r: Renderer, env: Environment, player: FirstPersonController, hooks: PlaygroundHooks, opts: { container?: HTMLElement; title?: string } = {}): GUI {
+  const gui = new GUI({ title: opts.title ?? 'Rill renderer playground', width: 320, container: opts.container });
   const S = r.settings;
   const E = () => env.state;
   const touch = () => env.touch();
