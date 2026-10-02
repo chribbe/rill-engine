@@ -178,3 +178,8 @@ input[type='color'] { width: 30px; height: 22px; padding: 0 2px; }
 
 /* Status bar */
 .statusbar { height: 100%; display: flex; align-items: center; padding: 0 10px; background: var(--panel); border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Dropdown menu */
+.menu { position: fixed; z-index: 20; min-width: 240px; max-height: 60vh; overflow: auto; background: var(--panel2); border: 1px solid #3a4048; border-radius: 4px; box-shadow: 0 6px 24px #0008; padding: 3px 0; }
+.menu-item { padding: 4px 12px; white-space: pre; cursor: pointer; font: 11.5px ui-monospace, Menlo, monospace; }
+.menu-item:hover { background: var(--sel); }

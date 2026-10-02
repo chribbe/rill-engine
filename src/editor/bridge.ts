@@ -74,6 +74,12 @@ export class BlenderBridge {
       return;
     }
     if (j.result?.reload === 'lightmaps') {
+      // A map saved from another one used that map's lightmaps; its own bake lives in lightmaps/.
+      const own = 'lightmaps/lightmapset.json';
+      if (this.ed.scene.doc.lightmaps !== own) {
+        this.ed.exec('set_map_settings', { lightmaps: own });
+        await this.ed.save();
+      }
       await this.ed.rt.world.reloadLightmaps();
       this.ed.log('info', `[${j.task}] lightmaps reloaded`);
     }

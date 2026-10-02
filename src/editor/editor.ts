@@ -267,7 +267,7 @@ export class Editor {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
       this.history.markSaved();
-      this.log('info', `Saved ${j.file} (${j.entities} entities, ${(j.bytes / 1024).toFixed(0)} KB)`);
+      this.log('info', `Saved ${j.file} (${j.entities} entities, ${(j.bytes / 1024).toFixed(0)} KB)${j.backup ? `; previous version kept as ${j.backup}` : ''}`);
       return true;
     } catch (e) {
       this.log('error', `Save failed: ${(e as Error).message}`);
@@ -276,14 +276,41 @@ export class Editor {
   }
 
   /** Re-reads the map from disk (discarding unsaved edits) and rebuilds the world in place. */
-  async reload(doc?: MapDocument) {
+  async reload(doc?: MapDocument, opts: { unsaved?: boolean; label?: string } = {}) {
     const d = doc ?? (await World.fetchDocument(`/maps/${this.mapName}/map.json`));
     this.setSelection([]);
     await this.rt.world.reload(d);
     this.history.clear();
     this.history.markSaved();
-    this.log('info', `Loaded ${this.mapName} (${d.entities.length} entities)`);
+    // A restored backup is not on disk yet: it stays "unsaved" until Save.
+    if (opts.unsaved) this.history.forceDirty = true;
+    this.log('info', `Loaded ${opts.label ?? this.mapName} (${d.entities.length} entities)${opts.unsaved ? ' - not saved yet: Save to keep it' : ''}`);
     this.emit('scene');
+    this.emit('history');
+  }
+
+  /** Saved versions of this map (dev server), newest first. */
+  async backups(): Promise<{ file: string; bytes: number; time: number }[]> {
+    const r = await fetch(`/__editor/backups?map=${encodeURIComponent(this.mapName)}`);
+    return r.ok ? r.json() : [];
+  }
+
+  /** Loads a saved version into the editor (unsaved until Save). */
+  async restoreBackup(file: string) {
+    const r = await fetch(`/__editor/backup?map=${encodeURIComponent(this.mapName)}&file=${encodeURIComponent(file)}`);
+    if (!r.ok) throw new Error(`backup ${file}: ${r.status}`);
+    const doc = (await r.json()) as MapDocument;
+    if (doc.version !== 2 || !Array.isArray(doc.entities)) throw new Error(`${file} is not a v2 map`);
+    await this.reload(doc, { unsaved: true, label: `backup ${file}` });
+  }
+
+  /** Writes the current document as a new map and returns its name (open it with ?map=). */
+  async saveAs(name: string): Promise<string> {
+    const r = await fetch(`/__editor/save-as?map=${encodeURIComponent(name)}&from=${encodeURIComponent(this.mapName)}`, { method: 'POST', body: JSON.stringify(this.scene.doc) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error ?? r.statusText);
+    this.log('info', `Saved as ${j.file}`);
+    return j.map;
   }
 
   // ------------------------------------------------------------------ play mode

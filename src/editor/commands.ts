@@ -559,6 +559,20 @@ op<{ preset?: string; overrides?: Record<string, unknown> | null }>({
   },
 });
 
+op<{ name?: string; description?: string; lightmaps?: string | null }>({
+  name: 'set_map_settings',
+  description: 'Sets document-level map settings: display name, description, lightmap set path (relative to the map directory).',
+  params: { name: { type: 'string', optional: true, description: 'Map name.' }, description: { type: 'string', optional: true, description: 'Description.' }, lightmaps: { type: 'string', optional: true, description: 'LightmapSet manifest path, e.g. lightmaps/lightmapset.json.' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const d = ctx.scene.doc;
+    if (p.name !== undefined && p.name !== d.name) ps.doc('name', p.name);
+    if (p.description !== undefined && p.description !== d.description) ps.doc('description', p.description || undefined);
+    if (p.lightmaps !== undefined && p.lightmaps !== d.lightmaps) ps.doc('lightmaps', p.lightmaps || undefined);
+    return { patches: ps.patches(), label: 'Map settings' };
+  },
+});
+
 op<{ asset: string; position: V3; rotation?: [number, number, number, number]; yaw?: number; scale?: number | V3; parent?: string; name?: string }, { id: string; children: string[] }>({
   name: 'place_asset',
   description: 'Places an asset from the registry (id or path) at a world position, with its prefab children (e.g. a streetlight\'s lamp). yaw: degrees about +Y. Returns { id, children }.',
@@ -765,13 +779,17 @@ export class EditorHistory {
   }
 
   markSaved() {
+    this.forceDirty = false;
     this.saved = this.undoStack[this.undoStack.length - 1] ?? null;
     this.changed();
   }
 
+  /** Set when the document differs from disk without an undo entry (a restored backup). */
+  forceDirty = false;
+
   /** Unsaved changes since `markSaved` (undoing back to the saved state counts as clean). */
   get dirty() {
-    return !!this.tx || (this.undoStack[this.undoStack.length - 1] ?? null) !== this.saved;
+    return this.forceDirty || !!this.tx || (this.undoStack[this.undoStack.length - 1] ?? null) !== this.saved;
   }
 
   clear() {

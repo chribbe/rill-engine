@@ -417,6 +417,7 @@ export class World {
         for (const r of this.signsRt.renderables) {
           this.removed.add(r);
           this.renderer.instances.free(r.slot);
+          this.renderer.arena.free(r.mesh);
         }
         this.compactRenderables();
         this.signsRt = null;

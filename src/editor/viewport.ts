@@ -76,6 +76,10 @@ export class Viewport {
     o.addEventListener('pointerdown', (e) => this.onDown(e));
     o.addEventListener('pointermove', (e) => this.onMove(e));
     o.addEventListener('pointerup', (e) => this.onUp(e));
+    // A release the overlay never sees (focus change, lost capture, OS menus) must not
+    // leave the camera in look / pan / orbit mode.
+    o.addEventListener('pointercancel', () => this.resetDrags());
+    o.addEventListener('lostpointercapture', (e) => { if (e.buttons === 0) this.resetDrags(); });
     o.addEventListener('dblclick', (e) => {
       const hit = this.pickAt(e.offsetX, e.offsetY);
       if (hit) {
@@ -108,7 +112,8 @@ export class Viewport {
     });
     window.addEventListener('keydown', (e) => this.onKey(e));
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => { this.keys.clear(); this.resetDrags(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { this.keys.clear(); this.resetDrags(); } });
     // Play mode: fire while the mouse is captured.
     this.canvas.addEventListener('mousedown', (e) => {
       if (e.button === 0 && document.pointerLockElement === this.canvas) this.ed.rt.sandbox.trigger = true;
@@ -144,7 +149,21 @@ export class Viewport {
     if (h) this.beginGizmo(h, e);
   }
 
+  /** Ends every mouse gesture (camera look / pan / orbit, gizmo drag). */
+  resetDrags() {
+    this.looking = false;
+    this.panning = false;
+    this.orbiting = null;
+    this.down = null;
+    if (this.gizmo.dragging) this.endGizmo();
+  }
+
   private onMove(e: PointerEvent) {
+    // The buttons actually held decide: a missed pointerup never leaves a mode stuck.
+    if (this.looking && !(e.buttons & 2)) this.looking = false;
+    if (this.panning && !(e.buttons & 4)) this.panning = false;
+    if (this.orbiting && !(e.buttons & 1)) this.orbiting = null;
+    if (this.gizmo.dragging && !(e.buttons & 1)) this.endGizmo();
     const x = e.offsetX, y = e.offsetY;
     const dx = x - this.lastMouse[0], dy = y - this.lastMouse[1];
     this.lastMouse = [x, y];

@@ -88,6 +88,28 @@ export function buildToolbar(root: HTMLElement, ed: Editor, vp: Viewport, bridge
   const reload = btn('Reload', 'Reload the map from disk (discards unsaved edits)', () => {
     if (!ed.history.dirty || confirm('Discard unsaved changes and reload from disk?')) void ed.reload();
   });
+  const saveAs = btn('Save as…', 'Save a copy as a new map (the original stays untouched)', async () => {
+    const name = prompt('New map name (letters, digits, _ and -):', `${ed.mapName}_copy`);
+    if (!name) return;
+    if (!/^[\w-]+$/.test(name)) { ed.log('error', `Bad map name '${name}'`); return; }
+    try {
+      const m = await ed.saveAs(name);
+      ed.history.markSaved();
+      if (confirm(`Saved as '${m}'. Open it now?`)) location.search = `?map=${encodeURIComponent(m)}`;
+    } catch (e) {
+      ed.log('error', `Save as: ${(e as Error).message}`);
+    }
+  });
+  const backups = btn('Backups…', 'Earlier saved versions of this map (every save keeps the previous one)', async () => {
+    const list = await ed.backups();
+    showMenu(backups, list.length ? list.map((b) => ({
+      label: `${b.file.replace(/\.json$/, '')}   ${new Date(b.time).toLocaleString()}   ${(b.bytes / 1024).toFixed(0)} KB`,
+      run: () => {
+        if (ed.history.dirty && !confirm('Discard unsaved changes and load this backup?')) return;
+        ed.restoreBackup(b.file).catch((e) => ed.log('error', (e as Error).message));
+      },
+    })) : [{ label: 'No backups yet (made on every save)', run: () => {} }]);
+  });
   const undo = btn('↶', 'Undo (Cmd/Ctrl+Z)', () => ed.undo());
   const redo = btn('↷', 'Redo (Cmd/Ctrl+Shift+Z)', () => ed.redo());
   const toolBtns: Record<Tool, HTMLElement> = {
@@ -119,7 +141,7 @@ export function buildToolbar(root: HTMLElement, ed: Editor, vp: Viewport, bridge
   });
   const status = h('span', { class: 'tb-status' });
   root.append(h('div', { class: 'toolbar' },
-    h('span', { class: 'tb-brand' }, 'Rill'), maps, save, reload, h('span', { class: 'tb-sep' }), undo, redo, h('span', { class: 'tb-sep' }),
+    h('span', { class: 'tb-brand' }, 'Rill'), maps, save, saveAs, backups, reload, h('span', { class: 'tb-sep' }), undo, redo, h('span', { class: 'tb-sep' }),
     ...Object.values(toolBtns), space, snapChk, grid, angle, h('span', { class: 'tb-sep' }), play, playFrom, h('span', { class: 'tb-sep' }), bake, capture, status));
 
   const refresh = () => {
@@ -151,6 +173,18 @@ export function buildToolbar(root: HTMLElement, ed: Editor, vp: Viewport, bridge
   setInterval(refresh, 1000);
   refresh();
   void vp;
+}
+
+/** Small dropdown menu under an element; closes on any outside click. */
+export function showMenu(anchor: HTMLElement, items: { label: string; run: () => void }[]) {
+  document.querySelector('.menu')?.remove();
+  const r = anchor.getBoundingClientRect();
+  const m = h('div', { class: 'menu', style: `left:${r.left}px;top:${r.bottom + 2}px` },
+    ...items.map((it) => h('div', { class: 'menu-item', onclick: () => { m.remove(); it.run(); } }, it.label)));
+  document.body.append(m);
+  setTimeout(() => document.addEventListener('pointerdown', function close(e) {
+    if (!m.contains(e.target as Node)) { m.remove(); document.removeEventListener('pointerdown', close); }
+  }), 0);
 }
 
 export function buildStatusBar(root: HTMLElement, ed: Editor) {

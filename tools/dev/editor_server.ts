@@ -1,7 +1,11 @@
 // Dev-server side of the editor (vite plugin, dev only, bound to 127.0.0.1):
 //
 //   GET  /__editor/maps                 maps with a map.json
-//   POST /__editor/save?map=<name>      writes public/maps/<name>/map.json (canonical formatting)
+//   POST /__editor/save?map=<name>      writes public/maps/<name>/map.json (canonical formatting);
+//                                       the previous version goes to backups/maps/<name>/ first
+//   POST /__editor/save-as?map=<new>&from=<map>   new map from a document (lightmaps referenced from <map>)
+//   GET  /__editor/backups?map=<name>   saved versions, newest first
+//   GET  /__editor/backup?map=<name>&file=<f>     one saved version
 //   GET  /__editor/materials            material library summary (public/materials/*.json)
 //   GET  /__editor/asset-files          asset files on disk (for the registry / browser)
 //   POST /__editor/registry             writes public/assets/registry.json
@@ -15,7 +19,7 @@
 import type { Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { formatMapJson } from '../../src/engine/scene/mapjson.ts';
 
@@ -39,6 +43,26 @@ function json(res: ServerResponse, status: number, body: unknown) {
 }
 
 const NAME = /^[\w-]+$/;
+const BACKUPS = join(ROOT, 'backups', 'maps');
+const KEEP_BACKUPS = 50;
+
+function stamp() {
+  const d = new Date(), p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${String(d.getMilliseconds()).padStart(3, '0')}`;
+}
+
+/** Copies the current map.json aside before it is overwritten; keeps the newest KEEP_BACKUPS (named snapshots are kept). */
+function backupMap(map: string) {
+  const src = join(PUBLIC, 'maps', map, 'map.json');
+  if (!existsSync(src)) return null;
+  const dir = join(BACKUPS, map);
+  mkdirSync(dir, { recursive: true });
+  const file = `${stamp()}.json`;
+  copyFileSync(src, join(dir, file));
+  const auto = readdirSync(dir).filter((f) => /^\d{8}-\d{6}(-\d{3})?\.json$/.test(f)).sort();
+  for (const f of auto.slice(0, Math.max(0, auto.length - KEEP_BACKUPS))) unlinkSync(join(dir, f));
+  return file;
+}
 
 /** Atomic write: a crash mid-write never leaves a truncated map. */
 function writeAtomic(path: string, text: string) {
@@ -165,8 +189,40 @@ export function editorServer(): Plugin {
             const file = join(PUBLIC, 'maps', map, 'map.json');
             if (!existsSync(join(PUBLIC, 'maps', map))) return json(res, 404, { error: `no map '${map}'` });
             const text = formatMapJson(doc);
+            const backup = existsSync(file) && readFileSync(file, 'utf8') !== text ? backupMap(map) : null;
             writeAtomic(file, text);
-            return json(res, 200, { file: relative(ROOT, file), bytes: text.length, entities: doc.entities.length });
+            return json(res, 200, { file: relative(ROOT, file), bytes: text.length, entities: doc.entities.length, backup: backup && relative(ROOT, join(BACKUPS, map, backup)) });
+          }
+          if (path === '/__editor/save-as' && req.method === 'POST') {
+            const map = url.searchParams.get('map') ?? '', from = url.searchParams.get('from') ?? '';
+            if (!NAME.test(map) || !NAME.test(from)) return json(res, 400, { error: 'bad map name' });
+            const dir = join(PUBLIC, 'maps', map);
+            if (existsSync(join(dir, 'map.json'))) return json(res, 409, { error: `map '${map}' already exists` });
+            const doc = JSON.parse(await readBody(req));
+            if (doc?.format !== 'rill.map' || doc.version !== 2) return json(res, 400, { error: 'not a rill.map v2 document' });
+            doc.name = map;
+            // Until the copy is baked, it uses the source map's lightmaps (same entity IDs).
+            if (doc.lightmaps && !doc.lightmaps.startsWith('../')) doc.lightmaps = `../${from}/${doc.lightmaps}`;
+            mkdirSync(dir, { recursive: true });
+            writeAtomic(join(dir, 'map.json'), formatMapJson(doc));
+            return json(res, 200, { map, file: relative(ROOT, join(dir, 'map.json')) });
+          }
+          if (path === '/__editor/backups' && req.method === 'GET') {
+            const map = url.searchParams.get('map') ?? '';
+            if (!NAME.test(map)) return json(res, 400, { error: 'bad map name' });
+            const dir = join(BACKUPS, map);
+            const list = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => ({ file: f, bytes: statSync(join(dir, f)).size, time: statSync(join(dir, f)).mtimeMs })) : [];
+            list.sort((a, b) => b.time - a.time);
+            return json(res, 200, list);
+          }
+          if (path === '/__editor/backup' && req.method === 'GET') {
+            const map = url.searchParams.get('map') ?? '', f = url.searchParams.get('file') ?? '';
+            if (!NAME.test(map) || !/^[\w.-]+\.json$/.test(f)) return json(res, 400, { error: 'bad name' });
+            const file = join(BACKUPS, map, f);
+            if (!existsSync(file)) return json(res, 404, { error: 'no such backup' });
+            res.setHeader('content-type', 'application/json');
+            res.setHeader('cache-control', 'no-store');
+            return res.end(readFileSync(file));
           }
           if (path === '/__editor/materials' && req.method === 'GET') {
             const dir = join(PUBLIC, 'materials');

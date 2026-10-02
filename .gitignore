@@ -9,3 +9,4 @@ dist
 /public/textures/bc7
 /.texture-cache
 /build
+/backups

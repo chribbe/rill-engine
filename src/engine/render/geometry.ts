@@ -92,8 +92,32 @@ class GrowBuffer {
   constructor(private device: GPUDevice, private label: string, private usage: number, public capacity: number) {
     this.buffer = device.createBuffer({ label, size: capacity, usage: usage | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
   }
-  /** Reserves bytes, growing (with a GPU copy) if needed. Returns the byte offset. */
+  /** Released ranges [offset, bytes], sorted by offset, adjacent ones merged. */
+  private freeList: [number, number][] = [];
+
+  /** Returns a range for reuse (editor-generated meshes are rebuilt often). */
+  free(offset: number, bytes: number) {
+    if (bytes <= 0) return;
+    const L = this.freeList;
+    let i = 0;
+    while (i < L.length && L[i][0] < offset) i++;
+    L.splice(i, 0, [offset, bytes]);
+    // Merge with neighbours.
+    if (i + 1 < L.length && L[i][0] + L[i][1] === L[i + 1][0]) { L[i][1] += L[i + 1][1]; L.splice(i + 1, 1); }
+    if (i > 0 && L[i - 1][0] + L[i - 1][1] === L[i][0]) { L[i - 1][1] += L[i][1]; L.splice(i, 1); }
+  }
+
+  /** Reserves bytes (first fit in freed ranges, else at the end, growing with a GPU copy). Returns the byte offset. */
   alloc(bytes: number): number {
+    const L = this.freeList;
+    for (let i = 0; i < L.length; i++) {
+      if (L[i][1] < bytes) continue;
+      const off = L[i][0];
+      L[i][0] += bytes;
+      L[i][1] -= bytes;
+      if (L[i][1] === 0) L.splice(i, 1);
+      return off;
+    }
     if (this.used + bytes > this.capacity) {
       let cap = this.capacity;
       while (this.used + bytes > cap) cap *= 2;
@@ -174,6 +198,8 @@ export class GeometryArena {
       }
       const posOff = this.pos.alloc(vc * POS_STRIDE);
       const attrOff = this.attr.alloc(vc * ATTR_STRIDE);
+      // Both vertex streams are allocated and freed in lockstep, so they share the vertex index.
+      if (attrOff / ATTR_STRIDE !== posOff / POS_STRIDE) throw new Error('arena: vertex streams out of step');
       const idxOff = this.index.alloc(p.indices.byteLength);
       this.device.queue.writeBuffer(this.pos.buffer, posOff, p.positions as Float32Array<ArrayBuffer>);
       this.device.queue.writeBuffer(this.attr.buffer, attrOff, attr);
@@ -205,6 +231,24 @@ export class GeometryArena {
       this.primitives.push(prim);
     }
     return { name: mesh.name, primitives: prims, aabb, triangles: tris, hasUv1 };
+  }
+
+  /**
+   * Releases a mesh's GPU ranges for reuse. Only for meshes nothing draws any more
+   * (editor-generated geometry that was rebuilt); queue ordering makes the reuse safe
+   * against frames already submitted.
+   */
+  free(mesh: GpuMesh) {
+    for (const p of mesh.primitives) {
+      this.pos.free(p.baseVertex * POS_STRIDE, p.vertexCount * POS_STRIDE);
+      this.attr.free(p.baseVertex * ATTR_STRIDE, p.vertexCount * ATTR_STRIDE);
+      this.index.free(p.firstIndex * 4, p.indexCount * 4);
+      if (p.wireCount) this.wire.free(p.wireFirst * 4, p.wireCount * 4);
+      p.wireCount = 0;
+      this.vertexCount -= p.vertexCount;
+      const i = this.primitives.indexOf(p);
+      if (i >= 0) this.primitives.splice(i, 1);
+    }
   }
 
   /** Builds a unique-edge line list for a primitive (lazily, for the wireframe view). */
