@@ -15,7 +15,7 @@ struct Frame {
   sunColor: vec4f,       // rgb = sun illuminance at ground (lux), w = sun disk luminance scale
   exposure: vec4f,       // x pre-exposure, y ev100, z sky intensity, w indirect intensity
   fog0: vec4f,           // x fog density (1/m) at reference height, y reference height (m), z height falloff (1/m), w haze density (1/m)
-  fog1: vec4f,           // x phase g, y start distance (m), z max opacity, w sky fog height fade
+  fog1: vec4f,           // x phase g, y start distance (m), z max opacity, w indoor fog scale (camera sky visibility)
   fogColor: vec4f,       // rgb fog albedo, w sun inscatter strength
   shadow0: vec4f,        // x normal offset (texels), y const bias, z softness, w shadow distance
   cascadeSplits: vec4f,  // far view depth per cascade

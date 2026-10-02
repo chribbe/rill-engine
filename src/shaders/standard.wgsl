@@ -35,6 +35,7 @@ const M_NO_LIGHTMAP_SH_RATIO: u32 = 4096u;
 const M_BLEND: u32 = 8192u;
 const M_EMISSIVE_TEX: u32 = 16384u;
 const M_INTERIOR: u32 = 32768u;
+const M_EMISSIVE_ALWAYS: u32 = 65536u;
 
 // Pipeline specialisation. The renderer compiles one variant per (material
 // features x active global features); disabled blocks are removed by the
@@ -695,7 +696,7 @@ fn shade(in: VSOut, front: bool, vl: VertexLight) -> ShadeOut {
   // Texture AO x baked vertex AO (vertex colour G; 1 for meshes without colours).
   s.ao = mix(1.0, orm.r, material.pbr.w) * in.color.g;
   // Emission (lamp lenses) follows the environment's local-light switch.
-  s.emissive = material.emissive.rgb * frame.ground.w * select(vec3f(1.0), bc.rgb, matFlag(M_EMISSIVE_TEX));
+  s.emissive = material.emissive.rgb * select(frame.ground.w, 1.0, matFlag(M_EMISSIVE_ALWAYS)) * select(vec3f(1.0), bc.rgb, matFlag(M_EMISSIVE_TEX));
   // Interior glazing: the emissive colour lights the fake rooms instead.
   if (USE_INTERIOR && matFlag(M_INTERIOR)) { s.emissive = vec3f(0.0); }
   s.Ng = Ng;
@@ -1111,6 +1112,19 @@ fn finalize(o: ShadeOut) -> vec4f {
     return vec4f(c, -1.0);
   }
   return encodeResolve(max(o.color.rgb, vec3f(0.0)));
+}
+
+// Transparent glass: premultiplied lit surface (reflections + glints) over what is
+// behind it; opacity rises with Fresnel. Blended by the destination weight.
+@fragment
+fn fsGlass(in: VSOut, @builtin(front_facing) front: bool) -> @location(0) vec4f {
+  let o = shade(in, front, noVertexLight());
+  if (o.raw) { return vec4f(0.0); }
+  let V = normalize(frame.cameraPos.xyz - in.worldPos);
+  let NoV = abs(dot(normalize(in.normal), V));
+  let F = 0.04 + 0.96 * pow(1.0 - NoV, 5.0);
+  let a = saturate(o.color.a + (1.0 - o.color.a) * F);
+  return vec4f(max(o.color.rgb, vec3f(0.0)), a);
 }
 
 @fragment

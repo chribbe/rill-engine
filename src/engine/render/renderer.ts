@@ -70,6 +70,8 @@ export interface LightData {
   outerAngle?: number;
   sourceRadius?: number;
   fogScatter?: number;
+  /** Indoor light: on in every mood (not scaled by the environment's lamp switch). */
+  always?: boolean;
   /** Dynamic spot lights may cast realtime shadows (first SPOT_LAYERS of them). */
   shadow?: boolean;
 }
@@ -219,6 +221,8 @@ interface Draw {
   first: number;
   count: number;
   masked: boolean;
+  /** Transparent (glass): drawn after opaque geometry and the sky. */
+  blended: boolean;
   doubleSided: boolean;
   /** Instances inside a LOD transition band (dithered crossfade pipeline variant). */
   fade: boolean;
@@ -269,6 +273,8 @@ class DrawList {
   /** Sorts and appends instance slots to `out` starting at `offset`; returns the new offset. */
   finalize(out: { data: Uint32Array; grow: (n: number) => void }, offset: number): number {
     this.active.sort((a, b) => {
+      const ta = a.material.blended ? 1 : 0, tb = b.material.blended ? 1 : 0;
+      if (ta !== tb) return ta - tb;
       const ma = a.material.masked ? 1 : 0, mb = b.material.masked ? 1 : 0;
       if (ma !== mb) return ma - mb;
       const da = a.material.doubleSided ? 1 : 0, db = b.material.doubleSided ? 1 : 0;
@@ -281,7 +287,7 @@ class DrawList {
     for (const b of this.active) {
       out.grow(o + b.count);
       out.data.set(b.slots.subarray(0, b.count), o);
-      this.draws.push({ prim: b.prim, material: b.material, first: o, count: b.count, masked: b.material.masked, doubleSided: b.material.doubleSided, fade: b.fade });
+      this.draws.push({ prim: b.prim, material: b.material, first: o, count: b.count, masked: b.material.masked, blended: b.material.blended, doubleSided: b.material.doubleSided, fade: b.fade });
       this.triangles += (b.prim.indexCount / 3) * b.count;
       this.instances += b.count;
       o += b.count;
@@ -653,7 +659,7 @@ export class Renderer {
    * plus this frame's gameplay lights at full strength.
    */
   private uploadLights(lampScale: number) {
-    const lamps = lampScale > 0 ? this.staticLights : [];
+    const lamps = lampScale > 0 ? this.staticLights : this.staticLights.filter((l) => l.always);
     const lights = this.dynamicLights.length ? [...lamps, ...this.dynamicLights] : lamps;
     const nStatic = lamps.length;
     const n = Math.min(lights.length, 256);
@@ -664,7 +670,7 @@ export class Renderer {
       const l = lights[i];
       const o = i * 16;
       f.set([...l.position, l.range], o);
-      const k = l.intensity * (i < nStatic ? lampScale : 1);
+      const k = l.intensity * (i < nStatic && !l.always ? lampScale : 1);
       f.set([l.color[0] * k, l.color[1] * k, l.color[2] * k, l.fogScatter ?? 1], o + 4);
       const dir = l.direction ?? [0, -1, 0];
       const outer = ((l.outerAngle ?? 60) * Math.PI) / 180;
@@ -931,6 +937,37 @@ export class Renderer {
     });
   }
 
+  /**
+   * Transparent glass: lit like any surface (reflections, sun glints), blended into
+   * the weighted (rgb*w, w) target exactly like particles (source scaled by the
+   * destination weight, weight kept), depth-tested without writes.
+   */
+  private glassPipeline(doubleSided: boolean, mat: Material, msaa = this.settings.msaa): GPURenderPipeline | null {
+    const v = this.variant(mat);
+    const key = `glass:${doubleSided}:${msaa}:${v.key}`;
+    return this.cached(key, () => {
+      const mod = shaderModule(this.device, 'standard');
+      return {
+        label: key,
+        layout: this.stdPipelineLayout,
+        vertex: { module: mod, entryPoint: 'vsMain', buffers: VERTEX_LAYOUT_FULL },
+        fragment: {
+          module: mod, entryPoint: 'fsGlass', constants: { ...v.constants, USE_LOD_FADE: 0 },
+          targets: [{
+            format: this.hdrFormat,
+            blend: {
+              color: { srcFactor: 'dst-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+              alpha: { srcFactor: 'zero', dstFactor: 'one', operation: 'add' },
+            },
+          }],
+        },
+        primitive: { topology: 'triangle-list', cullMode: doubleSided ? 'none' : 'back', frontFace: 'ccw' },
+        depthStencil: { format: this.depthFormat, depthWriteEnabled: false, depthCompare: 'greater' },
+        multisample: { count: msaa ? 4 : 1 },
+      };
+    });
+  }
+
   /** Masked geometry: depth/coverage prepass (colour writes off) or the equal-depth lit pass. */
   private maskedPipeline(prepass: boolean, doubleSided: boolean, mat: Material, msaa = this.settings.msaa, fade = false, clutter = false): GPURenderPipeline | null {
     // Hardware A2C when multisampled (fast path); discard-based test otherwise.
@@ -1132,6 +1169,9 @@ export class Renderer {
   // ------------------------------------------------------------------ targets
 
   resize(width: number, height: number) {
+    // A hidden or collapsed canvas reports ~0 px: keep targets (and the bloom chain) valid.
+    width = Math.max(64, width | 0);
+    height = Math.max(64, height | 0);
     if (width === this.width && height === this.height && this.targetsMsaa === this.settings.msaa && this.resolved) return;
     this.width = width;
     this.height = height;
@@ -1399,6 +1439,32 @@ export class Renderer {
     return { flags, shadowsOn, fogOn };
   }
 
+  /** Smoothed fog in-scatter scale for an eye position (see fog1.w). */
+  private fogScale = 1;
+  private fogIndoorScale(eye: ArrayLike<number>): number {
+    const pv = this.probeVolume;
+    let target = 1;
+    if (pv && this.settings.probeVolume) {
+      const [nx, ny, nz] = pv.dims;
+      const f = [0, 1, 2].map((i) => (eye[i] - pv.origin[i]) / pv.spacing[i]);
+      if (f[0] >= 0 && f[1] >= 0 && f[2] >= 0 && f[0] <= nx - 1 && f[1] <= ny - 1 && f[2] <= nz - 1) {
+        const i0 = f.map((v, k) => Math.min(Math.floor(v), [nx, ny, nz][k] - 2));
+        const t = f.map((v, k) => v - i0[k]);
+        let vis = 0;
+        for (let dz = 0; dz < 2; dz++) for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+          const w = (dx ? t[0] : 1 - t[0]) * (dy ? t[1] : 1 - t[1]) * (dz ? t[2] : 1 - t[2]);
+          vis += w * pv.skyVisibility[((i0[2] + dz) * ny + (i0[1] + dy)) * nx + (i0[0] + dx)];
+        }
+        // Only truly enclosed spaces lose the fog (under bridges and canopies it stays).
+        const s = Math.min(1, Math.max(0, (vis - 0.04) / 0.26));
+        target = 0.08 + 0.92 * s * s * (3 - 2 * s);
+      }
+    }
+    this.fogScale += (target - this.fogScale) * 0.15;
+    if (Math.abs(target - this.fogScale) < 1e-3) this.fogScale = target;
+    return this.fogScale;
+  }
+
   private writeFrameUniforms(F: FrameUniforms, buffer: GPUBuffer, v: ViewParams, width: number, height: number, env: Environment, de: DerivedEnvironment,
     preExposure: number, ev: number, flags: number, debugView: number) {
     const S = this.settings;
@@ -1418,7 +1484,9 @@ export class Renderer {
     const fog = envState.fog;
     const hazeDensity = fog.hazeVisibilityKm > 0 ? 3.912 / (fog.hazeVisibilityKm * 1000) : 0;
     F.vec4(FO.fog0, fog.density, fog.height, fog.falloff, hazeDensity);
-    F.vec4(FO.fog1, fog.anisotropy, fog.startDistance, fog.maxOpacity, 0);
+    // fog1.w: in-scatter scale from the camera's sky visibility (indoors the daylight-lit fog
+    // of the outdoor volume is not there; probe-volume estimate, 1 outdoors / without probes).
+    F.vec4(FO.fog1, fog.anisotropy, fog.startDistance, fog.maxOpacity, this.fogIndoorScale(v.position));
     const fa = parseColor(fog.albedo, [1, 1, 1, 1]);
     F.vec4(FO.fogColor, fa[0], fa[1], fa[2], fog.sunScatter);
     F.vec4(FO.shadow0, S.shadows.normalOffset, S.shadows.constBias, S.shadows.softness, S.shadows.distance);
@@ -1535,7 +1603,7 @@ export class Renderer {
           // coarser casters further out where a shadow texel covers decimetres.
           const l = this.selectLod(r, eye, k2, SHADOW_MIN_LOD[ci]);
           const prims = l.mesh.primitives;
-          for (let k = 0; k < prims.length; k++) list.add(prims[k], l.materials[k], r.slot);
+          for (let k = 0; k < prims.length; k++) if (!l.materials[k].blended) list.add(prims[k], l.materials[k], r.slot);
         }
         offset = list.finalize(this.visible, offset);
         shadowDraws += list.draws.length;
@@ -1552,7 +1620,7 @@ export class Renderer {
         if (!aabbVisible(sp, r.worldMin, r.worldMax)) continue;
         const l = this.selectLod(r, eye, k2, 0);
         const prims = l.mesh.primitives;
-        for (let k = 0; k < prims.length; k++) list.add(prims[k], l.materials[k], r.slot);
+        for (let k = 0; k < prims.length; k++) if (!l.materials[k].blended) list.add(prims[k], l.materials[k], r.slot);
       }
       offset = list.finalize(this.visible, offset);
       shadowDraws += list.draws.length;
@@ -1664,10 +1732,10 @@ export class Renderer {
     if (overdraw) {
       drawList(() => true, (dr) => this.overdrawPipeline(dr.doubleSided));
     } else if (this.maskedMode === 'direct') {
-      drawList(() => true, (dr) => this.stdPipeline(dr.masked, dr.doubleSided, dr.material, msaa, dr.fade));
+      drawList((d) => !d.blended, (dr) => this.stdPipeline(dr.masked, dr.doubleSided, dr.material, msaa, dr.fade));
     } else {
       // Opaque first (fills depth), then masked prepass, then masked colour at equal depth.
-      drawList((d) => !d.masked, (dr) => this.stdPipeline(false, dr.doubleSided, dr.material, msaa, dr.fade));
+      drawList((d) => !d.masked && !d.blended, (dr) => this.stdPipeline(false, dr.doubleSided, dr.material, msaa, dr.fade));
       // A prepass without its colour pass would punch holes: draw only when both are compiled.
       drawList((d) => d.masked, (dr) => this.maskedPipeline(false, dr.doubleSided, dr.material, msaa) ? this.maskedPipeline(true, dr.doubleSided, dr.material, msaa, dr.fade) : null);
       const clutterPass = (prepassStage: boolean) => {
@@ -1694,6 +1762,8 @@ export class Renderer {
     if (!overdraw) {
       pass.setPipeline(this.skyPipeline(msaa));
       pass.draw(3);
+      // Glass over everything opaque (and the sky behind it).
+      drawList((d) => d.blended, (dr) => this.glassPipeline(dr.doubleSided, dr.material, msaa));
     }
     const P = this.particles;
     if (particles && !overdraw && P.alphaCount + P.addCount > 0) {

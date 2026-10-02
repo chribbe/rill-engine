@@ -22,7 +22,7 @@ import sys
 import bmesh
 import bpy
 import numpy as np
-from mathutils import Vector, noise
+from mathutils import Matrix, Vector, noise
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import PUBLIC, MeshBuilder, export_glb, reset_scene, smoothstep, to_engine, yaw_quat  # noqa: E402
@@ -301,6 +301,9 @@ PLAZAS = [
     [(-60, -6), (-38, 2), (-50, 34), (-66, 30)],                                            # passage under the platform end
     [(-81, 43), (-53, 43), (-45, 46), (-51, 62), (-86, 50)],                                 # between the centre buildings
     [(-44, 103), (-10, 113), (-17, 137), (-32, 133), (-58, 122), (-50, 98)],                 # courtyard of Hässelby torg 14-22
+    # the shop street from the station entrance north to Hässelby torg, and the square itself
+    # (Resenärer stands on it); buildings are carved out of every surface anyway
+    [(-70, -34), (-44, -34), (-46, -27), (-81, 68), (-60, 80), (-58, 92), (-100, 99), (-108, 80), (-98, 62), (-90, 40), (-84, 20)],
 ]
 
 g = HS.Grid(X0, Y0, X1, Y1, 0.3)
@@ -450,6 +453,28 @@ def wall_seg(b, a, c, z0, z1, mat, outward=True):
         b.quad((c[0], c[1], z0), (a[0], a[1], z0), (a[0], a[1], z1), (c[0], c[1], z1), mat)
 
 
+def face_with_holes(b, outer, holes, z, mat, up=True):
+    """Horizontal face with holes (triangulated in plan)."""
+    from mathutils.geometry import tessellate_polygon
+    loops = [[Vector((p[0], p[1], 0.0)) for p in outer]] + [[Vector((p[0], p[1], 0.0)) for p in h] for h in holes]
+    flat = [p for lp in loops for p in lp]
+    for (i, j, k) in tessellate_polygon(loops):
+        tri = [flat[i], flat[j], flat[k]]
+        n = (tri[1] - tri[0]).cross(tri[2] - tri[0])
+        if abs(n.z) < 1e-10:
+            continue
+        if (n.z > 0) != up:
+            tri = tri[::-1]
+        b.face([(q.x, q.y, z) for q in tri], mat)
+
+
+def split_loops(loops):
+    """[(outer, [holes])]: contour loops are CCW outers / CW holes."""
+    outers = [l_ for l_ in loops if HL.area2(l_) > 0]
+    holes = [l_ for l_ in loops if HL.area2(l_) < 0]
+    return [(o_, [h for h in holes if HL.poly_contains(o_, *h[0])]) for o_ in outers]
+
+
 def emit_region(b, f, z, mat, flip=False):
     for poly in HS.march(gv, f)[0]:
         q = clean(poly)
@@ -474,9 +499,70 @@ PLAT_EDGE = 1.6
 A_W, A_E = along(-52.0, -5.0), 84.0
 A_GRID = GX * D_TRK.x + GY * D_TRK.y
 d_pl = np.maximum.reduce([d_strip, PLAT_EDGE - d_cl[0], PLAT_EDGE - d_cl[1], A_W - A_GRID, A_GRID - A_E])
+# ---- station layout (before the deck and platform: the stairwell cuts through both).
+# The ticket hall fills the south wing of the centre building (OSM 259713115) under the
+# platform's west end, its glazed front facing the shop street (OSM entrance at (-54, -5));
+# a switchback stair rises through the deck and platform into a stair house on the platform.
+CENTRE_ID = 259713115
+_cr = next(bd for bd in L['buildings'] if bd['id'] == CENTRE_ID)['ring']
+_near = lambda q: Vector(min(_cr, key=lambda p: math.dist(p, q)))
+WO, WN = _near((-46, -27)), _near((-81, 68))
+ES, EN = _near((-28, -21)), _near((-42, 10))
+WA = (WN - WO).normalized()                 # along the wing, northwards (west face direction)
+WB = Vector((WA.y, -WA.x))                  # across the wing, eastwards into the building
+HP = lambda s_, b_: WO + WA * s_ + WB * b_   # hall frame (s along, b across) -> plan
+HS0, HS1 = 13.0, 35.0
+
+
+def east_b(s_):
+    """Across-distance of the wing's east face at s."""
+    p0, e = WO + WA * s_, EN - ES
+    det = -WB.x * e.y + e.x * WB.y
+    r = ES - p0
+    return (-r.x * e.y + e.x * r.y) / det
+
+
+HALL_RING = [tuple(HP(HS0, 0.0)), tuple(HP(HS0, east_b(HS0))), tuple(HP(HS1, east_b(HS1))), tuple(HP(HS1, 0.0))]
+if HL.area2(HALL_RING) < 0:
+    HALL_RING = HALL_RING[::-1]
+Z_HALL = max(H(x, y) for (x, y) in HALL_RING) + 0.12
+CEIL_H = 3.4
+Z_ROOF = Z_HALL + 4.5
+# switchback: flight A rises east from the hall, flight B returns west to the platform
+FW, CWT, WT, TREAD = 2.0, 0.25, 0.2, 0.29
+B_FOOT = 6.5
+NR = int(round((PLAT_Z - Z_HALL) / 0.17))
+RR = (PLAT_Z - Z_HALL) / NR
+NA = (NR + 1) // 2
+NB = NR - NA
+Z_LAND = Z_HALL + NA * RR
+B_LAND0 = B_FOOT + (NA - 1) * TREAD
+B_LAND1 = B_LAND0 + 1.6
+B_TOP = B_LAND0 - (NB - 1) * TREAD
+_mids, _spans = [], []
+for _b in np.arange(B_FOOT - 1.0, B_LAND1 + 1.0, 0.5):
+    _ss = [s_ for s_ in np.arange(0.0, 50.0, 0.1) if HS.sample(gv, d_pl, *HP(s_, _b)) < -0.2]
+    if _ss:
+        _mids.append((min(_ss) + max(_ss)) / 2)
+        _spans.append((min(_ss), max(_ss)))
+S_MID = sum(_mids) / len(_mids)
+SA0 = S_MID - (2 * FW + CWT) / 2
+SA1 = SA0 + FW
+SB0 = SA1 + CWT
+SB1 = SB0 + FW
+CORE = [tuple(HP(SA0 - WT, B_FOOT - WT)), tuple(HP(SB1 + WT, B_FOOT - WT)), tuple(HP(SB1 + WT, B_LAND1 + WT)), tuple(HP(SA0 - WT, B_LAND1 + WT))]
+if HL.area2(CORE) < 0:
+    CORE = CORE[::-1]
+_pass = min(min(SA0 - WT - lo, hi - SB1 - WT) for (lo, hi) in _spans)
+print(f'  station: floor {Z_HALL:.2f}, {NR} risers of {RR * 1000:.0f} mm, platform passages >= {_pass:.2f} m')
+d_open = HS.polygon_field(gv, [CORE])
+D_PL_FULL = d_pl.copy()
+d_pl = np.maximum(d_pl, -d_open)                                    # stairwell through the platform
+
 DECK_HALF = 2.3
-d_deck = np.minimum(np.minimum(d_cl[0], d_cl[1]) - DECK_HALF, d_pl - 0.1)
+d_deck = np.minimum(np.minimum(d_cl[0], d_cl[1]) - DECK_HALF, D_PL_FULL - 0.1)
 d_deck = np.maximum(d_deck, S_END + 0.5)                           # deck ends rest on the abutments
+d_deck = np.maximum(d_deck, -d_open)                                # ... and the stairwell
 s_end = lambda x, y: past_end(x, y)
 
 # ---- deck slab, edge beams, parapet upstands (simplified outline loops + inset ribbons)
@@ -516,12 +602,12 @@ def edge_runs(flags):
 
 b = MeshBuilder('viaduct_deck')
 RAIL_RUNS = []
-for loop in deck_loops:
+for loop, holes in split_loops(deck_loops):
     n_ = len(loop)
     ends = [on_end(loop[i]) and on_end(loop[(i + 1) % n_]) for i in range(n_)]
     beam, upst, mid = HS.offset_loop(loop, 0.45), HS.offset_loop(loop, 0.22), HS.offset_loop(loop, 0.11)
-    b.face([(x, y, DECK_Z) for (x, y) in loop], 'concrete_viaduct')
-    b.face([(x, y, SOFFIT_Z + 0.35) for (x, y) in reversed(beam)], 'concrete_viaduct')
+    face_with_holes(b, loop, holes, DECK_Z, 'concrete_viaduct')
+    face_with_holes(b, beam, holes, SOFFIT_Z + 0.35, 'concrete_viaduct', up=False)
     for i in range(n_):
         j = (i + 1) % n_
         ribbon(b, loop, beam, i, SOFFIT_Z, 'concrete_viaduct', up=False)
@@ -633,6 +719,19 @@ for i in range(nb + 1):
         cols.append(((pn + ps) / 2, (tn + ts).normalized()))
     if any(HS.sample(g, d_road, c.x, c.y) < 1.2 for c, _t in cols):
         continue
+    _core_pad = HS.sample(gv, d_open, ((pn + ps) / 2).x, ((pn + ps) / 2).y)
+    def _in_hall_way(c):
+        p_ = c - WO
+        s_, b_ = p_.dot(WA), p_.dot(WB)
+        if not (HS0 - 1.0 < s_ < HS1 + 1.0 and -3.0 < b_ < 18.0):
+            return False
+        return abs(b_ - 3.7) < 2.0 or b_ < 1.0 or (SA0 - 1.5 < s_ < SB1 + 1.5 and b_ < B_LAND1 + 1.5)
+    cols = [(c, t) for (c, t) in cols if not _in_hall_way(c)] if any(_in_hall_way(c) for c, _t in cols) else cols
+    if len(cols) < 2:
+        continue
+    if any(HS.sample(gv, d_open, c.x, c.y) < 1.0 for c, _t in cols) or \
+            min(HS.sample(gv, d_open, *(ps + (pn - ps) * f_)) for f_ in np.linspace(0, 1, 30)) < 1.2:
+        continue                                                     # keep the stair core clear
     BENTS.append(cols)
     joined = A_W - 2.0 < a < A_E + 2.0
     v = (pn - ps).normalized()
@@ -699,10 +798,10 @@ for ti, track in enumerate(all_tracks):
 
 # ---- island platform: slab with an overhanging edge, light edge band
 b = MeshBuilder('platform')
-for loop in HS.contour_loops(gv, d_pl):
+for loop, holes in split_loops(HS.contour_loops(gv, d_pl)):
     n_ = len(loop)
     band, over = HS.offset_loop(loop, 0.5), HS.offset_loop(loop, 0.35)
-    b.face([(x, y, PLAT_Z) for (x, y) in band], 'paving_slabs')
+    face_with_holes(b, band, holes, PLAT_Z, 'paving_slabs')
     for i in range(n_):
         j = (i + 1) % n_
         ribbon(b, loop, band, i, PLAT_Z, 'platform_edge')
@@ -715,7 +814,7 @@ add_mesh_object('platform', 'Island platform', 'platform', 'structure', lightmap
 # ---- canopy: flat roof on a central column row, dark slatted fascia, fluorescent fittings
 CANOPY_Z = PLAT_Z + 3.0
 CAN_A0, CAN_A1 = A_W + 4.0, A_W + 64.0
-d_can = np.maximum.reduce([d_pl + 0.25, CAN_A0 - A_GRID, A_GRID - CAN_A1])
+d_can = np.maximum.reduce([D_PL_FULL + 0.25, CAN_A0 - A_GRID, A_GRID - CAN_A1])
 b = MeshBuilder('platform_canopy')
 for loop in HS.contour_loops(gv, d_can):
     b.face([(x, y, CANOPY_Z + 0.45) for (x, y) in loop], 'roof_felt')
@@ -749,124 +848,275 @@ add_mesh_object('platform_canopy_lights', 'Canopy light fittings', 'platform_can
 print(f'  canopy: {len(CANOPY_COLS)} columns, {len(CANOPY_LIGHTS)} fittings')
 
 
-# ---- station hall under the platform's west end: glazed front towards the forecourt
-# (wood/steel framed doors, brown tiles), entrance canopy, name band, T sign.
-SOUTH = Vector((D_TRK.y, -D_TRK.x))
-HALL_A0, HALL_A1 = -37.0, -15.0
-near_rings = [bd['ring'] for bd in L['buildings']
-              if any(-60 < x < 0 and -30 < y < 30 for (x, y) in bd['ring'])]
-d_hall = np.maximum.reduce([d_strip + 1.0, HALL_A0 - A_GRID, A_GRID - HALL_A1])   # columns stand just outside the glass
-d_hall = HS.subtract(d_hall, HS.polygon_field(gv, near_rings) - 0.02)
-HALL_TOP = SOFFIT_Z + 0.35
-FRONT_H = 2.95
+# ---- Hässelby gård station as in 1993: ticket hall in the centre building's south wing
+# (glazed front to the shop street), barrier line with the ticket booth and tripod
+# turnstiles, a switchback stair to a stair house on the platform.
+print('Building the station...')
+STATION = {}
+STATION_LIGHTS = []      # indoor (always on)
+ENTRANCE_LIGHTS = []
+zb_h = min(H(x, y) for (x, y) in HALL_RING) - 0.25
+
+
+def hwall(b, s0, b0, s1, b1, z0, z1, ops, mat, depth=0.2, **kw):
+    """arch.wall between two hall-frame points (outward = right of the travel direction)."""
+    o = HP(s0, b0)
+    d = HP(s1, b1) - o
+    return arch.wall(b, (o.x, o.y, z0), (d.x, d.y), d.length, z1 - z0, ops, depth, mat, **kw)
+
+
+def hbox(b, s0, s1, b0, b1, z0, z1, mat, top=True):
+    c = HP((s0 + s1) / 2, (b0 + b1) / 2)
+    box_oriented(b, c, WA, (s1 - s0) / 2, (b1 - b0) / 2, z0, z1, mat, top=top)
+
+
+def hquad(b, pts, mat, outward):
+    arch.quad_facing(b, [(*HP(s_, b_), z) for (s_, b_, z) in pts], outward, mat)
+
+
+UP3 = (0, 0, 1)
+WA3, WB3 = (WA.x, WA.y, 0), (WB.x, WB.y, 0)
+nWA3, nWB3 = (-WA.x, -WA.y, 0), (-WB.x, -WB.y, 0)
+ZH = Z_HALL - zb_h                      # floor height above the wall base
+FRONT_W = HS1 - HS0
+S_DOOR = 23.4                           # OSM entrance, on the west face
+
+# hall shell: west front (doorways + steel-framed glazing), east wall, roof
 b = MeshBuilder('station_hall')
-STATION = {'front': None}
-for loop in HS.contour_loops(gv, d_hall, tol=0.05):
-    zg = min(H(x, y) for (x, y) in loop)
-    zb = zg - 0.25
-    z0 = max(H(x, y) for (x, y) in loop) + 0.12 - zb     # floor level above the wall base
-    for i in range(len(loop)):
-        a, c = loop[i], loop[(i + 1) % len(loop)]
-        t = Vector((c[0] - a[0], c[1] - a[1]))
-        ln = t.length
-        if ln < 0.3:
-            continue
-        t /= ln
-        mid = ((a[0] + c[0]) / 2, (a[1] + c[1]) / 2)
-        outward = Vector((t.y, -t.x))
-        # walls against the neighbouring building are internal
-        if any(HL.poly_contains(r, mid[0] + outward.x * 0.3, mid[1] + outward.y * 0.3) for r in near_rings):
-            continue
-        ops = []
-        front = outward.dot(SOUTH) > 0.75
-        if front:
-            # glazed front: doors in the middle, fixed glazing either side, transom above
-            nb_ = max(3, int(round((ln - 1.2) / 2.0)))
-            w_ = (ln - 1.2) / nb_
-            for k in range(nb_):
-                u0 = 0.6 + k * w_
-                kind = 'door' if abs(k - (nb_ - 1) / 2) < 1.6 else 'shop'
-                if kind == 'door':
-                    ops.append((u0 + 0.06, z0, w_ - 0.12, 2.25, 'door', 'hall_interior', z0))
-                    ops.append((u0 + 0.06, z0 + 2.33, w_ - 0.12, FRONT_H - 2.45, 'shop', 'hall_interior', z0))
-                else:
-                    ops.append((u0 + 0.06, z0 + 0.25, w_ - 0.12, FRONT_H - 0.37, 'shop', 'hall_interior', z0))
-            STATION['front'] = (Vector(a), t, ln, zb, z0)
-        elif ln > 6:
-            ops.append((ln / 2 - 1.1, z0, 2.2, 2.3, 'door', 'hall_interior', z0))
-        arch.wall(b, (a[0], a[1], zb), t, ln, HALL_TOP - zb, ops, 0.12, 'tiles_brown',
-                  plinth=z0 + 0.0 if front else z0 + 0.25, plinth_mat='granite_curb',
-                  bands=[(z0 + FRONT_H, z0 + FRONT_H + 0.08, 'fascia_dark')] if front else (),
-                  frame='metal_galvanized')
+front_ops = []
+for (s_a, s_b_, kind) in [(15.6, 17.6, 'shop'), (17.8, 19.8, 'shop'), (20.0, 22.0, 'shop'), (S_DOOR - 1.0, S_DOOR + 1.0, 'void'),
+                          (S_DOOR + 1.2, S_DOOR + 3.2, 'void'), (26.8, 28.8, 'shop'), (29.0, 31.0, 'shop'), (31.2, 33.2, 'shop')]:
+    if s_a < 22.4 and kind == 'shop' and s_b_ > S_DOOR - 1.0:
+        continue
+    u0 = HS1 - s_b_                     # the front runs from HS1 towards HS0
+    if kind == 'void':
+        front_ops.append((u0, ZH, s_b_ - s_a, 2.35, 'void'))
+        front_ops.append((u0, ZH + 2.45, s_b_ - s_a, 0.5, 'shop', 'glass_clear'))
+    else:
+        front_ops.append((u0, ZH + 0.35, s_b_ - s_a, 2.6, 'shop', 'glass_clear'))
+hwall(b, HS1, 0.0, HS0, 0.0, zb_h, Z_ROOF, front_ops, 'tiles_brown', depth=0.25, plinth=ZH, plinth_mat='granite_curb',
+      bands=[(ZH + 3.05, ZH + 3.2, 'fascia_dark')], frame='metal_galvanized')
+hwall(b, HS0, east_b(HS0), HS1, east_b(HS1), zb_h, Z_ROOF, [(FRONT_W / 2 - 0.5, ZH, 1.0, 2.1, 'door', 'wood_door')], 'brick_brown',
+      plinth=ZH + 0.3)
+face_with_holes(b, HALL_RING, [CORE], Z_ROOF, 'roof_felt')
+arch.roof_edge(b, HALL_RING, Z_ROOF + 0.02, 0.3, 'metal_dark')
 res = build(b, TPM_ARCH)
 add_mesh_object('station_hall', 'Hässelby gård station hall', 'station_hall', 'building', lightmap=res)
 
-# Entrance canopy along the front, name band, T sign on the nearest bent column.
-if STATION['front']:
-    a, t, ln, zb, z0 = STATION['front']
-    out = Vector((t.y, -t.x))
-    b = MeshBuilder('station_canopy')
-    zc = zb + z0 + FRONT_H + 0.35
-    dep = 2.4
-    P = lambda u_, o_, z: (a.x + t.x * u_ + out.x * o_, a.y + t.y * u_ + out.y * o_, z)
-    u0_, u1_ = -0.6, ln + 0.6
-    b.quad(P(u0_, 0, zc + 0.3), P(u0_, dep, zc + 0.3), P(u1_, dep, zc + 0.3), P(u1_, 0, zc + 0.3), 'concrete_cast')
-    b.quad(P(u0_, dep, zc), P(u0_, 0, zc), P(u1_, 0, zc), P(u1_, dep, zc), 'ceiling_panel')
-    arch.quad_facing(b, [P(u0_, dep, zc - 0.05), P(u1_, dep, zc - 0.05), P(u1_, dep, zc + 0.3), P(u0_, dep, zc + 0.3)], (out.x, out.y, 0), 'concrete_cast')
-    for uu in (u0_, u1_):
-        arch.quad_facing(b, [P(uu, 0, zc - 0.05), P(uu, dep, zc - 0.05), P(uu, dep, zc + 0.3), P(uu, 0, zc + 0.3)], (t.x * (1 if uu > 0 else -1), t.y * (1 if uu > 0 else -1), 0), 'concrete_cast')
-    res = build(b, TPM_ARCH)
-    add_mesh_object('station_canopy', 'Station entrance canopy', 'station_canopy', 'structure', lightmap=res)
-    lamp_b = MeshBuilder('station_canopy_lights')
-    STATION_LIGHTS = []
-    for uu in np.arange(1.2, ln, 2.4):
-        c = Vector(P(uu, dep * 0.55, 0)[:2])
-        box_oriented(lamp_b, c, t, 0.6, 0.07, zc - 0.07, zc - 0.005, 'lamp_fluorescent')
-        STATION_LIGHTS.append((c.x, c.y, zc - 0.1))
-    # name band over the doors (lettering comes from a sign object)
-    band_u0, band_u1 = ln / 2 - 4.2, ln / 2 + 4.2
-    bz0, bz1 = zb + z0 + FRONT_H - 0.42, zb + z0 + FRONT_H - 0.04
-    arch.quad_facing(lamp_b, [P(band_u0, 0.06, bz0), P(band_u1, 0.06, bz0), P(band_u1, 0.06, bz1), P(band_u0, 0.06, bz1)], (out.x, out.y, 0), 'sign_blue_band')
-    STATION['band'] = (Vector(P((band_u0 + band_u1) / 2, 0.07, 0)[:2]), t, out, (bz0 + bz1) / 2, band_u1 - band_u0, bz1 - bz0)
-    bc_ = P((band_u0 + band_u1) / 2, 0.075, (bz0 + bz1) / 2)
-    add_sign('sign_station_band', 'Station name band', bc_, out, 'Hässelby gård', (band_u1 - band_u0, bz1 - bz0),
-             font='Inter', weight=700, color='#ffffff', background='#0b3f7e', backlit=1, textHeight=0.68, letterSpacing=0.12)
-    # T sign: the column nearest the front's east end gets a bracket and a backlit disc
-    east = Vector(P(ln, 0, 0)[:2])
-    cols = [(c, tt) for bent in BENTS for (c, tt) in bent]
-    col, ct = min(cols, key=lambda ct_: (ct_[0] - east).length) if cols else (east + out * 3, t)
-    if (col - east).length < 12:
-        side = 1                                             # disc east of the column, over the canopy
-        disc_c = col + t * side * (0.8 + 0.95)
-        zt = 4.55
-        lamp_b.tube((col.x + t.x * side * 0.8, col.y + t.y * side * 0.8, zt + 0.55), (disc_c.x, disc_c.y, zt + 0.55), 0.04, 0.04, 'metal_railing_dark', sides=6)
-        lamp_b.tube((disc_c.x, disc_c.y, zt + 0.55), (disc_c.x, disc_c.y, zt + 0.45), 0.03, 0.03, 'metal_railing_dark', sides=6)
-        # disc: 0.9 m opal face both sides, thin dark rim; faces the forecourt
-        R_ = 0.5
-        nseg = 24
-        for sgn in (1, -1):
-            fn = out * sgn
-            ring_ = []
-            uvs_ = []
-            for k in range(nseg):
-                ang = 2 * math.pi * k / nseg
-                lx, lz = math.cos(ang) * R_, math.sin(ang) * R_
-                p = disc_c + fn * 0.09 + t * lx * sgn
-                ring_.append((p.x, p.y, zt + lz))
-                uvs_.append((0.45 + lx * 0.9, 0.45 + lz * 0.9))
-            lamp_b.face(ring_, 'sign_tbana', uvs=uvs_)
-        for k in range(nseg):
-            a0, a1 = 2 * math.pi * k / nseg, 2 * math.pi * (k + 1) / nseg
-            q = [disc_c + out * 0.09 + t * math.cos(a0) * -R_, disc_c + out * 0.09 + t * math.cos(a1) * -R_,
-                 disc_c - out * 0.09 + t * math.cos(a1) * -R_, disc_c - out * 0.09 + t * math.cos(a0) * -R_]
-            zz = [math.sin(a0) * R_, math.sin(a1) * R_, math.sin(a1) * R_, math.sin(a0) * R_]
-            mid_ = disc_c + t * math.cos((a0 + a1) / 2) * -R_
-            arch.quad_facing(lamp_b, [(q[i].x, q[i].y, zt + zz[i]) for i in range(4)],
-                             (mid_.x - disc_c.x, mid_.y - disc_c.y, math.sin((a0 + a1) / 2)), 'metal_railing_dark')
-        STATION['tsign'] = (disc_c.x, disc_c.y, zt)
-    build(lamp_b, None)
-    add_mesh_object('station_canopy_lights', 'Station lights and signs', 'station_canopy_lights', 'prop', collision=False, cast=False)
-    print(f"  station hall front {ln:.1f} m at {tuple(round(v, 1) for v in a)}, T sign at {tuple(round(v, 1) for v in STATION.get('tsign', ()))}")
+# interior: terrazzo floor, tiled walls (plaster above 2.5 m), ceiling with fluorescent strips
+b = MeshBuilder('station_interior')
+T_IN = 0.25
+eb0, eb1 = east_b(HS0) - T_IN, east_b(HS1) - T_IN
+inner = [tuple(HP(HS0 + T_IN, T_IN)), tuple(HP(HS0 + T_IN, eb0)), tuple(HP(HS1 - T_IN, eb1)), tuple(HP(HS1 - T_IN, T_IN))]
+if HL.area2(inner) < 0:
+    inner = inner[::-1]
+face_with_holes(b, inner, [], Z_HALL, 'terrazzo')
+face_with_holes(b, inner, [CORE], Z_HALL + CEIL_H, 'ceiling_panel', up=False)
+in_ops = [(s_a - (HS0 + T_IN), op[1], op[2], op[3], 'void') for op in front_ops for s_a in [HS1 - op[0] - op[2]]]
+in_ops = [(u0, z0 - ZH, w, h_, k) for (u0, z0, w, h_, k) in in_ops]
+wkw = dict(plinth=2.5, plinth_mat='tiles_brown')
+hwall(b, HS0 + T_IN, T_IN, HS1 - T_IN, T_IN, Z_HALL, Z_HALL + CEIL_H, in_ops, 'plaster_white', depth=0.0, **wkw)
+hwall(b, HS1 - T_IN, eb1, HS0 + T_IN, eb0, Z_HALL, Z_HALL + CEIL_H, [(FRONT_W / 2 - 0.5 - T_IN, 0.0, 1.0, 2.1, 'void')], 'plaster_white', depth=0.0, **wkw)
+hwall(b, HS0 + T_IN, eb0, HS0 + T_IN, T_IN, Z_HALL, Z_HALL + CEIL_H, [], 'plaster_white', depth=0.0, **wkw)
+hwall(b, HS1 - T_IN, T_IN, HS1 - T_IN, eb1, Z_HALL, Z_HALL + CEIL_H, [], 'plaster_white', depth=0.0, **wkw)
+lamps_in = MeshBuilder('station_interior_lights')
+for s_ in np.arange(HS0 + 1.8, HS1 - 1.0, 3.0):
+    for b_ in np.arange(1.5, min(eb0, eb1) - 0.5, 3.2):
+        if (SA0 - WT - 0.6 < s_ < SB1 + WT + 0.6) and (B_FOOT - WT - 0.6 < b_ < B_LAND1 + WT + 0.6):
+            continue
+        c = HP(s_, b_)
+        box_oriented(lamps_in, c, WA, 0.6, 0.09, Z_HALL + CEIL_H - 0.06, Z_HALL + CEIL_H - 0.005, 'lamp_fluorescent_indoor')
+        if int(round((s_ - HS0) / 3.0)) % 2 == 0 and int(round(b_ / 3.2)) % 2 == 0:
+            STATION_LIGHTS.append((c.x, c.y, Z_HALL + CEIL_H - 0.15))
+res = build(b, TPM_ARCH)
+add_mesh_object('station_interior', 'Station hall interior', 'station_interior', 'building', lightmap=res)
+
+# stair core: walls (tiles inside, both faces), flights, landing, handrails
+b = MeshBuilder('station_stairs')
+ZT = PLAT_Z + 2.8                        # stair house wall top
+DOOR_H = 2.35
+for (s0, s1) in ((SA0 - WT, SA0), (SB1, SB1 + WT)):              # outer long walls
+    hbox(b, s0, s1, B_FOOT - WT, B_LAND1 + WT, Z_HALL, PLAT_Z, 'tiles_brown')
+hbox(b, SA0 - WT, SB1 + WT, B_LAND1, B_LAND1 + WT, Z_HALL, PLAT_Z, 'tiles_brown')   # east wall
+hbox(b, SA1, SB0, B_FOOT, B_LAND0, Z_HALL, PLAT_Z + 1.0, 'tiles_brown')            # central wall (parapet on top)
+# west wall: doorway into flight A at the bottom, exit from flight B at platform level
+hbox(b, SA0, SA1, B_FOOT - WT, B_FOOT, Z_HALL + DOOR_H, PLAT_Z, 'tiles_brown')
+hbox(b, SA1, SB0, B_FOOT - WT, B_FOOT, Z_HALL, PLAT_Z, 'tiles_brown')
+hbox(b, SB0, SB1, B_FOOT - WT, B_FOOT, Z_HALL, PLAT_Z, 'tiles_brown')
+for k in range(NA):                                                  # flight A (+b)
+    bb0 = B_FOOT + k * TREAD
+    bb1 = B_LAND0 if k == NA - 1 else bb0 + TREAD
+    z1 = Z_HALL + (k + 1) * RR
+    if k < NA - 1:
+        hquad(b, [(SA0, bb0, z1), (SA1, bb0, z1), (SA1, bb1, z1), (SA0, bb1, z1)], 'terrazzo', UP3)
+    hquad(b, [(SA0, bb0, z1 - RR), (SA1, bb0, z1 - RR), (SA1, bb0, z1), (SA0, bb0, z1)], 'terrazzo', nWB3)
+hquad(b, [(SA0, B_LAND0, Z_LAND), (SB1, B_LAND0, Z_LAND), (SB1, B_LAND1, Z_LAND), (SA0, B_LAND1, Z_LAND)], 'terrazzo', UP3)
+hquad(b, [(SB0, B_LAND0, Z_LAND - 0.25), (SB1, B_LAND0, Z_LAND - 0.25), (SB1, B_LAND1, Z_LAND - 0.25), (SB0, B_LAND1, Z_LAND - 0.25)], 'concrete_cast', (0, 0, -1))
+for j in range(NB):                                                  # flight B (-b)
+    bb1 = B_LAND0 - j * TREAD
+    bb0 = bb1 - TREAD
+    z1 = Z_LAND + (j + 1) * RR
+    hquad(b, [(SB0, bb1, z1 - RR), (SB1, bb1, z1 - RR), (SB1, bb1, z1), (SB0, bb1, z1)], 'terrazzo', WB3)
+    if j < NB - 1:
+        hquad(b, [(SB0, bb0, z1), (SB1, bb0, z1), (SB1, bb1, z1), (SB0, bb1, z1)], 'terrazzo', UP3)
+    # sloped soffit strip under each tread (seen from flight A over the parapet)
+    hquad(b, [(SB0, bb0, z1 - RR - 0.2), (SB1, bb0, z1 - RR - 0.2), (SB1, bb1, z1 - 2 * RR - 0.2), (SB0, bb1, z1 - 2 * RR - 0.2)], 'concrete_cast', (0, 0, -1))
+hquad(b, [(SB0, B_FOOT - WT, PLAT_Z), (SB1, B_FOOT - WT, PLAT_Z), (SB1, B_TOP, PLAT_Z), (SB0, B_TOP, PLAT_Z)], 'terrazzo', UP3)
+# handrails along the outer walls and both sides of the central wall
+for (s_r, b0_, z0_, b1_, z1_) in [(SA0 + 0.06, B_FOOT + 0.3, Z_HALL + 0.95, B_LAND0, Z_LAND + 0.9),
+                                   (SA1 - 0.06, B_FOOT + 0.3, Z_HALL + 0.95, B_LAND0, Z_LAND + 0.9),
+                                   (SB0 + 0.06, B_LAND0, Z_LAND + 0.9, B_TOP + 0.3, PLAT_Z + 0.9),
+                                   (SB1 - 0.06, B_LAND0, Z_LAND + 0.9, B_TOP + 0.3, PLAT_Z + 0.9)]:
+    p0, p1 = HP(s_r, b0_), HP(s_r, b1_)
+    b.tube((p0.x, p0.y, z0_), (p1.x, p1.y, z1_), 0.025, 0.025, 'steel_brushed', sides=6)
+res = build(b, TPM_ARCH)
+add_mesh_object('station_stairs', 'Stairs to the platform', 'station_stairs', 'structure', lightmap=res)
+for (s_, b_, z) in [((SA0 + SA1) / 2, B_FOOT + 1.5, Z_HALL + 2.6), ((SA0 + SB1) / 2, B_LAND0 + 0.8, Z_LAND + 2.6),
+                    ((SB0 + SB1) / 2, B_FOOT + 2.0, PLAT_Z + 2.55)]:
+    c = HP(s_, b_)
+    box_oriented(lamps_in, c, WB, 0.5, 0.08, z - 0.05, z, 'lamp_fluorescent_indoor')
+    STATION_LIGHTS.append((c.x, c.y, z - 0.1))
+
+# stair house on the platform: tiled base, steel-framed glazing, flat roof; exit to the west
+b = MeshBuilder('station_stairhouse')
+s_lo, s_hi, b_lo, b_hi = SA0 - WT, SB1 + WT, B_FOOT - WT, B_LAND1 + WT
+glaze = lambda ln: [(c - 0.55, 1.05, 1.1, 1.35, 'shop', 'glass_clear') for c in arch.bays(ln, 1.25, 0.4)]
+hwall(b, s_lo, b_hi, s_lo, b_lo, PLAT_Z, ZT, glaze(b_hi - b_lo), 'tiles_brown', depth=WT, frame='metal_railing_dark')   # south side
+hwall(b, s_hi, b_lo, s_hi, b_hi, PLAT_Z, ZT, glaze(b_hi - b_lo), 'tiles_brown', depth=WT, frame='metal_railing_dark')   # north side
+hwall(b, s_lo, b_lo, s_hi, b_lo, PLAT_Z, ZT, [(SB0 - s_lo, 0.0, FW, DOOR_H, 'void')], 'tiles_brown', depth=WT)          # west, exit
+hwall(b, s_hi, b_hi, s_lo, b_hi, PLAT_Z, ZT, [], 'tiles_brown', depth=WT)                                                # east
+for (s0, s1, b0, b1) in [(s_lo, s_lo + WT, b_lo, b_hi), (s_hi - WT, s_hi, b_lo, b_hi), (s_lo, s_hi, b_hi - WT, b_hi)]:
+    hbox(b, s0, s1, b0, b1, ZT - 0.01, ZT, 'tiles_brown', top=False)
+roof = [tuple(HP(s_lo - 0.35, b_lo - 0.35)), tuple(HP(s_hi + 0.35, b_lo - 0.35)), tuple(HP(s_hi + 0.35, b_hi + 0.35)), tuple(HP(s_lo - 0.35, b_hi + 0.35))]
+if HL.area2(roof) < 0:
+    roof = roof[::-1]
+face_with_holes(b, roof, [], ZT + 0.22, 'roof_felt')
+face_with_holes(b, roof, [], ZT, 'ceiling_panel', up=False)
+for i in range(4):
+    a_, c_ = roof[i], roof[(i + 1) % 4]
+    wall_seg(b, a_, c_, ZT, ZT + 0.22, 'concrete_cast')
+res = build(b, TPM_ARCH)
+add_mesh_object('station_stairhouse', 'Stair house on the platform', 'station_stairhouse', 'building', lightmap=res)
+
+# ticket barrier: booth (spärrkur), four tripod turnstiles, balustrades; free zone by the doors
+B_BAR = 3.7
+S_BOOTH0, S_BOOTH1 = S_DOOR - 6.3, S_DOOR - 3.9
+b = MeshBuilder('station_barrier')
+hbox(b, S_BOOTH0, S_BOOTH1, B_BAR - 1.0, B_BAR + 1.0, Z_HALL, Z_HALL + 1.0, 'teak_panel')           # booth base
+for (sc, bc) in [(S_BOOTH0, B_BAR - 1.0), (S_BOOTH1, B_BAR - 1.0), (S_BOOTH0, B_BAR + 1.0), (S_BOOTH1, B_BAR + 1.0)]:
+    hbox(b, sc - 0.04, sc + 0.04, bc - 0.04, bc + 0.04, Z_HALL + 1.0, Z_HALL + 2.45, 'metal_railing_dark')   # corner posts
+hbox(b, S_BOOTH0 - 0.06, S_BOOTH1 + 0.06, B_BAR - 1.06, B_BAR + 1.06, Z_HALL + 2.45, Z_HALL + 2.6, 'teak_panel')  # roof cap
+for (pa, pb, outv) in [((S_BOOTH0, B_BAR - 1.0), (S_BOOTH1, B_BAR - 1.0), nWB3), ((S_BOOTH1, B_BAR + 1.0), (S_BOOTH0, B_BAR + 1.0), WB3),
+                       ((S_BOOTH0, B_BAR + 1.0), (S_BOOTH0, B_BAR - 1.0), nWA3), ((S_BOOTH1, B_BAR - 1.0), (S_BOOTH1, B_BAR + 1.0), WA3)]:
+    hquad(b, [(pa[0], pa[1], Z_HALL + 1.0), (pb[0], pb[1], Z_HALL + 1.0), (pb[0], pb[1], Z_HALL + 2.45), (pa[0], pa[1], Z_HALL + 2.45)], 'glass_clear', outv)
+hbox(b, S_BOOTH0 + 0.1, S_BOOTH1 - 0.1, B_BAR - 0.95, B_BAR - 0.55, Z_HALL + 1.0, Z_HALL + 1.05, 'teak_panel')    # counter
+CAB_W, LANE_W = 0.28, 0.62
+s_t = S_BOOTH1 + 0.05
+cabs = [s_t + CAB_W / 2 + k * (CAB_W + LANE_W) for k in range(5)]
+for sc in cabs:
+    hbox(b, sc - CAB_W / 2, sc + CAB_W / 2, B_BAR - 0.65, B_BAR + 0.65, Z_HALL, Z_HALL + 0.98, 'steel_brushed')
+S_RAIL0 = cabs[-1] + CAB_W / 2
+for (s0, s1) in [(HS0 + T_IN, S_BOOTH0), (S_RAIL0, HS1 - T_IN)]:     # balustrades to the walls
+    p0, p1 = HP(s0, B_BAR), HP(s1, B_BAR)
+    b.tube((p0.x, p0.y, Z_HALL + 1.0), (p1.x, p1.y, Z_HALL + 1.0), 0.03, 0.03, 'steel_brushed', sides=6)
+    for s_ in np.arange(s0, s1 + 0.01, 1.2):
+        q = HP(min(s_, s1), B_BAR)
+        b.tube((q.x, q.y, Z_HALL), (q.x, q.y, Z_HALL + 1.0), 0.025, 0.025, 'steel_brushed', sides=6)
+    hquad(b, [(s0, B_BAR, Z_HALL + 0.1), (s1, B_BAR, Z_HALL + 0.1), (s1, B_BAR, Z_HALL + 0.95), (s0, B_BAR, Z_HALL + 0.95)], 'railing_bars', nWB3)
+res = build(b, TPM_ARCH)
+add_mesh_object('station_barrier', 'Ticket booth and barrier', 'station_barrier', 'prop', lightmap=res)
+c = HP((S_BOOTH0 + S_BOOTH1) / 2, B_BAR)
+STATION_LIGHTS.append((c.x, c.y, Z_HALL + 2.3))
+add_sign('sign_booth', 'Ticket booth sign', (*HP((S_BOOTH0 + S_BOOTH1) / 2, B_BAR - 1.07), Z_HALL + 2.8), (-WB.x, -WB.y),
+         'Biljetter', (2.2, 0.32), font='Inter', weight=700, color='#ffffff', background='#0b3f7e', backlit=1)
+
+# tripod rotors: one object each (they turn as the player walks through the lane)
+b = MeshBuilder('turnstile_rotor')                                  # local: +y = passing direction, +x = across the lane
+# Tripod arms on a 45° cone about an axis pointing down into the lane: one arm horizontal
+# across the lane, the other two angled down (local -x maps to +WA, into the lane).
+ax = Vector((-math.sin(math.radians(45)), 0.0, -math.cos(math.radians(45))))
+arm0 = Vector((-1.0, 0.0, 0.0))
+for k in range(3):
+    d = arm0.copy()
+    d.rotate(Matrix.Rotation(2 * math.pi * k / 3, 3, ax))
+    b.tube((0, 0, 0), tuple(d * 0.5), 0.022, 0.018, 'steel_brushed', sides=6)
+b.tube(tuple(-ax * 0.04), tuple(ax * 0.07), 0.05, 0.05, 'steel_brushed', sides=8)
+build(b, None)
+yaw_t = math.degrees(math.atan2(WB.x, WB.y))
+ax_world = Vector((WA.x * -ax.x, WA.y * -ax.x, ax.z))              # local -x -> +WA
+for k in range(4):
+    pv = HP(cabs[k] + CAB_W / 2 + 0.02, B_BAR)
+    lane = HP(cabs[k] + CAB_W / 2 + LANE_W / 2, B_BAR)
+    objects.append({
+        'id': f'turnstile_{k}', 'name': f'Turnstile {k + 1}', 'type': 'mesh', 'semantic': 'turnstile',
+        'asset': f'{ASSET_REL}/turnstile_rotor.glb',
+        'transform': {'position': to_engine((pv.x, pv.y, Z_HALL + 0.95)), 'rotation': yaw_quat(yaw_t)},
+        'static': False, 'castShadow': True, 'collision': False,
+        'turnstile': {'pivot': to_engine((pv.x, pv.y, Z_HALL + 0.95)), 'axis': to_engine(tuple(ax_world.normalized())),
+                      'lane': to_engine((lane.x, lane.y, Z_HALL)), 'dir': to_engine((WB.x, WB.y, 0.0))},
+    })
+
+# entrance canopy over the front, name band, T sign; the furniture code places around it
+b = MeshBuilder('station_canopy')
+zc = Z_HALL + 3.25
+cs0, cs1, cdep = 15.2, 33.4, 2.3
+P4 = lambda s_, o_, z: (*HP(s_, -o_), z)
+cq = [P4(cs0, 0, zc + 0.3), P4(cs1, 0, zc + 0.3), P4(cs1, cdep, zc + 0.3), P4(cs0, cdep, zc + 0.3)]
+arch.quad_facing(b, cq, UP3, 'concrete_cast')
+arch.quad_facing(b, [P4(cs0, 0, zc), P4(cs1, 0, zc), P4(cs1, cdep, zc), P4(cs0, cdep, zc)], (0, 0, -1), 'ceiling_panel')
+arch.quad_facing(b, [P4(cs0, cdep, zc - 0.05), P4(cs1, cdep, zc - 0.05), P4(cs1, cdep, zc + 0.3), P4(cs0, cdep, zc + 0.3)], nWB3, 'concrete_cast')
+for (s_e, sg) in ((cs0, nWA3), (cs1, WA3)):
+    arch.quad_facing(b, [P4(s_e, 0, zc - 0.05), P4(s_e, cdep, zc - 0.05), P4(s_e, cdep, zc + 0.3), P4(s_e, 0, zc + 0.3)], sg, 'concrete_cast')
+res = build(b, TPM_ARCH)
+add_mesh_object('station_canopy', 'Station entrance canopy', 'station_canopy', 'structure', lightmap=res)
+for s_ in np.arange(cs0 + 1.0, cs1 - 0.5, 2.4):
+    c = HP(s_, -cdep * 0.55)
+    box_oriented(lamps_in, c, WA, 0.6, 0.07, zc - 0.07, zc - 0.005, 'lamp_fluorescent')
+    if int(round((s_ - cs0) / 2.4)) % 2 == 0:
+        ENTRANCE_LIGHTS.append((c.x, c.y, zc - 0.1))
+band_c = HP(S_DOOR, -0.08)
+add_sign('sign_station_band', 'Station name band', (band_c.x, band_c.y, Z_HALL + 2.95 + 0.0), (-WB.x, -WB.y), 'Hässelby gård', (8.4, 0.4),
+         font='Inter', weight=700, color='#ffffff', background='#0b3f7e', backlit=1, textHeight=0.68, letterSpacing=0.12)
+# T sign on a bracket at the front's north end
+t_base = HP(HS1 - 0.6, -0.05)
+disc_c = HP(HS1 - 0.6, -1.15)
+zt = Z_HALL + 4.0
+lamps_in.tube((t_base.x, t_base.y, zt + 0.6), (disc_c.x, disc_c.y, zt + 0.6), 0.04, 0.04, 'metal_railing_dark', sides=6)
+lamps_in.tube((disc_c.x, disc_c.y, zt + 0.6), (disc_c.x, disc_c.y, zt + 0.5), 0.03, 0.03, 'metal_railing_dark', sides=6)
+R_, nseg = 0.5, 24
+for sgn in (1, -1):
+    fn = WA * sgn                                     # the disc faces along the street (both ways)
+    side = Vector((fn.y, -fn.x))
+    ring_, uvs_ = [], []
+    for k in range(nseg):
+        a_ = 2 * math.pi * k / nseg
+        lx, lz = math.cos(a_) * R_, math.sin(a_) * R_
+        p_ = disc_c + fn * 0.09 - side * lx
+        ring_.append((p_.x, p_.y, zt + lz))
+        uvs_.append((0.45 + lx * 0.9, 0.45 + lz * 0.9))
+    lamps_in.face(ring_, 'sign_tbana', uvs=uvs_)
+for k in range(nseg):
+    a0, a1 = 2 * math.pi * k / nseg, 2 * math.pi * (k + 1) / nseg
+    side = Vector((WA.y, -WA.x))
+    q = [disc_c + WA * 0.09 + side * math.cos(a0) * R_, disc_c + WA * 0.09 + side * math.cos(a1) * R_,
+         disc_c - WA * 0.09 + side * math.cos(a1) * R_, disc_c - WA * 0.09 + side * math.cos(a0) * R_]
+    zz = [math.sin(a0) * R_, math.sin(a1) * R_, math.sin(a1) * R_, math.sin(a0) * R_]
+    mid_ = side * math.cos((a0 + a1) / 2)
+    arch.quad_facing(lamps_in, [(q[i].x, q[i].y, zt + zz[i]) for i in range(4)], (mid_.x, mid_.y, math.sin((a0 + a1) / 2)), 'metal_railing_dark')
+build(lamps_in, None)
+add_mesh_object('station_lights', 'Station light fittings and T sign', 'station_interior_lights', 'prop', collision=False, cast=False)
+# signs inside: exit, to the trains, platform names
+add_sign('sign_exit', 'Exit sign', (*HP(S_DOOR, T_IN + 0.05), Z_HALL + 2.75), (WB.x, WB.y), 'Utgång  Hässelby torg', (2.6, 0.26),
+         font='Inter', weight=600, color='#ffffff', background='#1d6b3a', backlit=1, uppercase=False)
+add_sign('sign_trains', 'To the trains', (*HP((SA0 + SA1) / 2, B_FOOT - WT - 0.03), Z_HALL + 2.7), (-WB.x, -WB.y), 'Till tågen', (1.9, 0.3),
+         font='Inter', weight=700, color='#ffffff', background='#0b3f7e', backlit=1, uppercase=False)
+for (s_, fac) in ((s_lo - 0.02, (-WA.x, -WA.y)), (s_hi + 0.02, (WA.x, WA.y))):
+    add_sign(f'sign_platform_{len(objects)}', 'Platform name sign', (*HP(s_, (b_lo + b_hi) / 2), PLAT_Z + 2.5), fac, 'Hässelby gård', (3.2, 0.42),
+             font='Inter', weight=700, color='#ffffff', background='#0b3f7e', backlit=1, textHeight=0.62, letterSpacing=0.08)
+add_sign('sign_direction', 'Direction sign', (*HP((SB0 + SB1) / 2, b_lo - 0.03), PLAT_Z + 2.55), (-WB.x, -WB.y), 'Mot T-Centralen', (2.0, 0.28),
+         font='Inter', weight=600, color='#ffffff', background='#1d6b3a', backlit=1, uppercase=False)
+STATION['front'] = (HP(HS1, 0.0), -WA, FRONT_W, zb_h, ZH)
+print(f'  station: hall {FRONT_W:.0f} x {(east_b(HS0) + east_b(HS1)) / 2:.0f} m, stair core s {SA0:.1f}..{SB1:.1f}, top at b {B_TOP:.2f}')
 
 
 # =============================================================== buildings
@@ -880,7 +1130,8 @@ def archetype(bd):
     cx = sum(p[0] for p in bd['ring']) / len(bd['ring'])
     cy = sum(p[1] for p in bd['ring']) / len(bd['ring'])
     if bd['area'] < 45 and lv <= 1 and X0 < cx < X1 and Y0 < cy < Y1 and HS.sample(g, d_walk, cx, cy) < 3.0:
-        return 'kiosk'                       # small pavilions standing on the square
+        # one kiosk on the forecourt; the smaller modern pavilions (toilet...) did not exist
+        return 'kiosk' if bd['area'] >= 30 else None
     if bd['area'] < 40 or k in ('shed', 'roof', 'toilets'):
         return 'shed'
     if k == 'parking':
@@ -914,7 +1165,7 @@ def edges_of(ring):
         a, c = ring[i], ring[(i + 1) % n]
         d = (c[0] - a[0], c[1] - a[1])
         ln = math.hypot(*d)
-        if ln > 0.2:
+        if ln > 0.2 and not faces_hall(a, (d[0] / ln, d[1] / ln), ln):
             yield a, (d[0] / ln, d[1] / ln), ln, acc
         acc += ln + 2.0   # gap: each wall is its own lightmap chart (packs better than one long belt)
 
@@ -945,6 +1196,12 @@ def machine_room(b, ring, z, mat):
         arch.quad_facing(b, [P(a0, b0, z), P(a1, b1, z), P(a1, b1, z1), P(a0, b0, z1)],
                          ((a0 + a1) / 2 * u.x + (b0 + b1) / 2 * v.x, (a0 + a1) / 2 * u.y + (b0 + b1) / 2 * v.y, 0), mat)
     b.quad(P(-hu - 0.1, -hv - 0.1, z1), P(hu + 0.1, -hv - 0.1, z1), P(hu + 0.1, hv + 0.1, z1), P(-hu - 0.1, hv + 0.1, z1), 'roof_felt')
+
+
+def faces_hall(a, u, ln):
+    out = (u[1], -u[0])
+    mx, my = a[0] + u[0] * ln / 2 + out[0] * 0.3, a[1] + u[1] * ln / 2 + out[1] * 0.3
+    return HL.poly_contains(HALL_RING, mx, my)
 
 
 def build_building(bd, idx):
@@ -1074,11 +1331,27 @@ def build_building(bd, idx):
 SHOP_WALLS = []
 KIOSK_WALLS = []
 print('Building buildings...')
+# centre building pieces outside the hall (plan difference via a fine distance field)
+_cr_bd = next(bd for bd in L['buildings'] if bd['id'] == CENTRE_ID)
+_xs, _ys = [p[0] for p in _cr_bd['ring']], [p[1] for p in _cr_bd['ring']]
+_gc = HS.Grid(min(_xs) - 2, min(_ys) - 2, max(_xs) + 2, max(_ys) + 2, 0.1)
+_dc = HS.subtract(HS.polygon_field(_gc, [_cr_bd['ring']]), HS.polygon_field(_gc, [HALL_RING]))
+CENTRE_PIECES = [HL.simplify_ring(l_, 0.3, 3.0) for l_ in HS.contour_loops(_gc, _dc, tol=0.04) if HL.area2(l_) > 20]
+print(f'  centre building split into {len(CENTRE_PIECES)} pieces around the hall')
 kinds = {}
 for i, bd in enumerate(L['buildings']):
     cx = sum(p[0] for p in bd['ring']) / len(bd['ring'])
     cy = sum(p[1] for p in bd['ring']) / len(bd['ring'])
     if not (X0 + 5 < cx < X1 - 5 and Y0 + 5 < cy < Y1 - 5):
+        continue
+    if bd['id'] == CENTRE_ID:
+        # the centre building minus the ticket hall (its south wing under the platform)
+        for k_, piece in enumerate(CENTRE_PIECES):
+            nb_ = dict(bd, id=f'{CENTRE_ID}_{k_}', ring=piece, area=abs(HL.area2(piece)))
+            kk, _ = build_building(nb_, 900 + k_)
+            kinds[kk] = kinds.get(kk, 0) + 1
+        continue
+    if archetype(bd) is None:
         continue
     k, _ = build_building(bd, i)
     kinds[k] = kinds.get(k, 0) + 1
@@ -1127,7 +1400,11 @@ for (a, u, ln, zb, z0, bd) in SHOP_WALLS:
         nsign += 1
 KIOSKS = [('Torgkiosken', '#f4d13a', '#7a1c14'), ('Korv & Glass', '#ffffff', '#1f4f8a'), ('Pressboden', '#ffffff', '#b3261e')]
 done_k = {}
-for (a, u, ln, z0, bid) in KIOSK_WALLS:
+_best = {}
+for kw in KIOSK_WALLS:                                   # one fascia per kiosk: its longest walk-facing side
+    if kw[4] not in _best or kw[2] > _best[kw[4]][2]:
+        _best[kw[4]] = kw
+for (a, u, ln, z0, bid) in _best.values():
     k = done_k.setdefault(bid, len(done_k))
     text, col, bg = KIOSKS[k % len(KIOSKS)]
     out = (u[1], -u[0])
@@ -1235,10 +1512,10 @@ objects.append({'id': 'lamps_path', 'name': 'Path lamps (mercury globes)', 'type
                 'instances': [[*to_engine((x, y, H(x, y) - 0.05)), 0.0, 1.0] for (x, y) in lamps_path]})
 
 
-def light(obj_id, pos, intensity, rng_, color, kind='spot', outer=60, inner=30, fog=1.0, radius=0.15):
+def light(obj_id, pos, intensity, rng_, color, kind='spot', outer=60, inner=30, fog=1.0, radius=0.15, always=False):
     objects.append({'id': obj_id, 'type': 'light', 'semantic': 'light', 'transform': {'position': to_engine(pos), 'rotation': [0, 0, 0, 1]},
                     'light': {'kind': kind, 'color': list(color), 'intensity': intensity, 'range': rng_, 'outerAngle': outer,
-                              'innerAngle': inner, 'sourceRadius': radius, 'fogScatter': fog}})
+                              'innerAngle': inner, 'sourceRadius': radius, 'fogScatter': fog, **({'always': True} if always else {})}})
 
 
 SODIUM, MERCURY, FLUO = (1.0, 0.6, 0.28), (0.8, 0.9, 1.0), (0.9, 0.96, 1.0)
@@ -1249,7 +1526,9 @@ for i, (x, y) in enumerate(lamps_path):
     light(f'lamp_path_{i}', (x, y, H(x, y) + 4.05), 260, 12, MERCURY, kind='point', fog=0.6, radius=0.23)
 for i, (x, y, z) in enumerate(CANOPY_LIGHTS[::2]):
     light(f'platform_light_{i}', (x, y, z), 700, 11, FLUO, outer=80, inner=55, fog=0.4)
-for i, (x, y, z) in enumerate(STATION_LIGHTS[::2]):
+for i, (x, y, z) in enumerate(STATION_LIGHTS):
+    light(f'station_light_{i}', (x, y, z), 750, 9, FLUO, outer=85, inner=60, fog=0.0, always=True)
+for i, (x, y, z) in enumerate(ENTRANCE_LIGHTS):
     light(f'entrance_light_{i}', (x, y, z), 600, 10, FLUO, outer=80, inner=55, fog=0.4)
 print(f'  {len(lamps_street)} street lamps, {len(lamps_path)} path lamps')
 
@@ -1350,6 +1629,47 @@ for (p, name) in L['bus_stops']:
     add_sign(f'sign_busstop_{k}', 'Bus stop sign', (sx, sy, H(sx, sy) + 2.55), (-n[0], -n[1]), 'Buss\nHässelby gård', (0.62, 0.42),
              font='Inter', weight=700, color='#ffffff', background='#1d4f91', border='#ffffff', textHeight=0.62,
              uppercase=False, doubleSided=True, depth=0.03)
+
+# Resenärer (Thomas Qvarsebo, 1989): eight bronze travellers with suitcases, 1.35 m tall,
+# on a 40 cm granite plinth, waiting on Hässelby torg within sight of the T-bana exit.
+art = next((n for n in [(-89.4, 74.6)]), None)
+b = MeshBuilder('resenarer')
+PL_L, PL_W, PL_H = 6.8, 1.5, 0.4
+b.box(-PL_L / 2, PL_L / 2, -PL_W / 2, PL_W / 2, -0.3, PL_H, 'granite_curb')
+rng_art = random.Random(1989)
+for k in range(8):
+    x = -PL_L / 2 + 0.55 + k * (PL_L - 1.1) / 7 + rng_art.uniform(-0.1, 0.1)
+    y = rng_art.uniform(-0.35, 0.35)
+    h = 1.35 * rng_art.uniform(0.93, 1.04)
+    yaw = rng_art.uniform(-0.5, 0.5) + (math.pi if k % 3 == 2 else 0.0)
+    c, s_ = math.cos(yaw), math.sin(yaw)
+    L_ = lambda lx, ly, lz: (x + lx * c - ly * s_, y + lx * s_ + ly * c, PL_H + lz)
+    hip, sh = h * 0.5, h * 0.82
+    for sx in (-0.07, 0.07):                                          # legs
+        b.tube(L_(sx, 0, 0), L_(sx * 1.1, 0, hip), 0.05, 0.065, 'bronze_patina', sides=7)
+    b.tube(L_(0, 0, hip - 0.05), L_(0, 0, sh), 0.14, 0.16, 'bronze_patina', sides=8)        # coat / torso
+    b.tube(L_(0, 0, hip - 0.25), L_(0, 0, hip + 0.05), 0.12, 0.15, 'bronze_patina', sides=8)
+    b.tube(L_(0, 0, sh), L_(0, 0, sh + 0.06), 0.06, 0.05, 'bronze_patina', sides=6)         # neck
+    sphere(b, L_(0, 0, sh + 0.15), 0.1, 'bronze_patina', rings=5, seg=8)                    # head
+    if k % 2 == 0:
+        b.tube(L_(-0.12, 0, sh + 0.25), L_(0.12, 0, sh + 0.25), 0.11, 0.11, 'bronze_patina', sides=8)   # hat brim
+    side = 1 if k % 2 else -1
+    b.tube(L_(0.17 * side, 0, sh - 0.03), L_(0.2 * side, 0.02, hip - 0.02), 0.045, 0.04, 'bronze_patina', sides=6)   # arm with case
+    b.tube(L_(-0.17 * side, 0, sh - 0.03), L_(-0.19 * side, 0.03, hip + 0.05), 0.045, 0.04, 'bronze_patina', sides=6)
+    cx_, cy_ = 0.27 * side, 0.02
+    sw, sd, sh_ = 0.13, 0.42, 0.32 if k % 3 else 0.38                # suitcase
+    pts8 = [L_(cx_ + dx, cy_ + dy, dz) for dz in (0.03, 0.03 + sh_) for (dx, dy) in ((-sw / 2, -sd / 2), (sw / 2, -sd / 2), (sw / 2, sd / 2), (-sw / 2, sd / 2))]
+    for (i0, i1, i2, i3) in ((0, 1, 2, 3), (4, 7, 6, 5), (0, 4, 5, 1), (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)):
+        b.face([pts8[i0], pts8[i3], pts8[i2], pts8[i1]] if (i0, i1) == (0, 1) else [pts8[i0], pts8[i1], pts8[i2], pts8[i3]], 'bronze_patina')
+build(b, None)
+ax_, ay_ = art
+art_heading = heading_of((STATION['front'][0].x - ax_, STATION['front'][0].y - ay_)) if STATION.get('front') else 160.0
+objects.append({'id': 'art_resenarer', 'name': 'Resenärer (Thomas Qvarsebo, 1989)', 'type': 'mesh', 'semantic': 'artwork',
+                'asset': f'{ASSET_REL}/resenarer.glb', 'transform': {'position': to_engine((ax_, ay_, H(ax_, ay_) + 0.12)), 'rotation': yaw_quat(art_heading)},
+                'static': True, 'castShadow': True, 'collision': True})
+for (dx, dy, hd) in ((-5.5, -4.5, 20), (4.5, -5.0, -20), (-7.0, 3.0, 110), (7.5, 2.5, -110)):
+    furn['bench_park'].append((ax_ + dx, ay_ + dy, art_heading + hd))
+furn['bin_post'].append((ax_ - 3.5, ay_ - 5.5, art_heading))
 
 for p in L['benches']:
     if X0 + 3 < p[0] < X1 - 3 and Y0 + 3 < p[1] < Y1 - 3 and HS.sample(g, d_bldg, *p) > 1.0:
@@ -1778,12 +2098,20 @@ print('  ' + ', '.join(f'{k} {len(v)}' for k, v in sorted(plants.items())) + f' 
 # =============================================================== document
 def write_doc():
     gz = lambda x, y: H(x, y) + 0.12
+    hd_ = lambda v: math.degrees(math.atan2(v.x, v.y))
+    c0 = HP(S_DOOR, -14.0)
+    c1 = HP(S_DOOR + 6.0, 1.2)
+    c2 = HP((SA0 + SA1) / 2, B_FOOT - 1.4)
+    c3 = HP(S_MID, 3.6)
     VIEWS = [
-        ('Station entrance', (-27, -14, gz(-27, -14)), 5, 10),
+        ('Station entrance (shop street)', (c0.x, c0.y, gz(c0.x, c0.y)), hd_(WB), 6),
+        ('Ticket hall and barrier', (c1.x, c1.y, Z_HALL), hd_(WB) - 38, -4),
+        ('Stairs to the platform', (c2.x, c2.y, Z_HALL), hd_(WB), 18),
+        ('Platform, stair house', (c3.x, c3.y, PLAT_Z), hd_(WB) + 4, -2),
+        ('Hässelby torg, Resenärer', (-79, 55, gz(-79, 55)), -26, 2),
         ('Forecourt shops', (-52, -44, gz(-52, -44)), 28, 6),
         ('Astrakangatan under the bridge', (32, -62, gz(32, -62)), -10, 6),
         ('Courtyard, Hässelby torg 14-22', (-36, 126, gz(-36, 126)), 120, 4),
-        ('Platform', (-34, 3.0, PLAT_Z), 68, 0),
         ('Rock cut', (104, 47.5, BED_Z + 0.3), 78, 3),
         ('Overview', (-120, -120, 60), 45, -24),
     ]
@@ -1813,7 +2141,7 @@ def write_doc():
         'format': 'rill.map', 'version': 1, 'name': 'hasselby',
         'description': 'Hässelby torg, November 1993 (vertical slice). Layout © OpenStreetMap contributors (ODbL). Generated by tools/blender/build_hasselby.py.',
         'environment': {'preset': 'november'},
-        'spawn': {'position': to_engine((-62, -30, H(-62, -30) + 0.12)), 'yaw': 30, 'pitch': 0},
+        'spawn': {'position': to_engine(VIEWS[0][1]), 'yaw': VIEWS[0][2], 'pitch': 0},
         'objects': objects,
     }
     if os.path.exists(os.path.join(os.path.dirname(MAP_PATH), 'lightmaps', 'lightmapset.json')):

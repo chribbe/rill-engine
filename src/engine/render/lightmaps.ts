@@ -29,6 +29,15 @@ export interface LoadedProbeVolume {
   spacing: [number, number, number];
   dims: [number, number, number];
   bytes: number;
+  /** Per probe: sky irradiance on the up face relative to open sky (0 enclosed .. 1 open). CPU copy. */
+  skyVisibility: Float32Array;
+}
+
+function halfToFloat(h: number): number {
+  const s = h & 0x8000 ? -1 : 1, e = (h >> 10) & 0x1f, m = h & 0x3ff;
+  if (e === 0) return s * m * 2 ** -24;
+  if (e === 31) return m ? NaN : s * Infinity;
+  return s * (1 + m / 1024) * 2 ** (e - 15);
 }
 
 /**
@@ -61,6 +70,15 @@ async function loadProbeVolume(device: GPUDevice, base: string, pv: NonNullable<
       }
     }
   }
+  // Sky visibility per probe (component 0 = sky, face 2 = +Y), normalised by open sky (p95).
+  const vis = new Float32Array(nx * ny * nz);
+  for (let p = 0; p < vis.length; p++) {
+    const i = ((p * 2) * 6 + 2) * 3;
+    vis[p] = 0.2126 * halfToFloat(src[i]) + 0.7152 * halfToFloat(src[i + 1]) + 0.0722 * halfToFloat(src[i + 2]);
+  }
+  const sorted = Float32Array.from(vis).sort();
+  const open = Math.max(1e-4, sorted[Math.floor(sorted.length * 0.95)]);
+  for (let p = 0; p < vis.length; p++) vis[p] = Math.min(1, Math.max(0, vis[p] / open));
   const texture = device.createTexture({
     label: `probeVolume:${pv.id}`,
     size: [nx, ny, nz * 12],
@@ -69,7 +87,7 @@ async function loadProbeVolume(device: GPUDevice, base: string, pv: NonNullable<
     usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
   });
   device.queue.writeTexture({ texture }, out, { bytesPerRow: nx * 8, rowsPerImage: ny }, [nx, ny, nz * 12]);
-  return { texture, view: texture.createView({ dimension: '3d' }), origin: pv.origin, spacing: pv.spacing, dims: pv.dims, bytes: out.byteLength };
+  return { texture, view: texture.createView({ dimension: '3d' }), origin: pv.origin, spacing: pv.spacing, dims: pv.dims, bytes: out.byteLength, skyVisibility: vis };
 }
 
 /** Parses a Radiance .hdr (RGBE, new-style RLE or flat) into float RGB. Rows are top-to-bottom. */

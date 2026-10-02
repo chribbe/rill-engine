@@ -291,6 +291,7 @@ async function main() {
     applySize();
     if (renderer.settings.clutter) world.ensureClutter();
     player.update(dt);
+    world.update(dt, player.feet);
     sandbox.update(dt);
     env.advance(dt);
     const all = stressList.length ? renderables.concat(stressList) : renderables;

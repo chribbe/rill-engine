@@ -1,0 +1,6 @@
+{
+ "inherits": "lamp_fluorescent",
+ "emissiveAlways": true,
+ "emissiveIntensity": 7000,
+ "notes": "Indoor fluorescent diffusers (station hall, stairs): lit in every mood."
+}

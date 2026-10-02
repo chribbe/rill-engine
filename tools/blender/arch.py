@@ -95,6 +95,17 @@ def wall(b, o, u, length, height, openings, depth, wall_mat, plinth=0.0, plinth_
             run = cell
     for (u0, z0, w, h, kind, pane_mat, room_z) in ops:
         d = {'panel': 0.035, 'glazed': depth * 0.6, 'shop': depth * 0.8}.get(kind, depth)
+        if kind == 'void':
+            # open doorway / hole: reveals only (none on a zero-thickness lining)
+            if d >= 0.01:
+                f_ = min(d, 0.45 * min(w, h))
+                Q((P(u0, z0), P(u0, z0, d), P(u0, z0 + h, d), P(u0, z0 + h)),
+                  [UV(u0, z0), UV(u0 + f_, z0 + f_), UV(u0 + f_, z0 + h - f_), UV(u0, z0 + h)], wall_mat)
+                Q((P(u0 + w, z0, d), P(u0 + w, z0), P(u0 + w, z0 + h), P(u0 + w, z0 + h, d)),
+                  [UV(u0 + w - f_, z0 + f_), UV(u0 + w, z0), UV(u0 + w, z0 + h), UV(u0 + w - f_, z0 + h - f_)], wall_mat)
+                Q((P(u0, z0 + h), P(u0, z0 + h, d), P(u0 + w, z0 + h, d), P(u0 + w, z0 + h)),
+                  [UV(u0, z0 + h), UV(u0 + f_, z0 + h - f_), UV(u0 + w - f_, z0 + h - f_), UV(u0 + w, z0 + h)], wall_mat)
+            continue
         f_ = min(d, 0.45 * min(w, h))          # fold width of the reveals in UV space
         # inner rectangle of the opening in UV space (panes, frames)
         IM = lambda a, c: UV(u0 + f_ + (a - u0) * (w - 2 * f_) / w, z0 + f_ + (c - z0) * (h - 2 * f_) / h)

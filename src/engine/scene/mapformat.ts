@@ -47,6 +47,11 @@ export interface MeshObject extends MapObjectBase {
   /** Material slot overrides: slot name -> material name or inline definition. */
   materialOverrides?: Record<string, string | MaterialDef>;
   receiveDecals?: boolean;
+  /**
+   * Turnstile rotor (tripod arms): turns 120° about `axis` through `pivot` when the
+   * player walks through the lane (centre `lane`, passing direction `dir`). World space.
+   */
+  turnstile?: { pivot: [number, number, number]; axis: [number, number, number]; lane: [number, number, number]; dir: [number, number, number] };
 }
 
 export interface InstancesObject extends MapObjectBase {
@@ -71,6 +76,8 @@ export interface LightObject extends MapObjectBase {
     outerAngle?: number;
     sourceRadius?: number;
     fogScatter?: number;
+    /** Indoor light: on in every mood (station halls, stairwells). */
+    always?: boolean;
   };
 }
 

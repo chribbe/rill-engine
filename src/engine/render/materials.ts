@@ -12,7 +12,8 @@ export interface MaterialDef {
   name?: string;
   inherits?: string;
   shader?: 'standard' | 'foliage' | 'unlit';
-  alphaMode?: 'opaque' | 'mask';
+  /** 'blend': transparent glass, drawn after opaque geometry (no shadows, no depth writes). */
+  alphaMode?: 'opaque' | 'mask' | 'blend';
   alphaCutoff?: number;
   doubleSided?: boolean;
   /** Metres covered by one repeat of the base textures (UV0 is in metres). */
@@ -49,6 +50,8 @@ export interface MaterialDef {
   emissiveIntensity?: number;
   /** Emission is tinted by the base colour texture (backlit signs, displays). */
   emissiveFromBaseColor?: boolean;
+  /** Indoor fittings: emit in every mood (not only when the environment's lamps are on). */
+  emissiveAlways?: boolean;
   /**
    * Fake rooms behind glazing (interior mapping). Needs room-space UVs on the
    * pane (u along the facade, v up from the storey floor, metres). The emissive
@@ -111,6 +114,7 @@ export const MF = {
   BLEND: 8192,
   EMISSIVE_TEX: 16384,
   INTERIOR: 32768,
+  EMISSIVE_ALWAYS: 65536,
 } as const;
 
 export const MATERIAL_PARAM_BYTES = 240;
@@ -174,6 +178,9 @@ export class Material {
   get masked() {
     return this.def.alphaMode === 'mask';
   }
+  get blended() {
+    return this.def.alphaMode === 'blend';
+  }
   get doubleSided() {
     return !!this.def.doubleSided || this.def.shader === 'foliage';
   }
@@ -231,6 +238,7 @@ export class Material {
     if (this.blendDef) flags |= MF.BLEND;
     if (d.emissiveFromBaseColor) flags |= MF.EMISSIVE_TEX;
     if (d.interior) flags |= MF.INTERIOR;
+    if (d.emissiveAlways) flags |= MF.EMISSIVE_ALWAYS;
     u[28] = flags;
     const rr = d.roughnessRange ?? [0, 1];
     f.set([rr[0], rr[1], d.triplanarSharpness ?? 4, mac?.stainStrength ?? 0], 32);

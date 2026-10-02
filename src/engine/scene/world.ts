@@ -62,8 +62,21 @@ interface ModelDocument {
 }
 type ModelLods = { mesh: GpuMesh; distance: number }[];
 
+interface Turnstile {
+  r: Renderable;
+  base: Mat4;
+  pivot: number[];
+  axis: number[];
+  lane: number[];
+  dir: number[];
+  angle: number;
+  target: number;
+  side: number;
+}
+
 export class World {
   readonly objects = new Map<string, RuntimeObject>();
+  private turnstiles: Turnstile[] = [];
   readonly renderables: Renderable[] = [];
   readonly lights: LightData[] = [];
   readonly reflectionProbes: ReflectionProbeObject[] = [];
@@ -121,6 +134,30 @@ export class World {
     }
     w.loadMs = performance.now() - t0;
     return w;
+  }
+
+  /** Per-frame world behaviour (turnstiles turning as the player walks through). */
+  update(dt: number, feet: ArrayLike<number>) {
+    for (const t of this.turnstiles) {
+      const rel = [feet[0] - t.lane[0], feet[1] - t.lane[1], feet[2] - t.lane[2]];
+      const along = rel[0] * t.dir[0] + rel[2] * t.dir[2];
+      const lat = Math.hypot(rel[0] - t.dir[0] * along, rel[2] - t.dir[2] * along);
+      const inLane = lat < 0.45 && Math.abs(along) < 1.0 && Math.abs(rel[1] - 0.9) < 1.2;
+      const side = inLane ? Math.sign(along) || 1 : 0;
+      // Crossing the rotor plane turns it one third, in the passing direction.
+      if (side && t.side && side !== t.side) t.target += (side > 0 ? 1 : -1) * (2 * Math.PI) / 3;
+      if (side) t.side = side;
+      else if (Math.abs(along) > 1.5 || lat > 1.0) t.side = 0;
+      if (t.angle === t.target) continue;
+      const step = dt * 6.0;
+      const d = t.target - t.angle;
+      t.angle = Math.abs(d) <= step ? t.target : t.angle + Math.sign(d) * step;
+      const m = mat4.translation(t.pivot);
+      mat4.rotate(m, t.axis, t.angle, m);
+      mat4.translate(m, [-t.pivot[0], -t.pivot[1], -t.pivot[2]], m);
+      mat4.multiply(m, t.base, m);
+      this.renderer.instances.setModel(t.r.slot, m);
+    }
   }
 
   /** All text signs as one mesh: atlas faces (backlit / painted) and lightbox bodies. */
@@ -294,6 +331,12 @@ export class World {
         const sc = o.transform.scale ?? [1, 1, 1];
         r.lods = World.lodChain(lods, Math.max(sc[0], sc[1], sc[2]));
         rt.renderables.push(r);
+        if (o.turnstile) {
+          const t = o.turnstile;
+          // Arms sweep a small sphere: grow the bounds so culling never clips them.
+          for (let i = 0; i < 3; i++) { r.worldMin[i] = Math.min(r.worldMin[i], t.pivot[i] - 0.7); r.worldMax[i] = Math.max(r.worldMax[i], t.pivot[i] + 0.7); }
+          this.turnstiles.push({ r, base: model, pivot: t.pivot, axis: t.axis, lane: t.lane, dir: t.dir, angle: 0, target: 0, side: 0 });
+        }
         if (o.collision ?? o.static ?? true) {
           for (const p of mesh.primitives) {
             const m = mats[mesh.primitives.indexOf(p)];
@@ -332,6 +375,7 @@ export class World {
           outerAngle: l.outerAngle,
           sourceRadius: l.sourceRadius,
           fogScatter: l.fogScatter,
+          always: l.always,
         });
         break;
       }

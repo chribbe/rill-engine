@@ -50,7 +50,7 @@
     "compensation": -0.6,
     "auto": true,
     "min": 2.0,
-    "max": 5.0
+    "max": 8.4
   },
   "ambient": {
     "groundAlbedo": [

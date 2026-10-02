@@ -59,6 +59,13 @@ export class InstanceStore {
     this.dirtyMax = Math.max(this.dirtyMax, slot);
   }
 
+  /** Moves an instance (animated props); the rest of its record is kept. */
+  setModel(slot: number, model: ArrayLike<number>) {
+    this.cpu.set(model as Float32Array, slot * INSTANCE_FLOATS);
+    this.dirtyMin = Math.min(this.dirtyMin, slot);
+    this.dirtyMax = Math.max(this.dirtyMax, slot);
+  }
+
   /** Per-object reflection probes: up to three probe indices packed in flag bits 8..31 (index + 1, 0 = none). */
   setProbes(slot: number, packed: number) {
     const o = slot * INSTANCE_FLOATS;

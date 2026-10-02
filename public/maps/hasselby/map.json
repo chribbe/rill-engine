@@ -8,11 +8,11 @@
  },
  "spawn": {
   "position": [
-   -62,
-   0.0572,
-   30
+   -67.0582,
+   0.0734,
+   9.7418
   ],
-  "yaw": 30,
+  "yaw": 69.81069087309893,
   "pitch": 0
  },
  "objects": [
@@ -1299,8 +1299,8 @@
    "collision": true,
    "lightmap": {
     "resolution": [
-     262,
-     312
+     260,
+     325
     ]
    }
   },
@@ -1391,8 +1391,8 @@
    "collision": true,
    "lightmap": {
     "resolution": [
-     328,
-     240
+     336,
+     241
     ]
    }
   },
@@ -2766,7 +2766,7 @@
    "lightmap": {
     "resolution": [
      110,
-     869
+     785
     ]
    }
   },
@@ -2970,8 +2970,311 @@
    "collision": true,
    "lightmap": {
     "resolution": [
-     126,
-     120
+     137,
+     202
+    ]
+   }
+  },
+  {
+   "id": "station_interior",
+   "name": "Station hall interior",
+   "type": "mesh",
+   "semantic": "building",
+   "asset": "assets/hasselby/station_interior.glb",
+   "transform": {
+    "position": [
+     0,
+     0,
+     0
+    ]
+   },
+   "static": true,
+   "castShadow": true,
+   "collision": true,
+   "lightmap": {
+    "resolution": [
+     134,
+     314
+    ]
+   }
+  },
+  {
+   "id": "station_stairs",
+   "name": "Stairs to the platform",
+   "type": "mesh",
+   "semantic": "structure",
+   "asset": "assets/hasselby/station_stairs.glb",
+   "transform": {
+    "position": [
+     0,
+     0,
+     0
+    ]
+   },
+   "static": true,
+   "castShadow": true,
+   "collision": true,
+   "lightmap": {
+    "resolution": [
+     59,
+     783
+    ]
+   }
+  },
+  {
+   "id": "station_stairhouse",
+   "name": "Stair house on the platform",
+   "type": "mesh",
+   "semantic": "building",
+   "asset": "assets/hasselby/station_stairhouse.glb",
+   "transform": {
+    "position": [
+     0,
+     0,
+     0
+    ]
+   },
+   "static": true,
+   "castShadow": true,
+   "collision": true,
+   "lightmap": {
+    "resolution": [
+     61,
+     230
+    ]
+   }
+  },
+  {
+   "id": "station_barrier",
+   "name": "Ticket booth and barrier",
+   "type": "mesh",
+   "semantic": "prop",
+   "asset": "assets/hasselby/station_barrier.glb",
+   "transform": {
+    "position": [
+     0,
+     0,
+     0
+    ]
+   },
+   "static": true,
+   "castShadow": true,
+   "collision": true,
+   "lightmap": {
+    "resolution": [
+     121,
+     98
+    ]
+   }
+  },
+  {
+   "id": "sign_booth",
+   "name": "Ticket booth sign",
+   "type": "sign",
+   "semantic": "sign",
+   "transform": {
+    "position": [
+     -49.6899,
+     3.0429,
+     8.789
+    ],
+    "rotation": [
+     0.0,
+     -0.572222,
+     0.0,
+     0.820098
+    ]
+   },
+   "sign": {
+    "text": "Biljetter",
+    "size": [
+     2.2,
+     0.32
+    ],
+    "font": "Inter",
+    "weight": 700,
+    "color": "#ffffff",
+    "background": "#0b3f7e",
+    "backlit": 1
+   }
+  },
+  {
+   "id": "turnstile_0",
+   "name": "Turnstile 1",
+   "type": "mesh",
+   "semantic": "turnstile",
+   "asset": "assets/hasselby/turnstile_rotor.glb",
+   "transform": {
+    "position": [
+     -49.2206,
+     1.1929,
+     6.965
+    ],
+    "rotation": [
+     0.0,
+     -0.572222,
+     0.0,
+     0.820098
+    ]
+   },
+   "static": false,
+   "castShadow": true,
+   "collision": false,
+   "turnstile": {
+    "pivot": [
+     -49.2206,
+     1.1929,
+     6.965
+    ],
+    "axis": [
+     -0.244,
+     -0.7071,
+     -0.6637
+    ],
+    "lane": [
+     -49.3206,
+     0.2429,
+     6.6928
+    ],
+    "dir": [
+     0.9386,
+     0.0,
+     -0.3451
+    ]
+   }
+  },
+  {
+   "id": "turnstile_1",
+   "name": "Turnstile 2",
+   "type": "mesh",
+   "semantic": "turnstile",
+   "asset": "assets/hasselby/turnstile_rotor.glb",
+   "transform": {
+    "position": [
+     -49.5312,
+     1.1929,
+     6.1203
+    ],
+    "rotation": [
+     0.0,
+     -0.572222,
+     0.0,
+     0.820098
+    ]
+   },
+   "static": false,
+   "castShadow": true,
+   "collision": false,
+   "turnstile": {
+    "pivot": [
+     -49.5312,
+     1.1929,
+     6.1203
+    ],
+    "axis": [
+     -0.244,
+     -0.7071,
+     -0.6637
+    ],
+    "lane": [
+     -49.6313,
+     0.2429,
+     5.8481
+    ],
+    "dir": [
+     0.9386,
+     0.0,
+     -0.3451
+    ]
+   }
+  },
+  {
+   "id": "turnstile_2",
+   "name": "Turnstile 3",
+   "type": "mesh",
+   "semantic": "turnstile",
+   "asset": "assets/hasselby/turnstile_rotor.glb",
+   "transform": {
+    "position": [
+     -49.8418,
+     1.1929,
+     5.2755
+    ],
+    "rotation": [
+     0.0,
+     -0.572222,
+     0.0,
+     0.820098
+    ]
+   },
+   "static": false,
+   "castShadow": true,
+   "collision": false,
+   "turnstile": {
+    "pivot": [
+     -49.8418,
+     1.1929,
+     5.2755
+    ],
+    "axis": [
+     -0.244,
+     -0.7071,
+     -0.6637
+    ],
+    "lane": [
+     -49.9419,
+     0.2429,
+     5.0034
+    ],
+    "dir": [
+     0.9386,
+     0.0,
+     -0.3451
+    ]
+   }
+  },
+  {
+   "id": "turnstile_3",
+   "name": "Turnstile 4",
+   "type": "mesh",
+   "semantic": "turnstile",
+   "asset": "assets/hasselby/turnstile_rotor.glb",
+   "transform": {
+    "position": [
+     -50.1524,
+     1.1929,
+     4.4309
+    ],
+    "rotation": [
+     0.0,
+     -0.572222,
+     0.0,
+     0.820098
+    ]
+   },
+   "static": false,
+   "castShadow": true,
+   "collision": false,
+   "turnstile": {
+    "pivot": [
+     -50.1524,
+     1.1929,
+     4.4309
+    ],
+    "axis": [
+     -0.244,
+     -0.7071,
+     -0.6637
+    ],
+    "lane": [
+     -50.2525,
+     0.2429,
+     4.1587
+    ],
+    "dir": [
+     0.9386,
+     0.0,
+     -0.3451
     ]
    }
   },
@@ -2993,8 +3296,8 @@
    "collision": true,
    "lightmap": {
     "resolution": [
-     107,
-     52
+     114,
+     50
     ]
    }
   },
@@ -3005,22 +3308,22 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -24.1777,
-     2.8942,
-     1.2446
+     -53.9935,
+     3.1929,
+     4.9376
     ],
     "rotation": [
      0.0,
-     -0.1901,
+     -0.572222,
      0.0,
-     -0.981765
+     0.820098
     ]
    },
    "sign": {
     "text": "H\u00e4sselby g\u00e5rd",
     "size": [
      8.4,
-     0.38
+     0.4
     ],
     "font": "Inter",
     "weight": 700,
@@ -3032,11 +3335,11 @@
    }
   },
   {
-   "id": "station_canopy_lights",
-   "name": "Station lights and signs",
+   "id": "station_lights",
+   "name": "Station light fittings and T sign",
    "type": "mesh",
    "semantic": "prop",
-   "asset": "assets/hasselby/station_canopy_lights.glb",
+   "asset": "assets/hasselby/station_interior_lights.glb",
    "transform": {
     "position": [
      0,
@@ -3047,6 +3350,168 @@
    "static": true,
    "castShadow": false,
    "collision": false
+  },
+  {
+   "id": "sign_exit",
+   "name": "Exit sign",
+   "type": "sign",
+   "semantic": "sign",
+   "transform": {
+    "position": [
+     -53.6368,
+     2.9929,
+     4.8065
+    ],
+    "rotation": [
+     0.0,
+     -0.820098,
+     0.0,
+     -0.572222
+    ]
+   },
+   "sign": {
+    "text": "Utg\u00e5ng  H\u00e4sselby torg",
+    "size": [
+     2.6,
+     0.26
+    ],
+    "font": "Inter",
+    "weight": 600,
+    "color": "#ffffff",
+    "background": "#1d6b3a",
+    "backlit": 1,
+    "uppercase": false
+   }
+  },
+  {
+   "id": "sign_trains",
+   "name": "To the trains",
+   "type": "sign",
+   "semantic": "sign",
+   "transform": {
+    "position": [
+     -47.2797,
+     2.9429,
+     4.7964
+    ],
+    "rotation": [
+     0.0,
+     -0.572222,
+     0.0,
+     0.820098
+    ]
+   },
+   "sign": {
+    "text": "Till t\u00e5gen",
+    "size": [
+     1.9,
+     0.3
+    ],
+    "font": "Inter",
+    "weight": 700,
+    "color": "#ffffff",
+    "background": "#0b3f7e",
+    "backlit": 1,
+    "uppercase": false
+   }
+  },
+  {
+   "id": "sign_platform_145",
+   "name": "Platform name sign",
+   "type": "sign",
+   "semantic": "sign",
+   "transform": {
+    "position": [
+     -42.7619,
+     10.75,
+     4.435
+    ],
+    "rotation": [
+     0.0,
+     -0.175275,
+     0.0,
+     -0.98452
+    ]
+   },
+   "sign": {
+    "text": "H\u00e4sselby g\u00e5rd",
+    "size": [
+     3.2,
+     0.42
+    ],
+    "font": "Inter",
+    "weight": 700,
+    "color": "#ffffff",
+    "background": "#0b3f7e",
+    "backlit": 1,
+    "textHeight": 0.62,
+    "letterSpacing": 0.08
+   }
+  },
+  {
+   "id": "sign_platform_146",
+   "name": "Platform name sign",
+   "type": "sign",
+   "semantic": "sign",
+   "transform": {
+    "position": [
+     -44.3805,
+     10.75,
+     0.0332
+    ],
+    "rotation": [
+     0.0,
+     -0.98452,
+     0.0,
+     0.175275
+    ]
+   },
+   "sign": {
+    "text": "H\u00e4sselby g\u00e5rd",
+    "size": [
+     3.2,
+     0.42
+    ],
+    "font": "Inter",
+    "weight": 700,
+    "color": "#ffffff",
+    "background": "#0b3f7e",
+    "backlit": 1,
+    "textHeight": 0.62,
+    "letterSpacing": 0.08
+   }
+  },
+  {
+   "id": "sign_direction",
+   "name": "Direction sign",
+   "type": "sign",
+   "semantic": "sign",
+   "transform": {
+    "position": [
+     -48.0563,
+     10.8,
+     2.6847
+    ],
+    "rotation": [
+     0.0,
+     -0.572222,
+     0.0,
+     0.820098
+    ]
+   },
+   "sign": {
+    "text": "Mot T-Centralen",
+    "size": [
+     2.0,
+     0.28
+    ],
+    "font": "Inter",
+    "weight": 600,
+    "color": "#ffffff",
+    "background": "#1d6b3a",
+    "backlit": 1,
+    "uppercase": false
+   }
   },
   {
    "id": "bldg_001_slab",
@@ -3509,11 +3974,11 @@
    }
   },
   {
-   "id": "bldg_056_retail",
+   "id": "bldg_900_retail",
    "name": "retail",
    "type": "mesh",
    "semantic": "building",
-   "asset": "assets/hasselby/bldg_056_retail.glb",
+   "asset": "assets/hasselby/bldg_900_retail.glb",
    "transform": {
     "position": [
      0,
@@ -3526,8 +3991,31 @@
    "collision": true,
    "lightmap": {
     "resolution": [
-     611,
-     429
+     115,
+     218
+    ]
+   }
+  },
+  {
+   "id": "bldg_901_retail",
+   "name": "retail",
+   "type": "mesh",
+   "semantic": "building",
+   "asset": "assets/hasselby/bldg_901_retail.glb",
+   "transform": {
+    "position": [
+     0,
+     0,
+     0
+    ]
+   },
+   "static": true,
+   "castShadow": true,
+   "collision": true,
+   "lightmap": {
+    "resolution": [
+     404,
+     517
     ]
    }
   },
@@ -3923,29 +4411,6 @@
    }
   },
   {
-   "id": "bldg_105_kiosk",
-   "name": "kiosk",
-   "type": "mesh",
-   "semantic": "building",
-   "asset": "assets/hasselby/bldg_105_kiosk.glb",
-   "transform": {
-    "position": [
-     0,
-     0,
-     0
-    ]
-   },
-   "static": true,
-   "castShadow": true,
-   "collision": true,
-   "lightmap": {
-    "resolution": [
-     25,
-     112
-    ]
-   }
-  },
-  {
    "id": "bldg_106_kiosk",
    "name": "kiosk",
    "type": "mesh",
@@ -4130,29 +4595,6 @@
    }
   },
   {
-   "id": "bldg_114_kiosk",
-   "name": "kiosk",
-   "type": "mesh",
-   "semantic": "building",
-   "asset": "assets/hasselby/bldg_114_kiosk.glb",
-   "transform": {
-    "position": [
-     0,
-     0,
-     0
-    ]
-   },
-   "static": true,
-   "castShadow": true,
-   "collision": true,
-   "lightmap": {
-    "resolution": [
-     27,
-     88
-    ]
-   }
-  },
-  {
    "id": "sign_shop_00",
    "name": "Shop sign J\u00e4rn & F\u00e4rg",
    "type": "sign",
@@ -4225,15 +4667,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -88.3145,
+     -70.562,
      3.7484,
-     -40.3864
+     -13.3275
     ],
     "rotation": [
      0.0,
-     -0.985323,
+     -0.818887,
      0.0,
-     0.170699
+     -0.573955
     ]
    },
    "sign": {
@@ -4258,15 +4700,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -74.4059,
+     -77.709,
      3.7484,
-     -0.834
+     -33.0202
     ],
     "rotation": [
      0.0,
-     -0.173565,
+     -0.818887,
      0.0,
-     -0.984822
+     -0.573955
     ]
    },
    "sign": {
@@ -4291,15 +4733,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -41.4526,
-     3.7862,
-     25.4167
+     -88.3145,
+     3.7484,
+     -40.3864
     ],
     "rotation": [
      0.0,
-     -0.1626,
+     -0.985323,
      0.0,
-     -0.986692
+     0.170699
     ]
    },
    "sign": {
@@ -4324,15 +4766,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -32.6919,
-     3.7862,
-     22.4487
+     -74.4059,
+     3.7484,
+     -0.834
     ],
     "rotation": [
      0.0,
-     -0.1626,
+     -0.173565,
      0.0,
-     -0.986692
+     -0.984822
     ]
    },
    "sign": {
@@ -4357,15 +4799,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -31.8191,
-     3.7862,
-     13.0729
+     -41.4919,
+     3.7865,
+     25.3371
     ],
     "rotation": [
      0.0,
-     -0.839529,
+     -0.160616,
      0.0,
-     -0.543315
+     -0.987017
     ]
    },
    "sign": {
@@ -4390,15 +4832,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -38.8696,
-     3.7862,
-     -2.6293
+     -32.736,
+     3.7865,
+     22.41
     ],
     "rotation": [
      0.0,
-     -0.839529,
+     -0.160616,
      0.0,
-     -0.543315
+     -0.987017
     ]
    },
    "sign": {
@@ -4423,15 +4865,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -71.9145,
-     3.7862,
-     -43.9431
+     -31.0902,
+     3.7865,
+     14.7387
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.838827,
      0.0,
-     0.820099
+     -0.544398
     ]
    },
    "sign": {
@@ -4456,15 +4898,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -54.552,
-     3.7862,
-     3.274
+     -48.1206,
+     3.7865,
+     20.7326
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.572911,
      0.0,
-     0.820099
+     0.819618
     ]
    },
    "sign": {
@@ -4489,15 +4931,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -99.1424,
-     6.9953,
-     -41.5956
+     -74.9226,
+     3.7779,
+     -52.1424
     ],
     "rotation": [
      0.0,
-     -0.169786,
+     -0.57212,
      0.0,
-     -0.985481
+     0.82017
     ]
    },
    "sign": {
@@ -4522,15 +4964,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -90.2088,
-     6.9953,
-     -44.7681
+     -63.6067,
+     3.7779,
+     -21.3924
     ],
     "rotation": [
      0.0,
-     -0.169786,
+     -0.57212,
      0.0,
-     -0.985481
+     0.82017
     ]
    },
    "sign": {
@@ -4555,15 +4997,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -41.2723,
-     3.8099,
-     -107.1068
+     -108.4975,
+     6.9953,
+     -77.9188
     ],
     "rotation": [
      0.0,
-     -0.818206,
+     -0.818211,
      0.0,
-     -0.574926
+     -0.574918
     ]
    },
    "sign": {
@@ -4588,15 +5030,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -46.7318,
-     3.8099,
-     -122.2619
+     -99.1424,
+     6.9953,
+     -41.5956
     ],
     "rotation": [
      0.0,
-     -0.818206,
+     -0.169786,
      0.0,
-     -0.574926
+     -0.985481
     ]
    },
    "sign": {
@@ -4621,15 +5063,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -16.1527,
-     3.6311,
-     -133.3313
+     -90.2088,
+     6.9953,
+     -44.7681
     ],
     "rotation": [
      0.0,
-     -0.572519,
+     -0.169786,
      0.0,
-     0.819891
+     -0.985481
     ]
    },
    "sign": {
@@ -4654,15 +5096,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -10.5458,
-     3.6311,
-     -118.0492
+     -87.4112,
+     6.9953,
+     -51.0796
     ],
     "rotation": [
      0.0,
-     -0.572519,
+     -0.818154,
      0.0,
-     0.819891
+     -0.574999
     ]
    },
    "sign": {
@@ -4687,15 +5129,15 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -20.7291,
-     3.7625,
-     -122.2026
+     -90.7862,
+     6.9953,
+     -60.4534
     ],
     "rotation": [
      0.0,
-     -0.98554,
+     -0.818154,
      0.0,
-     0.169442
+     -0.574999
     ]
    },
    "sign": {
@@ -4720,192 +5162,6 @@
    "semantic": "sign",
    "transform": {
     "position": [
-     -41.4206,
-     2.7839,
-     33.6816
-    ],
-    "rotation": [
-     0.0,
-     -0.561113,
-     0.0,
-     0.827739
-    ]
-   },
-   "sign": {
-    "text": "Torgkiosken",
-    "size": [
-     3.4,
-     0.38
-    ],
-    "font": "Barlow Condensed",
-    "color": "#f4d13a",
-    "background": "#7a1c14",
-    "backlit": 1,
-    "depth": 0.1
-   }
-  },
-  {
-   "id": "sign_kiosk_18",
-   "name": "Kiosk sign Torgkiosken",
-   "type": "sign",
-   "semantic": "sign",
-   "transform": {
-    "position": [
-     -38.1816,
-     2.7839,
-     34.9868
-    ],
-    "rotation": [
-     0.0,
-     -0.155345,
-     0.0,
-     -0.98786
-    ]
-   },
-   "sign": {
-    "text": "Torgkiosken",
-    "size": [
-     3.4,
-     0.38
-    ],
-    "font": "Barlow Condensed",
-    "color": "#f4d13a",
-    "background": "#7a1c14",
-    "backlit": 1,
-    "depth": 0.1
-   }
-  },
-  {
-   "id": "sign_kiosk_19",
-   "name": "Kiosk sign Torgkiosken",
-   "type": "sign",
-   "semantic": "sign",
-   "transform": {
-    "position": [
-     -36.597,
-     2.7839,
-     31.8973
-    ],
-    "rotation": [
-     0.0,
-     -0.81759,
-     0.0,
-     -0.575801
-    ]
-   },
-   "sign": {
-    "text": "Torgkiosken",
-    "size": [
-     3.4,
-     0.38
-    ],
-    "font": "Barlow Condensed",
-    "color": "#f4d13a",
-    "background": "#7a1c14",
-    "backlit": 1,
-    "depth": 0.1
-   }
-  },
-  {
-   "id": "sign_kiosk_20",
-   "name": "Kiosk sign Torgkiosken",
-   "type": "sign",
-   "semantic": "sign",
-   "transform": {
-    "position": [
-     -39.8387,
-     2.7839,
-     30.5919
-    ],
-    "rotation": [
-     0.0,
-     -0.980544,
-     0.0,
-     0.1963
-    ]
-   },
-   "sign": {
-    "text": "Torgkiosken",
-    "size": [
-     3.4,
-     0.38
-    ],
-    "font": "Barlow Condensed",
-    "color": "#f4d13a",
-    "background": "#7a1c14",
-    "backlit": 1,
-    "depth": 0.1
-   }
-  },
-  {
-   "id": "sign_kiosk_21",
-   "name": "Kiosk sign Korv & Glass",
-   "type": "sign",
-   "semantic": "sign",
-   "transform": {
-    "position": [
-     -59.1582,
-     2.6413,
-     27.9866
-    ],
-    "rotation": [
-     0.0,
-     -0.592534,
-     0.0,
-     0.805545
-    ]
-   },
-   "sign": {
-    "text": "Korv & Glass",
-    "size": [
-     3.4,
-     0.38
-    ],
-    "font": "Barlow Condensed",
-    "color": "#ffffff",
-    "background": "#1f4f8a",
-    "backlit": 1,
-    "depth": 0.1
-   }
-  },
-  {
-   "id": "sign_kiosk_22",
-   "name": "Kiosk sign Korv & Glass",
-   "type": "sign",
-   "semantic": "sign",
-   "transform": {
-    "position": [
-     -55.8536,
-     2.6413,
-     32.334
-    ],
-    "rotation": [
-     0.0,
-     -0.148102,
-     0.0,
-     -0.988972
-    ]
-   },
-   "sign": {
-    "text": "Korv & Glass",
-    "size": [
-     3.36,
-     0.38
-    ],
-    "font": "Barlow Condensed",
-    "color": "#ffffff",
-    "background": "#1f4f8a",
-    "backlit": 1,
-    "depth": 0.1
-   }
-  },
-  {
-   "id": "sign_kiosk_23",
-   "name": "Kiosk sign Korv & Glass",
-   "type": "sign",
-   "semantic": "sign",
-   "transform": {
-    "position": [
      -55.5984,
      2.6413,
      26.891
@@ -4918,76 +5174,14 @@
     ]
    },
    "sign": {
-    "text": "Korv & Glass",
+    "text": "Torgkiosken",
     "size": [
      3.4,
      0.38
     ],
     "font": "Barlow Condensed",
-    "color": "#ffffff",
-    "background": "#1f4f8a",
-    "backlit": 1,
-    "depth": 0.1
-   }
-  },
-  {
-   "id": "sign_kiosk_24",
-   "name": "Kiosk sign Korv & Glass",
-   "type": "sign",
-   "semantic": "sign",
-   "transform": {
-    "position": [
-     -58.9031,
-     2.6413,
-     22.5436
-    ],
-    "rotation": [
-     0.0,
-     -0.988792,
-     0.0,
-     0.149302
-    ]
-   },
-   "sign": {
-    "text": "Korv & Glass",
-    "size": [
-     3.369,
-     0.38
-    ],
-    "font": "Barlow Condensed",
-    "color": "#ffffff",
-    "background": "#1f4f8a",
-    "backlit": 1,
-    "depth": 0.1
-   }
-  },
-  {
-   "id": "sign_kiosk_25",
-   "name": "Kiosk sign Pressboden",
-   "type": "sign",
-   "semantic": "sign",
-   "transform": {
-    "position": [
-     -69.7092,
-     2.6948,
-     -0.1984
-    ],
-    "rotation": [
-     0.0,
-     -0.175115,
-     0.0,
-     -0.984548
-    ]
-   },
-   "sign": {
-    "text": "Pressboden",
-    "size": [
-     3.4,
-     0.38
-    ],
-    "font": "Barlow Condensed",
-    "color": "#ffffff",
-    "background": "#b3261e",
+    "color": "#f4d13a",
+    "background": "#7a1c14",
     "backlit": 1,
     "depth": 0.1
    }
@@ -8949,14 +9143,377 @@
    }
   },
   {
+   "id": "station_light_0",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -50.5779,
+     3.4929,
+     9.6483
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
+   "id": "station_light_1",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -44.5711,
+     3.4929,
+     7.4395
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
+   "id": "station_light_2",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -38.5644,
+     3.4929,
+     5.2307
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
+   "id": "station_light_3",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -52.6486,
+     3.4929,
+     4.0169
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
+   "id": "station_light_4",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -54.7194,
+     3.4929,
+     -1.6144
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
+   "id": "station_light_5",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -48.7126,
+     3.4929,
+     -3.8232
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
+   "id": "station_light_6",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -42.7058,
+     3.4929,
+     -6.032
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
+   "id": "station_light_7",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -45.656,
+     2.7429,
+     4.1993
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
+   "id": "station_light_8",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -40.4411,
+     6.8316,
+     1.0831
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
+   "id": "station_light_9",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -45.9633,
+     10.7,
+     1.915
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
+   "id": "station_light_10",
+   "type": "light",
+   "semantic": "light",
+   "transform": {
+    "position": [
+     -48.6856,
+     2.5429,
+     8.4197
+    ],
+    "rotation": [
+     0,
+     0,
+     0,
+     1
+    ]
+   },
+   "light": {
+    "kind": "spot",
+    "color": [
+     0.9,
+     0.96,
+     1.0
+    ],
+    "intensity": 750,
+    "range": 9,
+    "outerAngle": 85,
+    "innerAngle": 60,
+    "sourceRadius": 0.15,
+    "fogScatter": 0.0,
+    "always": true
+   }
+  },
+  {
    "id": "entrance_light_0",
    "type": "light",
    "semantic": "light",
    "transform": {
     "position": [
-     -29.994,
-     3.3742,
-     4.9268
+     -52.6208,
+     3.3929,
+     12.1042
     ],
     "rotation": [
      0,
@@ -8986,9 +9543,9 @@
    "semantic": "light",
    "transform": {
     "position": [
-     -25.5409,
-     3.3742,
-     3.1351
+     -54.2774,
+     3.3929,
+     7.5991
     ],
     "rotation": [
      0,
@@ -9018,9 +9575,9 @@
    "semantic": "light",
    "transform": {
     "position": [
-     -21.0879,
-     3.3742,
-     1.3434
+     -55.934,
+     3.3929,
+     3.0941
     ],
     "rotation": [
      0,
@@ -9050,9 +9607,9 @@
    "semantic": "light",
    "transform": {
     "position": [
-     -16.6348,
-     3.3742,
-     -0.4482
+     -57.5906,
+     3.3929,
+     -1.411
     ],
     "rotation": [
      0,
@@ -9217,21 +9774,44 @@
    }
   },
   {
+   "id": "art_resenarer",
+   "name": "Resen\u00e4rer (Thomas Qvarsebo, 1989)",
+   "type": "mesh",
+   "semantic": "artwork",
+   "asset": "assets/hasselby/resenarer.glb",
+   "transform": {
+    "position": [
+     -89.4,
+     0.1755,
+     -74.6
+    ],
+    "rotation": [
+     0.0,
+     -0.976968,
+     0.0,
+     0.213385
+    ]
+   },
+   "static": true,
+   "castShadow": true,
+   "collision": true
+  },
+  {
    "id": "sign_phone_0",
    "name": "Phone booth header",
    "type": "sign",
    "semantic": "sign",
    "transform": {
     "position": [
-     -13.2763,
-     2.366,
-     1.6282
+     -53.8624,
+     2.421,
+     18.1012
     ],
     "rotation": [
      0.0,
-     -0.828633,
+     -0.175275,
      0.0,
-     -0.559792
+     -0.98452
     ]
    },
    "sign": {
@@ -9308,6 +9888,34 @@
    },
    "instances": [
     [
+     -94.9,
+     0.1878,
+     -70.1,
+     175.4,
+     1.0
+    ],
+    [
+     -84.9,
+     0.0894,
+     -69.6,
+     135.4,
+     1.0
+    ],
+    [
+     -96.4,
+     0.2292,
+     -77.6,
+     265.4,
+     1.0
+    ],
+    [
+     -81.9,
+     0.069,
+     -77.1,
+     45.4,
+     1.0
+    ],
+    [
      28.3098,
      0.1261,
      68.1811,
@@ -9378,17 +9986,17 @@
      1.0
     ],
     [
-     -10.4822,
-     0.0529,
-     5.8936,
-     158.1,
+     -67.0318,
+     0.1986,
+     -9.0202,
+     249.8,
      1.0
     ],
     [
-     -7.7951,
-     0.0649,
-     3.1956,
-     158.1,
+     -58.2101,
+     0.0639,
+     20.7654,
+     249.8,
      1.0
     ]
    ]
@@ -9434,6 +10042,13 @@
      -0.049,
      21.7079,
      -109.2,
+     1.0
+    ],
+    [
+     -92.9,
+     0.1688,
+     -69.1,
+     155.4,
      1.0
     ],
     [
@@ -9486,10 +10101,10 @@
      1.0
     ],
     [
-     -22.2647,
-     0.0885,
-     5.9992,
-     -21.9,
+     -59.006,
+     0.1409,
+     6.1415,
+     69.8,
      1.0
     ]
    ]
@@ -9510,10 +10125,10 @@
    },
    "instances": [
     [
-     -13.2763,
-     0.066,
-     1.6282,
-     68.1,
+     -53.8624,
+     0.121,
+     18.1012,
+     159.8,
      1.0
     ]
    ]
@@ -9534,10 +10149,17 @@
    },
    "instances": [
     [
-     -32.1863,
-     0.1561,
-     8.0509,
-     158.1,
+     -61.8032,
+     0.2156,
+     -6.6809,
+     249.8,
+     1.0
+    ],
+    [
+     -62.9766,
+     0.2034,
+     -9.872,
+     249.8,
      1.0
     ]
    ]
@@ -37262,6 +37884,114 @@
    "semantic": "decal",
    "transform": {
     "position": [
+     -47.5502,
+     6.1,
+     3.916
+    ],
+    "rotation": [
+     0.0,
+     -0.820098,
+     0.0,
+     -0.572224
+    ]
+   },
+   "decal": {
+    "material": "decal_waterstreak",
+    "size": [
+     1.572,
+     1.6,
+     0.5
+    ],
+    "opacity": 0.8
+   }
+  },
+  {
+   "id": "decal_0662",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -46.3148,
+     6.1,
+     0.7909
+    ],
+    "rotation": [
+     0.0,
+     -0.174378,
+     0.0,
+     -0.984679
+    ]
+   },
+   "decal": {
+    "material": "decal_waterstreak",
+    "size": [
+     1.435,
+     1.6,
+     0.5
+    ],
+    "opacity": 0.8
+   }
+  },
+  {
+   "id": "decal_0663",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -39.5437,
+     6.1,
+     0.684
+    ],
+    "rotation": [
+     0.0,
+     -0.572223,
+     0.0,
+     0.820098
+    ]
+   },
+   "decal": {
+    "material": "decal_waterstreak",
+    "size": [
+     1.14,
+     1.6,
+     0.5
+    ],
+    "opacity": 0.8
+   }
+  },
+  {
+   "id": "decal_0664",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -40.8023,
+     6.1,
+     3.6691
+    ],
+    "rotation": [
+     0.0,
+     -0.984629,
+     0.0,
+     0.17466
+    ]
+   },
+   "decal": {
+    "material": "decal_waterstreak",
+    "size": [
+     1.428,
+     1.6,
+     0.5
+    ],
+    "opacity": 0.8
+   }
+  },
+  {
+   "id": "decal_0665",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
      -52.9163,
      0.5333,
      48.1855
@@ -37284,7 +38014,7 @@
    }
   },
   {
-   "id": "decal_0662",
+   "id": "decal_0666",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -37311,7 +38041,7 @@
    }
   },
   {
-   "id": "decal_0663",
+   "id": "decal_0667",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -37338,7 +38068,142 @@
    }
   },
   {
-   "id": "decal_0664",
+   "id": "decal_0668",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -68.0214,
+     0.5234,
+     -6.2978
+    ],
+    "rotation": [
+     0.0,
+     -0.818887,
+     0.0,
+     -0.573955
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0669",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -70.7506,
+     0.5234,
+     -13.8179
+    ],
+    "rotation": [
+     0.0,
+     -0.818887,
+     0.0,
+     -0.573955
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0670",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -73.4798,
+     0.5234,
+     -21.3379
+    ],
+    "rotation": [
+     0.0,
+     -0.818887,
+     0.0,
+     -0.573955
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0671",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -76.209,
+     0.5234,
+     -28.858
+    ],
+    "rotation": [
+     0.0,
+     -0.818887,
+     0.0,
+     -0.573955
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0672",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -78.9383,
+     0.5234,
+     -36.3781
+    ],
+    "rotation": [
+     0.0,
+     -0.818887,
+     0.0,
+     -0.573955
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0673",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -37365,7 +38230,7 @@
    }
   },
   {
-   "id": "decal_0665",
+   "id": "decal_0674",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -37392,7 +38257,7 @@
    }
   },
   {
-   "id": "decal_0666",
+   "id": "decal_0675",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -37419,7 +38284,7 @@
    }
   },
   {
-   "id": "decal_0667",
+   "id": "decal_0676",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -37446,263 +38311,20 @@
    }
   },
   {
-   "id": "decal_0668",
-   "type": "decal",
-   "semantic": "decal",
-   "transform": {
-    "position": [
-     -42.9947,
-     0.5612,
-     25.9286
-    ],
-    "rotation": [
-     0.0,
-     -0.1626,
-     0.0,
-     -0.986692
-    ]
-   },
-   "decal": {
-    "material": "decal_grime_base",
-    "size": [
-     8.0,
-     0.8,
-     0.5
-    ],
-    "opacity": 0.7
-   }
-  },
-  {
-   "id": "decal_0669",
-   "type": "decal",
-   "semantic": "decal",
-   "transform": {
-    "position": [
-     -35.4178,
-     0.5612,
-     23.3616
-    ],
-    "rotation": [
-     0.0,
-     -0.1626,
-     0.0,
-     -0.986692
-    ]
-   },
-   "decal": {
-    "material": "decal_grime_base",
-    "size": [
-     8.0,
-     0.8,
-     0.5
-    ],
-    "opacity": 0.7
-   }
-  },
-  {
-   "id": "decal_0670",
-   "type": "decal",
-   "semantic": "decal",
-   "transform": {
-    "position": [
-     -29.5318,
-     0.5612,
-     18.1913
-    ],
-    "rotation": [
-     0.0,
-     -0.839529,
-     0.0,
-     -0.543315
-    ]
-   },
-   "decal": {
-    "material": "decal_grime_base",
-    "size": [
-     8.0,
-     0.8,
-     0.5
-    ],
-    "opacity": 0.7
-   }
-  },
-  {
-   "id": "decal_0671",
-   "type": "decal",
-   "semantic": "decal",
-   "transform": {
-    "position": [
-     -32.8087,
-     0.5612,
-     10.8932
-    ],
-    "rotation": [
-     0.0,
-     -0.839529,
-     0.0,
-     -0.543315
-    ]
-   },
-   "decal": {
-    "material": "decal_grime_base",
-    "size": [
-     8.0,
-     0.8,
-     0.5
-    ],
-    "opacity": 0.7
-   }
-  },
-  {
-   "id": "decal_0672",
-   "type": "decal",
-   "semantic": "decal",
-   "transform": {
-    "position": [
-     -36.0857,
-     0.5612,
-     3.5952
-    ],
-    "rotation": [
-     0.0,
-     -0.839529,
-     0.0,
-     -0.543315
-    ]
-   },
-   "decal": {
-    "material": "decal_grime_base",
-    "size": [
-     8.0,
-     0.8,
-     0.5
-    ],
-    "opacity": 0.7
-   }
-  },
-  {
-   "id": "decal_0673",
-   "type": "decal",
-   "semantic": "decal",
-   "transform": {
-    "position": [
-     -39.3626,
-     0.5612,
-     -3.7029
-    ],
-    "rotation": [
-     0.0,
-     -0.839529,
-     0.0,
-     -0.543315
-    ]
-   },
-   "decal": {
-    "material": "decal_grime_base",
-    "size": [
-     8.0,
-     0.8,
-     0.5
-    ],
-    "opacity": 0.7
-   }
-  },
-  {
-   "id": "decal_0674",
-   "type": "decal",
-   "semantic": "decal",
-   "transform": {
-    "position": [
-     -79.551,
-     0.5612,
-     -64.7395
-    ],
-    "rotation": [
-     0.0,
-     -0.572222,
-     0.0,
-     0.820099
-    ]
-   },
-   "decal": {
-    "material": "decal_grime_base",
-    "size": [
-     8.0,
-     0.8,
-     0.5
-    ],
-    "opacity": 0.7
-   }
-  },
-  {
-   "id": "decal_0675",
-   "type": "decal",
-   "semantic": "decal",
-   "transform": {
-    "position": [
-     -76.79,
-     0.5612,
-     -57.231
-    ],
-    "rotation": [
-     0.0,
-     -0.572222,
-     0.0,
-     0.820099
-    ]
-   },
-   "decal": {
-    "material": "decal_grime_base",
-    "size": [
-     8.0,
-     0.8,
-     0.5
-    ],
-    "opacity": 0.7
-   }
-  },
-  {
-   "id": "decal_0676",
-   "type": "decal",
-   "semantic": "decal",
-   "transform": {
-    "position": [
-     -74.029,
-     0.5612,
-     -49.7226
-    ],
-    "rotation": [
-     0.0,
-     -0.572222,
-     0.0,
-     0.820099
-    ]
-   },
-   "decal": {
-    "material": "decal_grime_base",
-    "size": [
-     8.0,
-     0.8,
-     0.5
-    ],
-    "opacity": 0.7
-   }
-  },
-  {
    "id": "decal_0677",
    "type": "decal",
    "semantic": "decal",
    "transform": {
     "position": [
-     -71.268,
-     0.5612,
-     -42.2141
+     -43.0277,
+     0.5615,
+     25.8401
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.160616,
      0.0,
-     0.820099
+     -0.987017
     ]
    },
    "decal": {
@@ -37721,15 +38343,15 @@
    "semantic": "decal",
    "transform": {
     "position": [
-     -68.5071,
-     0.5612,
-     -34.7056
+     -35.4405,
+     0.5615,
+     23.3036
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.160616,
      0.0,
-     0.820099
+     -0.987017
     ]
    },
    "decal": {
@@ -37748,15 +38370,15 @@
    "semantic": "decal",
    "transform": {
     "position": [
-     -65.7461,
-     0.5612,
-     -27.1972
+     -29.5711,
+     0.5615,
+     18.1699
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.838827,
      0.0,
-     0.820099
+     -0.544398
     ]
    },
    "decal": {
@@ -37775,15 +38397,15 @@
    "semantic": "decal",
    "transform": {
     "position": [
-     -62.9851,
-     0.5612,
-     -19.6887
+     -32.8292,
+     0.5615,
+     10.8634
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.838827,
      0.0,
-     0.820099
+     -0.544398
     ]
    },
    "decal": {
@@ -37802,15 +38424,15 @@
    "semantic": "decal",
    "transform": {
     "position": [
-     -60.2241,
-     0.5612,
-     -12.1803
+     -49.2938,
+     0.5615,
+     17.4966
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.572911,
      0.0,
-     0.820099
+     0.819618
     ]
    },
    "decal": {
@@ -37829,15 +38451,15 @@
    "semantic": "decal",
    "transform": {
     "position": [
-     -57.4631,
-     0.5612,
-     -4.6718
+     -79.5352,
+     0.5529,
+     -64.7054
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.57212,
      0.0,
-     0.820099
+     0.82017
     ]
    },
    "decal": {
@@ -37856,15 +38478,15 @@
    "semantic": "decal",
    "transform": {
     "position": [
-     -54.7021,
-     0.5612,
-     2.8367
+     -76.7723,
+     0.5529,
+     -57.1976
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.57212,
      0.0,
-     0.820099
+     0.82017
     ]
    },
    "decal": {
@@ -37883,15 +38505,15 @@
    "semantic": "decal",
    "transform": {
     "position": [
-     -51.9412,
-     0.5612,
-     10.3451
+     -74.0095,
+     0.5529,
+     -49.6899
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.57212,
      0.0,
-     0.820099
+     0.82017
     ]
    },
    "decal": {
@@ -37910,15 +38532,15 @@
    "semantic": "decal",
    "transform": {
     "position": [
-     -49.1802,
-     0.5612,
-     17.8536
+     -71.2466,
+     0.5529,
+     -42.1821
     ],
     "rotation": [
      0.0,
-     -0.572222,
+     -0.57212,
      0.0,
-     0.820099
+     0.82017
     ]
    },
    "decal": {
@@ -37933,6 +38555,141 @@
   },
   {
    "id": "decal_0686",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -68.4838,
+     0.5529,
+     -34.6743
+    ],
+    "rotation": [
+     0.0,
+     -0.57212,
+     0.0,
+     0.82017
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0687",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -65.7209,
+     0.5529,
+     -27.1666
+    ],
+    "rotation": [
+     0.0,
+     -0.57212,
+     0.0,
+     0.82017
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0688",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -62.958,
+     0.5529,
+     -19.6588
+    ],
+    "rotation": [
+     0.0,
+     -0.57212,
+     0.0,
+     0.82017
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0689",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -60.1952,
+     0.5529,
+     -12.151
+    ],
+    "rotation": [
+     0.0,
+     -0.57212,
+     0.0,
+     0.82017
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0690",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -107.4251,
+     3.7703,
+     -74.9123
+    ],
+    "rotation": [
+     0.0,
+     -0.818211,
+     0.0,
+     -0.574918
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0691",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -37959,7 +38716,7 @@
    }
   },
   {
-   "id": "decal_0687",
+   "id": "decal_0692",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -37986,7 +38743,88 @@
    }
   },
   {
-   "id": "decal_0688",
+   "id": "decal_0693",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -86.7494,
+     3.7703,
+     -49.212
+    ],
+    "rotation": [
+     0.0,
+     -0.818154,
+     0.0,
+     -0.574999
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0694",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -89.4594,
+     3.7703,
+     -56.739
+    ],
+    "rotation": [
+     0.0,
+     -0.818154,
+     0.0,
+     -0.574999
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0695",
+   "type": "decal",
+   "semantic": "decal",
+   "transform": {
+    "position": [
+     -99.2687,
+     3.7703,
+     -65.9143
+    ],
+    "rotation": [
+     0.0,
+     -0.81824,
+     0.0,
+     -0.574877
+    ]
+   },
+   "decal": {
+    "material": "decal_grime_base",
+    "size": [
+     8.0,
+     0.8,
+     0.5
+    ],
+    "opacity": 0.7
+   }
+  },
+  {
+   "id": "decal_0696",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38013,7 +38851,7 @@
    }
   },
   {
-   "id": "decal_0689",
+   "id": "decal_0697",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38040,7 +38878,7 @@
    }
   },
   {
-   "id": "decal_0690",
+   "id": "decal_0698",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38067,7 +38905,7 @@
    }
   },
   {
-   "id": "decal_0691",
+   "id": "decal_0699",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38094,7 +38932,7 @@
    }
   },
   {
-   "id": "decal_0692",
+   "id": "decal_0700",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38121,7 +38959,7 @@
    }
   },
   {
-   "id": "decal_0693",
+   "id": "decal_0701",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38148,7 +38986,7 @@
    }
   },
   {
-   "id": "decal_0694",
+   "id": "decal_0702",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38175,7 +39013,7 @@
    }
   },
   {
-   "id": "decal_0695",
+   "id": "decal_0703",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38202,7 +39040,7 @@
    }
   },
   {
-   "id": "decal_0696",
+   "id": "decal_0704",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38229,7 +39067,7 @@
    }
   },
   {
-   "id": "decal_0697",
+   "id": "decal_0705",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38256,7 +39094,7 @@
    }
   },
   {
-   "id": "decal_0698",
+   "id": "decal_0706",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38283,7 +39121,7 @@
    }
   },
   {
-   "id": "decal_0699",
+   "id": "decal_0707",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38310,7 +39148,7 @@
    }
   },
   {
-   "id": "decal_0700",
+   "id": "decal_0708",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38337,7 +39175,7 @@
    }
   },
   {
-   "id": "decal_0701",
+   "id": "decal_0709",
    "type": "decal",
    "semantic": "decal",
    "transform": {
@@ -38508,6 +39346,13 @@
      1.216
     ],
     [
+     -5.4821,
+     -0.0151,
+     -27.5816,
+     198.4,
+     1.213
+    ],
+    [
      -38.2872,
      -0.0746,
      140.5094,
@@ -38555,13 +39400,6 @@
      -27.0622,
      198.7,
      1.022
-    ],
-    [
-     -69.0156,
-     -0.0665,
-     -91.6545,
-     322.5,
-     1.19
     ],
     [
      -76.0782,
@@ -38625,13 +39463,6 @@
      -135.1329,
      356.0,
      1.259
-    ],
-    [
-     -167.5713,
-     5.2602,
-     -142.6628,
-     294.8,
-     1.288
     ],
     [
      40.9139,
@@ -38725,11 +39556,11 @@
      0.998
     ],
     [
-     -71.0849,
-     -0.0808,
-     -93.0505,
-     179.8,
-     1.198
+     11.1487,
+     -0.019,
+     136.9943,
+     318.4,
+     0.901
     ],
     [
      61.4883,
@@ -38746,6 +39577,13 @@
      1.143
     ],
     [
+     -161.9189,
+     6.0345,
+     62.5619,
+     191.2,
+     1.186
+    ],
+    [
      -17.7625,
      -0.0035,
      -21.6604,
@@ -38760,18 +39598,18 @@
      1.032
     ],
     [
+     -7.2684,
+     -0.0143,
+     -26.2952,
+     134.5,
+     1.189
+    ],
+    [
      -110.0275,
      0.8956,
      -120.8461,
      125.4,
      1.111
-    ],
-    [
-     -159.4911,
-     6.1243,
-     -193.9311,
-     25.2,
-     1.155
     ],
     [
      44.5594,
@@ -38821,6 +39659,13 @@
      -138.0808,
      201.9,
      1.054
+    ],
+    [
+     -54.4504,
+     0.0652,
+     -89.9494,
+     117.2,
+     1.276
     ],
     [
      -150.2694,
@@ -38949,13 +39794,6 @@
      1.136
     ],
     [
-     -65.2028,
-     -0.118,
-     -77.2208,
-     115.4,
-     0.928
-    ],
-    [
      16.2351,
      -0.0928,
      119.5564,
@@ -38973,1156 +39811,1002 @@
      108.1313,
      6.6861,
      123.7524,
-     59.9,
-     0.888
+     123.1,
+     0.882
     ],
     [
-     103.431,
-     6.5608,
-     124.5421,
-     355.8,
-     0.605
+     81.1244,
+     3.5849,
+     15.0897,
+     49.4,
+     0.679
     ],
     [
-     57.3622,
-     -0.1131,
-     7.6734,
-     158.7,
-     0.841
+     54.8433,
+     -0.1542,
+     9.647,
+     171.6,
+     0.699
     ],
     [
-     55.4726,
-     -0.2146,
-     23.6435,
-     158.3,
-     0.712
-    ],
-    [
-     117.2393,
-     7.1355,
-     111.1562,
-     91.3,
-     0.615
-    ],
-    [
-     127.1504,
-     7.8416,
-     120.4497,
-     272.9,
-     0.966
+     119.8095,
+     7.2904,
+     105.295,
+     98.3,
+     0.787
     ],
     [
      130.0879,
      8.0833,
      121.719,
-     44.3,
-     0.749
+     157.8,
+     0.826
     ],
     [
-     -41.6274,
-     -0.0003,
-     66.2365,
+     135.9629,
+     8.5553,
+     124.2576,
+     64.5,
+     0.985
+    ],
+    [
+     -45.803,
+     0.0307,
+     48.492,
+     225.1,
+     0.658
+    ],
+    [
+     -47.4514,
+     0.0131,
+     49.3151,
+     128.3,
+     0.786
+    ],
+    [
+     -72.0852,
+     -0.0308,
+     75.7434,
+     242.0,
+     0.902
+    ],
+    [
+     -42.6922,
+     -0.0244,
+     71.9901,
+     242.8,
+     0.87
+    ],
+    [
+     -123.7281,
+     3.2305,
+     -173.5508,
+     222.5,
+     0.738
+    ],
+    [
+     -126.5276,
+     3.6616,
+     -175.101,
+     170.5,
+     0.823
+    ],
+    [
+     -132.1266,
+     4.4776,
+     -178.2012,
+     279.6,
+     0.759
+    ],
+    [
+     -140.525,
+     5.4553,
+     -182.8516,
      173.6,
      0.748
-    ],
-    [
-     -37.5024,
-     0.0365,
-     61.2534,
-     27.7,
-     0.999
-    ],
-    [
-     -38.6463,
-     0.043,
-     58.2649,
-     132.2,
-     0.726
-    ],
-    [
-     -48.6793,
-     -0.031,
-     74.2516,
-     175.6,
-     0.798
-    ],
-    [
-     -129.3271,
-     4.0797,
-     -176.6511,
-     23.4,
-     0.868
     ],
     [
      -143.3245,
      5.6817,
      -184.4018,
+     27.7,
+     0.999
+    ],
+    [
+     -146.124,
+     5.848,
+     -185.9519,
+     132.2,
+     0.726
+    ],
+    [
+     -141.0555,
+     5.0726,
+     -165.487,
+     202.4,
+     0.616
+    ],
+    [
+     -135.3792,
+     4.1698,
+     -90.2897,
+     10.0,
+     0.699
+    ],
+    [
+     -122.3387,
+     2.5912,
+     -103.4078,
+     156.7,
+     0.756
+    ],
+    [
+     -91.1669,
+     -0.1726,
+     -113.9677,
+     240.8,
+     0.78
+    ],
+    [
+     -101.0828,
+     0.0549,
+     -121.7981,
      140.5,
      0.869
     ],
     [
-     -156.228,
-     5.8192,
-     -184.2422,
+     -112.9942,
+     1.2699,
+     -117.1123,
      120.5,
      0.632
     ],
     [
-     -138.2556,
-     4.8193,
-     -163.9377,
+     -139.4812,
+     4.6653,
+     -112.9224,
      100.0,
      0.962
     ],
     [
-     -141.7581,
-     4.7184,
-     -89.7713,
-     209.1,
-     0.996
+     -150.6866,
+     5.0533,
+     -95.8005,
+     324.7,
+     0.685
     ],
     [
-     -121.3313,
-     2.4422,
-     -100.3705,
-     151.6,
-     0.719
-    ],
-    [
-     -113.9704,
-     1.4045,
-     -98.6839,
-     205.4,
-     0.969
-    ],
-    [
-     -101.9671,
-     0.071,
-     -103.1292,
-     193.7,
-     0.626
-    ],
-    [
-     -91.1243,
-     -0.1758,
-     -113.2995,
+     145.9463,
+     9.2321,
+     -103.9448,
      97.4,
      0.733
     ],
     [
-     -104.0606,
-     0.2722,
-     -120.6267,
-     129.3,
-     0.748
-    ],
-    [
-     -110.0164,
-     0.8913,
-     -118.2838,
+     102.4152,
+     6.5952,
+     -93.3582,
      350.7,
      0.931
     ],
     [
-     99.3058,
-     6.5461,
-     -92.602,
-     235.4,
-     0.884
-    ],
-    [
-     83.759,
-     4.2875,
-     -88.821,
-     247.9,
-     0.833
-    ],
-    [
-     80.6496,
-     3.4548,
-     -88.0649,
-     353.8,
-     0.916
-    ],
-    [
-     90.0693,
-     5.6153,
-     -75.924,
-     5.5,
-     0.634
-    ],
-    [
-     93.1786,
-     6.1099,
-     -76.6802,
-     54.4,
-     0.743
+     89.9777,
+     5.7134,
+     -90.3334,
+     336.1,
+     0.845
     ],
     [
      105.6161,
      6.5883,
      -79.7052,
-     267.8,
-     0.944
+     201.8,
+     0.777
     ],
     [
-     146.0377,
-     9.2426,
-     -89.5365,
-     212.8,
-     0.87
+     121.1628,
+     7.4801,
+     -83.4865,
+     89.5,
+     0.882
     ],
     [
-     113.3281,
-     6.9514,
-     107.741,
-     226.4,
-     0.663
+     124.2722,
+     7.6981,
+     -84.2427,
+     212.4,
+     0.83
     ],
     [
-     92.3867,
-     6.1819,
-     107.541,
-     78.8,
-     0.78
+     71.1844,
+     0.9865,
+     90.231,
+     284.0,
+     0.887
     ],
     [
-     107.5756,
-     6.7318,
-     112.5709,
-     29.7,
-     0.912
+     70.1668,
+     0.7852,
+     93.2649,
+     320.1,
+     0.785
+    ],
+    [
+     165.7569,
+     9.9958,
+     29.0705,
+     235.4,
+     0.884
+    ],
+    [
+     148.4139,
+     9.4069,
+     39.0332,
+     210.1,
+     0.794
     ],
     [
      153.0275,
      9.6351,
      45.7802,
-     349.4,
-     0.788
+     353.8,
+     0.916
     ],
     [
-     76.1655,
-     2.2863,
-     116.4779,
-     187.0,
-     0.647
+     165.5838,
+     9.9054,
+     43.2941,
+     85.6,
+     0.606
+    ],
+    [
+     82.0958,
+     3.9102,
+     118.8846,
+     18.7,
+     0.77
+    ],
+    [
+     56.5945,
+     0.0181,
+     115.4335,
+     72.2,
+     0.842
     ],
     [
      55.377,
      0.0005,
      118.3928,
-     351.8,
-     0.827
+     34.2,
+     0.852
     ],
     [
-     126.6477,
-     8.2568,
-     -173.5013,
-     236.7,
-     0.613
+     123.5895,
+     7.9925,
+     -172.5591,
+     265.0,
+     0.967
     ],
     [
-     117.4732,
-     7.5188,
-     -170.6749,
-     126.7,
-     0.631
+     139.1734,
+     8.8902,
+     -154.86,
+     78.8,
+     0.78
     ],
     [
-     115.5603,
-     7.219,
-     -163.3814,
-     32.9,
-     0.651
-    ],
-    [
-     118.4247,
-     7.2862,
-     -154.2187,
-     330.7,
-     0.983
-    ],
-    [
-     137.2637,
-     8.8375,
-     -160.9684,
-     317.7,
-     0.706
-    ],
-    [
-     -155.4638,
-     5.0902,
-     112.1395,
-     277.8,
-     0.991
-    ],
-    [
-     -166.0669,
-     5.1465,
-     120.5288,
-     135.8,
-     0.883
-    ],
-    [
-     33.3746,
-     -0.0971,
-     140.4987,
-     334.3,
-     0.768
-    ],
-    [
-     30.1746,
-     -0.0941,
-     140.4987,
-     283.9,
-     0.841
-    ],
-    [
-     25.4697,
-     -0.0349,
-     143.6987,
-     20.0,
-     0.977
+     -160.0708,
+     5.1347,
+     118.2911,
+     135.2,
+     0.998
     ],
     [
      161.7592,
      9.98,
      -114.507,
-     240.8,
-     0.666
+     142.9,
+     0.993
+    ],
+    [
+     167.3729,
+     9.8925,
+     -130.4686,
+     356.5,
+     0.904
+    ],
+    [
+     153.1714,
+     9.548,
+     -140.2103,
+     90.0,
+     0.731
     ],
     [
      150.1925,
      9.4035,
      -139.0415,
-     213.3,
-     0.839
+     294.9,
+     0.91
+    ],
+    [
+     156.3651,
+     9.7009,
+     83.2441,
+     83.7,
+     0.697
+    ],
+    [
+     153.3495,
+     9.5946,
+     82.1736,
+     97.6,
+     0.967
     ],
     [
      150.3339,
      9.4609,
      81.1032,
-     180.4,
-     0.71
+     245.7,
+     0.916
     ],
     [
-     117.1617,
-     7.1651,
-     69.3282,
-     16.1,
-     0.645
+     108.8486,
+     6.7042,
+     66.6969,
+     351.8,
+     0.827
     ],
     [
-     114.1461,
-     6.976,
-     68.2578,
-     33.1,
-     0.692
+     89.6187,
+     5.5979,
+     62.5852,
+     236.7,
+     0.613
     ],
     [
-     114.7109,
-     6.9833,
-     83.9421,
-     344.7,
-     0.868
+     95.8,
+     6.4124,
+     72.6581,
+     170.9,
+     0.741
     ],
     [
-     126.773,
-     7.7742,
-     88.2255,
-     122.3,
-     0.767
+     98.7556,
+     6.4766,
+     73.8848,
+     32.9,
+     0.651
     ],
     [
-     154.1601,
-     9.73,
-     97.7094,
-     356.8,
-     0.876
+     105.6644,
+     6.6065,
+     80.7296,
+     330.7,
+     0.983
     ],
     [
-     157.047,
-     9.84,
-     99.0898,
-     281.4,
-     0.873
+     132.804,
+     8.254,
+     90.3671,
+     317.7,
+     0.706
     ],
     [
-     162.8209,
-     9.9616,
-     101.8507,
-     200.1,
-     0.674
+     144.866,
+     9.2006,
+     94.6505,
+     277.8,
+     0.991
     ],
     [
-     -70.2972,
-     -0.0328,
-     -17.493,
+     -93.1119,
+     0.0844,
+     -26.8454,
+     22.7,
+     0.742
+    ],
+    [
+     -89.8388,
+     0.0788,
+     -17.8206,
+     333.2,
+     0.716
+    ],
+    [
+     67.8173,
+     0.3862,
+     -148.8556,
+     341.2,
+     0.827
+    ],
+    [
+     58.6217,
+     0.0119,
+     -155.4151,
+     266.5,
+     0.966
+    ],
+    [
+     57.4611,
+     -0.0673,
+     -136.4334,
      263.8,
      0.838
     ],
     [
-     -76.8473,
-     -0.1376,
-     -35.5412,
+     64.1281,
+     0.0383,
+     -118.428,
      161.4,
      0.606
     ],
     [
-     -94.2029,
-     0.0752,
-     -29.8537,
-     100.7,
-     0.973
-    ],
-    [
-     -85.4747,
-     0.0006,
-     -5.7876,
-     142.8,
-     0.688
-    ],
-    [
-     -84.3836,
-     -0.0231,
-     -2.7793,
-     268.2,
-     0.983
-    ],
-    [
-     -83.2926,
-     -0.0445,
-     0.229,
+     147.8621,
+     9.3249,
+     -3.055,
      290.1,
      0.829
     ],
     [
-     -154.239,
-     5.9235,
-     -187.3126,
+     156.5739,
+     9.8127,
+     -14.1975,
+     263.6,
+     0.73
+    ],
+    [
+     144.9502,
+     9.1394,
+     -17.934,
+     264.2,
+     0.717
+    ],
+    [
+     140.244,
+     8.8225,
+     -1.1186,
+     286.4,
+     0.66
+    ],
+    [
+     -11.4559,
+     -0.0392,
+     105.0172,
+     15.4,
+     0.864
+    ],
+    [
+     -22.0335,
+     -0.1614,
+     126.2367,
      52.3,
      0.879
     ],
     [
-     65.8156,
-     0.1726,
-     -153.6628,
-     33.5,
-     0.979
-    ],
-    [
-     60.2897,
-     0.9461,
-     -189.127,
-     208.9,
-     0.881
-    ],
-    [
-     53.0165,
-     -0.0316,
-     -148.4369,
-     28.4,
-     0.794
-    ],
-    [
-     59.6835,
-     -0.0847,
-     -130.4316,
+     85.8449,
+     6.2156,
+     -202.7849,
      276.6,
      0.824
     ],
     [
-     65.2392,
-     0.1503,
-     -115.4272,
-     34.2,
-     0.78
+     93.7972,
+     6.9408,
+     -180.9329,
+     143.5,
+     0.846
     ],
     [
-     145.0254,
-     9.1447,
-     -18.2368,
-     216.0,
-     0.665
+     -71.9595,
+     0.0244,
+     127.3428,
+     313.5,
+     0.989
     ],
     [
-     133.8172,
-     8.3303,
-     -3.9505,
-     130.9,
-     0.702
+     -50.0625,
+     0.0007,
+     134.6251,
+     134.4,
+     0.902
     ],
     [
-     -26.117,
-     -0.1492,
-     112.2541,
-     174.8,
-     0.772
-    ],
-    [
-     91.9491,
-     7.5228,
-     -204.7081,
-     340.0,
-     0.658
-    ],
-    [
-     102.9535,
-     7.3443,
-     -183.8177,
-     235.0,
-     0.778
-    ],
-    [
-     -54.1494,
-     -0.0481,
-     120.6431,
-     118.2,
-     0.862
-    ],
-    [
-     -73.5936,
-     0.0044,
-     136.8027,
-     356.5,
-     0.875
-    ],
-    [
-     -64.7215,
-     0.063,
-     141.8628,
-     233.1,
-     0.785
-    ],
-    [
-     -49.5187,
-     -0.016,
-     131.4716,
-     144.3,
-     0.738
-    ],
-    [
-     -105.8135,
-     0.3299,
-     138.1686,
-     152.6,
-     0.96
-    ],
-    [
-     -118.5308,
-     1.8907,
-     145.8732,
-     251.7,
-     0.906
-    ],
-    [
-     -97.4635,
-     -0.2295,
-     146.7628,
-     113.5,
-     0.626
-    ],
-    [
-     9.0544,
-     0.0332,
-     106.9717,
-     311.5,
-     0.872
-    ],
-    [
-     12.1662,
-     0.0346,
-     107.7178,
-     46.7,
-     0.987
-    ],
-    [
-     15.278,
-     0.0282,
-     108.4639,
-     263.3,
-     0.694
-    ],
-    [
-     -1.2163,
-     -0.1961,
-     54.0064,
-     247.1,
-     0.82
+     7.2294,
+     0.0666,
+     100.9126,
+     32.6,
+     0.894
     ],
     [
      1.3427,
      -0.2118,
      52.0851,
-     314.3,
-     0.89
+     144.3,
+     0.738
     ],
     [
-     -4.9892,
-     -0.2109,
-     40.0406,
-     48.5,
-     0.937
+     -2.4301,
+     -0.2322,
+     38.1195,
+     152.6,
+     0.96
     ],
     [
-     -44.3487,
-     -0.0538,
-     -25.0568,
-     299.3,
-     0.861
+     -8.9878,
+     -0.0981,
+     55.8833,
+     33.2,
+     0.702
     ],
     [
-     -21.081,
-     -0.0921,
-     -74.9352,
-     169.3,
-     0.611
+     -43.2397,
+     -0.0388,
+     -22.0552,
+     46.7,
+     0.946
     ],
     [
-     -32.6612,
-     -0.0567,
-     -86.8385,
-     135.9,
-     0.836
+     -46.5669,
+     -0.0908,
+     -31.0602,
+     293.4,
+     0.631
     ],
     [
      -44.6868,
      0.0125,
      -82.4539,
-     97.0,
-     0.643
+     347.5,
+     0.734
     ],
     [
-     -112.6073,
-     1.2717,
-     -84.8333,
-     144.8,
-     0.679
+     -56.7124,
+     -0.035,
+     -78.0693,
+     110.0,
+     1.0
     ],
     [
-     -129.1574,
-     3.4219,
-     -75.5454,
-     201.8,
-     0.933
+     -65.7316,
+     -0.1332,
+     -74.7808,
+     0.0,
+     0.636
     ],
     [
-     -128.0728,
-     3.2774,
-     -72.5348,
-     205.4,
-     0.745
+     -118.6375,
+     2.0339,
+     -82.6894,
+     160.5,
+     0.778
     ],
     [
-     -108.1757,
-     0.658,
-     -47.6743,
-     36.0,
-     0.602
+     -123.7345,
+     2.6573,
+     -60.4924,
+     37.0,
+     0.763
     ],
     [
-     -107.0917,
-     0.5701,
-     -44.6635,
-     318.4,
-     0.99
+     -109.8548,
+     0.8248,
+     -50.2684,
+     144.5,
+     0.636
     ],
     [
-     -85.7446,
-     -0.0996,
-     -51.3806,
-     174.2,
-     0.882
+     17.0865,
+     -0.089,
+     -70.2484,
+     117.2,
+     0.746
     ],
     [
-     -86.8286,
-     -0.0964,
-     -54.3914,
-     134.7,
-     0.618
+     12.6208,
+     -0.0065,
+     -82.2442,
+     355.5,
+     0.916
     ],
     [
-     -90.0807,
-     -0.0467,
-     -63.4238,
-     236.4,
-     0.958
-    ],
-    [
-     -97.1797,
-     0.0255,
-     -65.0727,
-     242.5,
-     0.856
-    ],
-    [
-     15.9701,
-     -0.071,
-     -73.2473,
-     30.4,
-     0.902
-    ],
-    [
-     10.388,
-     0.0145,
-     -88.242,
-     235.8,
-     0.606
+     9.2716,
+     0.0116,
+     -91.241,
+     65.3,
+     0.776
     ],
     [
      8.1552,
      -0.0013,
      -94.2399,
-     119.3,
-     0.643
+     105.9,
+     0.744
     ],
     [
-     7.0388,
-     -0.0234,
-     -97.2388,
-     300.2,
-     0.706
+     -6.6884,
+     -0.0185,
+     -76.0596,
+     299.3,
+     0.861
     ],
     [
-     -159.2655,
-     5.1216,
-     -3.7556,
-     216.4,
-     0.766
-    ],
-    [
-     -166.326,
-     5.1631,
-     11.9712,
-     107.3,
-     0.626
-    ],
-    [
-     -146.0564,
-     5.0851,
-     2.4368,
-     285.6,
-     0.661
+     -153.4742,
+     5.0952,
+     -6.4797,
+     26.9,
+     0.628
     ],
     [
      -35.0773,
      -0.1555,
      130.3589,
-     207.2,
-     0.684
+     283.0,
+     0.677
     ],
     [
-     -37.7997,
-     -0.1764,
-     124.8645,
-     61.9,
-     0.858
+     -163.6325,
+     5.1304,
+     -28.8005,
+     289.0,
+     0.809
     ],
     [
-     -160.9598,
-     5.0789,
-     -22.9854,
-     336.8,
-     0.76
+     -162.2961,
+     5.1015,
+     -25.893,
+     141.3,
+     0.854
     ],
     [
-     -139.9743,
-     4.5828,
-     -17.4442,
-     90.9,
-     0.748
+     -159.6234,
+     5.064,
+     -20.0778,
+     86.3,
+     0.963
     ],
     [
-     -141.099,
-     4.6653,
-     -20.4401,
-     22.9,
-     0.845
+     -145.4092,
+     4.9574,
+     -11.8885,
+     318.8,
+     0.95
     ],
     [
-     -92.3592,
-     -0.1321,
-     -141.7033,
-     237.1,
+     -162.5378,
+     5.2076,
+     -50.672,
+     97.6,
+     0.926
+    ],
+    [
+     -165.517,
+     5.2014,
+     -51.84,
+     39.7,
+     0.728
+    ],
+    [
+     -117.9291,
+     2.2065,
+     -164.0408,
+     229.0,
      0.994
     ],
     [
-     -106.9542,
-     0.9733,
-     -171.5163,
-     38.7,
-     0.937
+     -116.8057,
+     1.9923,
+     -161.0445,
+     29.8,
+     0.851
     ],
     [
-     -112.9575,
-     1.6341,
-     -169.298,
-     357.1,
-     0.742
+     -115.6823,
+     1.7838,
+     -158.0481,
+     211.2,
+     0.72
     ],
     [
-     -45.5437,
-     0.091,
-     -95.2358,
-     301.6,
-     0.715
+     -108.9418,
+     0.7439,
+     -140.0702,
+     216.4,
+     0.766
     ],
     [
-     -37.4798,
-     0.0316,
-     -101.5065,
-     150.3,
-     0.604
+     -96.9708,
+     -0.1136,
+     -126.347,
+     174.7,
+     0.733
     ],
     [
-     -54.4877,
-     -0.0398,
-     -129.8158,
-     265.3,
-     0.719
+     -93.9689,
+     -0.1303,
+     -127.4552,
+     290.6,
+     0.835
     ],
     [
-     -60.5002,
-     0.0089,
-     -127.6227,
-     246.9,
-     0.978
+     -48.5588,
+     0.0999,
+     -94.1638,
+     298.8,
+     0.874
+    ],
+    [
+     -63.5065,
+     0.0256,
+     -126.5261,
+     252.5,
+     0.655
     ],
     [
      -63.3525,
      -0.0016,
      -116.371,
-     226.0,
-     0.789
+     228.7,
+     0.806
     ],
     [
-     -48.5619,
-     -0.0396,
-     -153.9116,
-     206.0,
-     0.917
+     -60.0993,
+     0.0381,
+     -107.339,
+     126.0,
+     0.637
     ],
     [
-     -61.1963,
-     0.2694,
-     -167.3124,
-     188.6,
-     0.606
+     -44.4103,
+     -0.0999,
+     -129.9097,
+     303.1,
+     0.735
     ],
     [
-     -49.1586,
-     0.3268,
-     -171.6638,
-     123.4,
-     0.965
+     -41.4059,
+     -0.1143,
+     -131.0114,
+     74.3,
+     0.619
+    ],
+    [
+     -64.2057,
+     0.2512,
+     -166.2245,
+     64.3,
+     0.872
+    ],
+    [
+     -43.3147,
+     0.6115,
+     -180.5907,
+     214.5,
+     0.782
     ],
     [
      -71.4231,
      0.6968,
      -182.978,
-     251.4,
-     0.607
+     123.2,
+     0.71
     ],
     [
-     -75.4842,
-     0.0828,
-     -151.098,
-     34.1,
-     0.742
+     -82.9426,
+     0.3166,
+     -172.2199,
+     195.3,
+     0.788
     ],
     [
-     -24.1596,
-     -0.0133,
-     -159.0074,
-     95.2,
-     0.994
+     -33.1582,
+     0.3783,
+     -174.2537,
+     329.6,
+     0.886
     ],
     [
      -21.1507,
      0.0163,
      -160.0969,
-     170.5,
-     0.879
+     343.9,
+     0.926
+    ],
+    [
+     -5.5669,
+     0.7455,
+     -182.763,
+     301.6,
+     0.715
     ],
     [
      -11.0685,
      1.2175,
      -197.7874,
-     78.7,
-     0.743
+     298.9,
+     0.878
     ],
     [
-     -49.3545,
-     0.889,
-     -187.173,
-     338.6,
-     0.869
-    ],
-    [
-     -46.0446,
-     0.529,
-     -178.1616,
-     149.9,
-     0.912
-    ],
-    [
-     -41.6174,
-     -0.1125,
-     -152.8833,
-     236.1,
-     0.721
-    ],
-    [
-     -40.5137,
-     -0.1365,
-     -149.8797,
-     140.9,
-     0.898
-    ],
-    [
-     -19.4732,
-     -0.1148,
-     -138.9818,
-     200.3,
-     0.734
-    ],
-    [
-     -10.4446,
-     -0.1373,
-     -142.2442,
-     30.8,
-     0.715
-    ],
-    [
-     -16.2701,
-     0.1669,
-     -165.4779,
-     127.8,
-     0.864
+     -37.2026,
+     -0.1542,
+     -140.8687,
+     226.0,
+     0.789
     ],
     [
      -22.2874,
      0.0946,
      -163.2979,
-     112.0,
-     0.99
+     206.0,
+     0.917
     ],
     [
-     -0.2277,
-     -0.1642,
-     -149.5505,
-     296.3,
-     0.815
+     6.3118,
+     -0.1347,
+     -113.6822,
+     188.6,
+     0.606
     ],
     [
-     -3.2371,
-     -0.1617,
-     -148.4626,
-     249.0,
-     0.792
+     17.0582,
+     -0.0861,
+     -120.9788,
+     123.4,
+     0.965
     ],
     [
-     -6.2465,
-     -0.1545,
-     -147.3747,
-     130.6,
-     0.656
+     -18.4864,
+     -0.0754,
+     -104.8105,
+     34.1,
+     0.742
     ],
     [
-     -10.0874,
-     -0.1001,
-     -111.9513,
-     302.7,
-     0.73
+     14.6195,
+     -0.1611,
+     46.2009,
+     95.2,
+     0.994
     ],
     [
-     -2.7162,
-     -0.1222,
-     -110.4179,
-     123.1,
-     0.766
+     17.6708,
+     -0.1332,
+     45.2369,
+     170.5,
+     0.879
     ],
     [
-     3.3025,
-     -0.1408,
-     -112.5941,
-     291.0,
-     0.774
+     -148.0601,
+     5.1875,
+     80.9523,
+     78.7,
+     0.743
     ],
     [
-     9.3211,
-     -0.1206,
-     -114.7703,
-     175.6,
-     0.931
+     -145.0548,
+     5.0738,
+     79.8529,
+     136.2,
+     0.98
     ],
     [
-     11.5495,
-     -0.1836,
-     -136.0007,
-     336.0,
-     0.801
+     -100.0335,
+     0.1754,
+     57.8815,
+     338.6,
+     0.869
     ],
     [
-     10.4478,
-     -0.1929,
-     -139.005,
-     223.5,
-     0.859
+     -108.549,
+     0.7463,
+     53.4564,
+     149.9,
+     0.912
     ],
     [
-     -40.5404,
-     0.0612,
-     -99.9704,
-     239.1,
-     0.895
+     -109.9719,
+     0.8915,
+     54.1919,
+     236.1,
+     0.721
     ],
     [
-     -24.521,
-     -0.0549,
-     -102.6789,
-     101.3,
-     0.875
-    ],
-    [
-     -9.4345,
-     -0.0994,
-     -108.0078,
-     309.3,
-     0.811
-    ],
-    [
-     30.4869,
-     -0.1037,
-     37.8254,
-     64.6,
-     0.788
-    ],
-    [
-     -156.7832,
-     5.2756,
-     75.8145,
-     290.0,
-     0.723
-    ],
-    [
-     -155.6706,
-     5.26,
-     78.8148,
-     268.7,
-     0.843
-    ],
-    [
-     -124.5005,
-     2.6981,
-     57.5189,
-     124.5,
-     0.613
+     -114.803,
+     1.4162,
+     50.4669,
+     140.9,
+     0.898
     ],
     [
      -100.8039,
      0.2159,
      68.4224,
-     296.9,
-     0.88
+     200.3,
+     0.734
     ],
     [
-     -164.4032,
-     5.9194,
-     64.2562,
-     247.6,
-     0.992
+     -162.8932,
+     5.278,
+     78.0436,
+     212.3,
+     0.839
     ],
     [
-     -122.6254,
-     2.4466,
-     53.2501,
-     150.4,
-     0.897
+     -121.409,
+     2.2784,
+     56.2099,
+     112.0,
+     0.99
     ],
     [
-     -130.8573,
-     5.2557,
-     50.4151,
-     47.5,
-     0.855
+     -133.8464,
+     5.4376,
+     51.5578,
+     296.3,
+     0.815
     ],
     [
-     -140.233,
-     4.7485,
-     96.8418,
-     346.3,
-     0.963
+     -138.7695,
+     5.3314,
+     54.493,
+     249.0,
+     0.792
     ],
     [
-     -143.7879,
-     5.0224,
-     112.1935,
-     69.1,
-     0.743
+     -130.2213,
+     3.7633,
+     102.7362,
+     130.6,
+     0.656
     ],
     [
-     -140.7862,
-     4.8494,
-     111.0845,
-     169.3,
-     0.714
+     -149.7913,
+     5.156,
+     114.4115,
+     149.0,
+     0.706
+    ],
+    [
+     -146.7896,
+     5.1272,
+     113.3025,
+     59.7,
+     0.662
     ],
     [
      -134.7828,
      4.3198,
      108.8665,
-     71.3,
-     0.767
+     175.6,
+     0.931
     ],
     [
-     -109.9352,
-     1.0137,
-     94.9686,
-     150.5,
-     0.96
+     -118.0546,
+     2.0968,
+     102.5371,
+     61.4,
+     0.846
     ],
     [
-     -125.4231,
-     3.0497,
-     90.8652,
-     147.2,
-     0.836
+     -92.4802,
+     0.0079,
+     79.028,
+     309.3,
+     0.811
     ],
     [
-     -131.5382,
-     3.8729,
-     94.6062,
-     17.8,
-     0.83
+     -102.346,
+     0.2842,
+     78.8657,
+     319.4,
+     0.953
     ],
     [
-     -132.2488,
-     4.0054,
-     101.7197,
-     152.1,
-     0.666
-    ],
-    [
-     -124.5663,
-     3.0175,
-     103.9184,
-     201.2,
-     0.887
-    ],
-    [
-     -113.3604,
-     1.418,
-     90.7769,
-     286.9,
-     0.867
-    ],
-    [
-     -102.2369,
-     0.2653,
-     92.613,
-     266.5,
-     0.649
+     -109.4148,
+     0.9027,
+     82.6042,
+     266.0,
+     0.857
     ]
    ]
   },
@@ -40145,1163 +40829,1268 @@
      124.3292,
      7.7339,
      134.061,
-     315.9,
-     0.865
+     332.9,
+     0.747
     ],
     [
-     116.2303,
-     7.0932,
-     128.9067,
-     69.1,
-     0.783
+     118.9299,
+     7.2883,
+     130.6248,
+     259.4,
+     0.707
+    ],
+    [
+     110.831,
+     6.7889,
+     125.4705,
+     359.8,
+     0.936
+    ],
+    [
+     103.431,
+     6.5608,
+     124.5421,
+     187.5,
+     0.711
     ],
     [
      71.0837,
      0.9585,
      27.0317,
-     170.5,
-     0.704
+     58.2,
+     0.855
     ],
     [
-     156.7091,
-     9.7289,
-     129.7462,
-     214.1,
-     0.908
+     78.642,
+     2.9065,
+     21.113,
+     0.3,
+     0.768
+    ],
+    [
+     68.9538,
+     0.6115,
+     12.0059,
+     275.2,
+     0.824
+    ],
+    [
+     66.0383,
+     0.0912,
+     26.6783,
+     40.0,
+     0.888
     ],
     [
      158.1807,
      9.7799,
      118.3994,
-     158.6,
-     0.648
+     173.2,
+     0.658
     ],
     [
-     119.8095,
-     7.2904,
-     105.295,
-     178.1,
-     0.976
+     118.5244,
+     7.2115,
+     108.2256,
+     58.9,
+     0.896
     ],
     [
-     118.3379,
-     7.198,
-     116.6418,
-     23.5,
-     0.969
+     121.2754,
+     7.3918,
+     117.9111,
+     165.1,
+     0.636
+    ],
+    [
+     138.9004,
+     8.7753,
+     125.5269,
+     180.1,
+     0.964
+    ],
+    [
+     147.7128,
+     9.3449,
+     129.3348,
+     170.5,
+     0.704
+    ],
+    [
+     -40.7875,
+     -0.0015,
+     67.8411,
+     263.8,
+     0.766
+    ],
+    [
+     -40.9342,
+     0.0538,
+     52.2878,
+     255.5,
+     0.815
     ],
     [
      -75.8854,
      -0.1527,
      58.483,
-     301.0,
+     167.6,
+     0.859
+    ],
+    [
+     -63.6472,
+     0.0312,
+     79.9053,
+     321.1,
+     0.604
+    ],
+    [
+     -60.6536,
+     0.017,
+     78.7745,
+     121.7,
+     0.854
+    ],
+    [
+     -57.66,
+     0.0005,
+     77.6438,
+     183.1,
+     0.972
+    ],
+    [
+     -138.2556,
+     4.8193,
+     -163.9377,
+     135.8,
      0.717
     ],
     [
-     -75.5174,
-     -0.1162,
-     66.7779,
+     -135.4557,
+     4.5151,
+     -162.3884,
      166.7,
      0.832
     ],
     [
-     -54.6665,
-     -0.0144,
-     76.5131,
-     253.2,
-     0.724
-    ],
-    [
-     -126.5276,
-     3.6616,
-     -175.101,
-     95.3,
-     0.79
-    ],
-    [
-     -134.9261,
-     4.8468,
-     -179.7514,
-     29.5,
-     0.634
-    ],
-    [
-     -140.525,
-     5.4553,
-     -182.8516,
-     56.0,
-     0.638
-    ],
-    [
-     -157.794,
-     5.7259,
-     -181.4515,
-     95.6,
-     0.941
-    ],
-    [
-     -146.6554,
-     5.4037,
-     -168.5857,
-     78.8,
-     0.836
+     -141.7581,
+     4.7184,
+     -89.7713,
+     47.4,
+     0.911
     ],
     [
      -131.91,
      3.7911,
      -91.4057,
-     9.7,
-     0.861
+     99.4,
+     0.794
     ],
     [
      -126.8329,
      3.188,
      -96.9755,
-     141.4,
-     0.637
+     303.0,
+     0.662
     ],
     [
      -104.9679,
      0.3209,
      -102.0179,
-     170.2,
-     0.684
+     122.4,
+     0.838
     ],
     [
-     -98.9662,
-     -0.0946,
-     -104.2405,
-     325.2,
-     0.791
+     -101.9671,
+     0.071,
+     -103.1292,
+     56.4,
+     0.708
+    ],
+    [
+     -95.9654,
+     -0.1791,
+     -105.3518,
+     35.5,
+     0.995
     ],
     [
      -92.9646,
      -0.194,
      -106.4631,
-     272.8,
-     0.796
+     338.2,
+     0.642
     ],
     [
-     -90.032,
-     -0.1864,
-     -110.9757,
-     104.2,
-     0.993
+     -92.5681,
+     -0.1433,
+     -120.2516,
+     29.5,
+     0.634
     ],
     [
-     -88.2048,
-     -0.1437,
-     -117.8488,
+     -98.1049,
+     -0.0854,
+     -122.9696,
+     56.0,
+     0.638
+    ],
+    [
+     -115.9721,
+     1.6788,
+     -115.9409,
+     95.6,
+     0.941
+    ],
+    [
+     -130.8615,
+     3.7495,
+     -110.0836,
+     78.8,
+     0.836
+    ],
+    [
+     142.837,
+     9.0147,
+     -103.1886,
      245.8,
      0.808
-    ],
-    [
-     -93.3889,
-     -0.1466,
-     -119.7336,
-     104.8,
-     0.899
-    ],
-    [
-     145.9463,
-     9.2321,
-     -103.9448,
-     60.0,
-     0.852
-    ],
-    [
-     86.8683,
-     5.0568,
-     -89.5772,
-     2.1,
-     0.774
-    ],
-    [
-     99.3974,
-     6.4436,
-     -78.1927,
-     46.2,
-     0.617
     ],
     [
      102.5067,
      6.493,
      -78.949,
-     104.9,
-     0.961
+     115.6,
+     0.616
     ],
     [
-     114.3457,
-     7.002,
-     104.7071,
-     334.2,
-     0.865
+     118.0535,
+     7.2684,
+     -82.7302,
+     31.0,
+     0.933
     ],
     [
-     74.1602,
-     1.6628,
-     101.5051,
-     288.6,
-     0.77
+     136.7096,
+     8.5846,
+     -87.2677,
+     325.0,
+     0.697
     ],
     [
-     83.2735,
-     4.1371,
-     104.5231,
+     149.147,
+     9.4392,
+     -90.2927,
+     203.0,
+     0.64
+    ],
+    [
+     80.2357,
+     3.2921,
+     103.5171,
+     340.3,
+     0.805
+    ],
+    [
+     95.4245,
+     6.5276,
+     108.547,
+     159.1,
+     0.637
+    ],
+    [
+     162.4447,
+     9.8905,
+     43.9156,
+     9.9,
+     0.785
+    ],
+    [
+     130.1893,
+     8.1493,
+     -148.7364,
      223.5,
      0.823
-    ],
-    [
-     86.3112,
-     4.9349,
-     105.529,
-     188.4,
-     0.644
-    ],
-    [
-     89.349,
-     5.6339,
-     106.535,
-     98.8,
-     0.63
-    ],
-    [
-     165.7569,
-     9.9958,
-     29.0705,
-     48.1,
-     0.946
-    ],
-    [
-     85.0609,
-     4.6895,
-     120.0879,
-     301.5,
-     0.963
-    ],
-    [
-     57.1491,
-     0.0002,
-     122.5173,
-     320.9,
-     0.746
-    ],
-    [
-     71.9747,
-     1.3017,
-     128.534,
-     88.4,
-     0.702
-    ],
-    [
-     124.073,
-     7.6951,
-     -146.8521,
-     349.5,
-     0.619
     ],
     [
      133.2475,
      8.3865,
      -149.6786,
-     72.6,
-     0.609
+     188.4,
+     0.644
     ],
     [
      136.3057,
      8.6269,
      -150.6207,
-     279.8,
-     0.743
+     98.8,
+     0.63
     ],
     [
-     139.1734,
-     8.8902,
-     -154.86,
-     114.4,
-     0.679
+     33.3746,
+     -0.0971,
+     140.4987,
+     0.9,
+     0.775
     ],
     [
-     -163.0689,
-     5.1392,
-     119.4099,
-     12.4,
-     0.843
-    ],
-    [
-     -157.9897,
-     5.1221,
-     116.5052,
-     61.7,
-     0.641
-    ],
-    [
-     167.3729,
-     9.8925,
-     -130.4686,
-     27.7,
-     0.796
+     25.4697,
+     -0.0349,
+     143.6987,
+     48.1,
+     0.946
     ],
     [
      165.0059,
      9.8388,
      -136.4148,
-     91.3,
-     0.694
+     350.8,
+     0.834
     ],
     [
-     144.3026,
-     9.1232,
-     78.9623,
-     219.8,
-     0.951
+     163.8224,
+     9.8249,
+     -139.3879,
+     170.8,
+     0.953
     ],
     [
-     111.1304,
-     6.8108,
-     67.1873,
-     279.2,
-     0.856
+     147.3182,
+     9.3026,
+     80.0327,
+     301.5,
+     0.963
     ],
     [
-     108.8486,
-     6.7042,
-     66.6969,
-     100.1,
-     0.935
-    ],
-    [
-     108.2191,
-     6.6901,
-     59.9336,
-     133.8,
-     0.64
-    ],
-    [
-     102.3098,
-     6.5187,
-     57.4757,
-     100.4,
-     0.774
+     110.0922,
+     6.7694,
+     63.7484,
+     320.9,
+     0.746
     ],
     [
      96.4006,
      6.4627,
      55.0178,
-     68.3,
-     0.87
+     88.4,
+     0.702
     ],
     [
-     101.0288,
-     6.4893,
-     74.6964,
-     85.7,
-     0.739
+     90.862,
+     5.8325,
+     59.6366,
+     168.6,
+     0.711
     ],
     [
-     105.6644,
-     6.6065,
-     80.7296,
-     16.5,
-     0.628
+     111.6954,
+     6.8335,
+     82.8713,
+     349.5,
+     0.619
+    ],
+    [
+     120.7419,
+     7.3444,
+     86.0838,
+     72.6,
+     0.609
     ],
     [
      123.7575,
      7.5517,
      87.1546,
-     75.7,
-     0.763
+     279.8,
+     0.743
     ],
     [
-     144.866,
-     9.2006,
-     94.6505,
-     183.2,
-     0.791
+     126.773,
+     7.7742,
+     88.2255,
+     114.4,
+     0.679
     ],
     [
-     -95.2939,
-     0.0636,
-     -32.862,
-     146.6,
-     0.685
+     154.1601,
+     9.73,
+     97.7094,
+     304.2,
+     0.818
+    ],
+    [
+     -94.2029,
+     0.0752,
+     -29.8537,
+     302.7,
+     0.603
+    ],
+    [
+     -87.6567,
+     0.0464,
+     -11.8041,
+     184.1,
+     1.0
     ],
     [
      -86.5657,
      0.0242,
      -8.7958,
-     1.6,
-     0.903
+     231.0,
+     0.959
     ],
     [
-     -159.7656,
-     6.0193,
-     -190.5402,
-     29.3,
-     0.918
+     -84.3836,
+     -0.0231,
+     -2.7793,
+     85.7,
+     0.739
     ],
     [
-     58.5723,
-     -0.0784,
-     -133.4325,
-     165.1,
-     0.605
+     -167.5278,
+     5.6234,
+     -178.3818,
+     359.2,
+     0.64
     ],
     [
-     66.3504,
-     0.2942,
-     -112.4263,
-     162.6,
-     0.759
+     -153.8627,
+     5.7431,
+     -181.5297,
+     90.7,
+     0.813
+    ],
+    [
+     -154.239,
+     5.9235,
+     -187.3126,
+     36.7,
+     0.639
+    ],
+    [
+     -165.2921,
+     6.1337,
+     -193.7678,
+     29.6,
+     0.97
+    ],
+    [
+     48.6202,
+     0.7535,
+     -182.4227,
+     127.0,
+     0.888
+    ],
+    [
+     56.3069,
+     -0.0132,
+     -153.0518,
+     92.0,
+     0.891
+    ],
+    [
+     53.0165,
+     -0.0316,
+     -148.4369,
+     297.7,
+     0.904
     ],
     [
      69.6839,
      0.863,
      -103.4236,
-     298.5,
-     0.802
+     96.7,
+     0.931
     ],
     [
-     142.9244,
-     8.9951,
-     -20.4112,
-     338.4,
-     0.948
+     152.8459,
+     9.6133,
+     -7.0702,
+     295.7,
+     0.83
+    ],
+    [
+     147.5163,
+     9.3169,
+     -20.2457,
+     186.1,
+     0.712
     ],
     [
      133.5383,
      8.3059,
      -21.7992,
-     180.7,
-     0.802
+     41.1,
+     0.718
     ],
     [
-     131.0461,
-     8.1222,
-     -19.7919,
-     346.7,
-     0.704
-    ],
-    [
-     -11.4559,
-     -0.0392,
-     105.0172,
-     306.1,
-     0.725
+     -8.3013,
+     -0.0345,
+     105.5546,
+     152.3,
+     0.733
     ],
     [
      -17.765,
      -0.0535,
      103.9425,
-     87.1,
-     0.873
-    ],
-    [
-     -25.5723,
-     -0.1264,
-     109.1008,
-     230.5,
-     0.966
+     221.7,
+     0.887
     ],
     [
      95.0012,
      7.9028,
      -205.6697,
-     36.6,
-     0.841
+     337.6,
+     0.878
     ],
     [
-     85.8449,
-     6.2156,
-     -202.7849,
-     86.4,
-     0.66
+     88.897,
+     6.9443,
+     -203.7465,
+     165.1,
+     0.605
     ],
     [
-     103.2976,
-     7.9389,
-     -200.7085,
-     88.5,
-     0.936
+     107.1929,
+     7.615,
+     -188.5156,
+     298.5,
+     0.802
     ],
     [
-     102.3238,
-     8.0011,
-     -203.7567,
-     68.0,
-     0.613
+     -71.0306,
+     0.0322,
+     140.7881,
+     180.7,
+     0.802
     ],
     [
-     -50.9949,
-     -0.0785,
-     121.1806,
-     317.2,
-     0.886
+     -67.876,
+     0.0562,
+     141.3254,
+     346.7,
+     0.704
     ],
     [
-     -71.4148,
-     0.0228,
-     124.1895,
-     96.0,
-     0.669
+     -108.9741,
+     0.6684,
+     137.6686,
+     114.1,
+     0.744
     ],
     [
-     24.6134,
-     -0.0319,
-     110.7022,
-     105.7,
-     0.819
+     -118.0255,
+     1.8342,
+     142.7134,
+     98.2,
+     0.805
     ],
     [
-     33.9488,
-     -0.0994,
-     112.9406,
-     12.3,
-     0.853
+     -97.4635,
+     -0.2295,
+     146.7628,
+     49.6,
+     0.968
     ],
     [
-     -3.7752,
-     -0.1661,
-     55.9278,
-     37.2,
-     0.713
+     75.8508,
+     2.1855,
+     143.025,
+     118.5,
+     0.94
     ],
     [
-     -2.4301,
-     -0.2322,
-     38.1195,
-     208.5,
-     0.887
+     21.5016,
+     -0.0069,
+     109.9561,
+     105.9,
+     0.674
     ],
     [
-     -20.6772,
-     0.0323,
-     46.8848,
-     166.5,
-     0.648
+     -1.2163,
+     -0.1961,
+     54.0064,
+     299.8,
+     0.957
     ],
     [
-     -41.0215,
-     -0.0229,
-     -16.0519,
-     214.2,
-     0.873
+     -19.3163,
+     0.019,
+     48.323,
+     312.3,
+     0.696
     ],
     [
-     -47.676,
-     -0.1044,
-     -34.0618,
-     192.9,
-     0.994
+     -42.1306,
+     -0.0284,
+     -19.0535,
+     83.1,
+     0.69
+    ],
+    [
+     -49.8942,
+     -0.1207,
+     -40.0651,
+     259.0,
+     0.788
+    ],
+    [
+     -50.7076,
+     -0.1233,
+     -42.1059,
+     194.4,
+     0.87
     ],
     [
      -23.4517,
      -0.0836,
      -80.8799,
-     333.5,
-     0.826
+     105.7,
+     0.819
     ],
     [
-     -35.6676,
-     -0.0409,
-     -85.7423,
-     73.6,
-     0.772
+     -32.6612,
+     -0.0567,
+     -86.8385,
+     12.3,
+     0.853
     ],
     [
-     -38.674,
-     -0.0201,
-     -84.6462,
-     335.5,
-     0.995
+     -124.6677,
+     2.8345,
+     -80.5454,
+     166.5,
+     0.648
     ],
     [
-     -41.6804,
-     -0.0006,
-     -83.55,
-     3.2,
-     0.613
-    ],
-    [
-     -47.6932,
-     0.0159,
-     -81.3577,
-     158.6,
-     0.836
-    ],
-    [
-     -56.7124,
-     -0.035,
-     -78.0693,
-     240.7,
-     0.915
-    ],
-    [
-     -126.9882,
-     3.128,
-     -69.5242,
-     185.8,
-     0.837
-    ],
-    [
-     -115.885,
-     1.5598,
-     -48.1242,
-     345.4,
-     0.7
-    ],
-    [
-     -109.2598,
-     0.7606,
-     -50.6851,
-     246.7,
-     0.618
-    ],
-    [
-     21.5521,
-     -0.0766,
-     -58.2527,
-     45.5,
-     0.6
+     -107.0917,
+     0.5701,
+     -44.6635,
+     270.2,
+     0.657
     ],
     [
      18.2029,
      -0.1006,
      -67.2495,
-     98.6,
-     0.73
+     273.4,
+     0.905
     ],
     [
-     14.8536,
-     -0.0491,
-     -76.2463,
-     4.2,
-     0.944
+     2.6292,
+     -0.0602,
+     -99.9356,
+     78.4,
+     0.671
     ],
     [
-     12.6208,
-     -0.0065,
-     -82.2442,
-     107.5,
-     0.631
+     -0.3751,
+     -0.0475,
+     -98.8338,
+     315.6,
+     0.625
     ],
     [
-     9.2716,
-     0.0116,
-     -91.241,
-     58.7,
-     0.764
+     -10.0387,
+     -0.0085,
+     -85.056,
+     214.2,
+     0.873
     ],
     [
-     -9.3882,
-     -0.0333,
-     -95.5286,
-     83.3,
-     0.841
+     -3.3381,
+     -0.0352,
+     -67.0631,
+     192.9,
+     0.994
     ],
     [
-     -12.2722,
-     -0.0271,
-     -91.0536,
-     264.3,
+     -150.5785,
+     5.0848,
+     -7.8418,
+     263.5,
+     0.766
+    ],
+    [
+     -165.0568,
+     5.1509,
+     -1.0315,
+     116.5,
+     0.851
+    ],
+    [
+     -166.326,
+     5.1631,
+     11.9712,
+     193.0,
      0.854
-    ],
-    [
-     -2.2213,
-     -0.0253,
-     -64.0643,
-     37.6,
-     0.881
-    ],
-    [
-     -153.4742,
-     5.0952,
-     -6.4797,
-     14.8,
-     0.622
     ],
     [
      -157.639,
      5.1451,
      7.885,
-     315.2,
-     0.618
+     275.1,
+     0.862
     ],
     [
-     -44.1749,
-     -0.1276,
-     124.3015,
-     80.6,
-     0.74
+     -37.7997,
+     -0.1764,
+     124.8645,
+     227.2,
+     0.62
     ],
     [
-     -163.6325,
-     5.1304,
-     -28.8005,
-     287.0,
-     0.969
+     -47.9193,
+     -0.0628,
+     127.1809,
+     359.8,
+     0.705
     ],
     [
-     -162.2961,
-     5.1015,
-     -25.893,
-     184.5,
-     0.987
+     -48.4909,
+     -0.0181,
+     133.5553,
+     192.7,
+     0.808
     ],
     [
-     -159.6234,
-     5.064,
-     -20.0778,
-     315.8,
-     0.659
+     -156.9506,
+     5.059,
+     -14.2626,
+     356.8,
+     0.971
     ],
     [
-     -143.3484,
-     4.8276,
-     -26.4318,
-     108.6,
-     0.648
+     -142.4329,
+     4.7886,
+     -13.064,
+     341.6,
+     0.795
     ],
     [
-     -145.5978,
-     4.9734,
-     -32.4234,
-     103.5,
-     0.765
+     -139.9743,
+     4.5828,
+     -17.4442,
+     350.1,
+     0.979
+    ],
+    [
+     -141.099,
+     4.6653,
+     -20.4401,
+     324.4,
+     0.722
+    ],
+    [
+     -144.4731,
+     4.904,
+     -29.4276,
+     322.5,
+     0.788
+    ],
+    [
+     -146.7225,
+     5.0331,
+     -35.4193,
+     332.0,
+     0.719
     ],
     [
      -147.8472,
      5.0838,
      -38.4151,
-     60.7,
-     0.866
+     23.4,
+     0.612
     ],
     [
-     -162.5378,
-     5.2076,
-     -50.672,
-     78.9,
-     0.653
+     -109.9558,
+     1.2833,
+     -170.4072,
+     345.0,
+     0.863
     ],
     [
-     -95.7317,
-     -0.0698,
-     -150.6914,
-     220.5,
-     0.6
+     -112.9575,
+     1.6341,
+     -169.298,
+     35.5,
+     0.896
     ],
     [
-     -97.98,
-     0.0671,
-     -156.6835,
-     233.3,
-     0.979
+     -111.1886,
+     1.054,
+     -146.0628,
+     14.8,
+     0.622
     ],
     [
-     -117.9291,
-     2.2065,
-     -164.0408,
-     162.0,
-     0.706
-    ],
-    [
-     -110.0652,
-     0.8933,
-     -143.0665,
-     45.3,
-     0.708
-    ],
-    [
-     -105.5716,
-     0.4044,
-     -131.0812,
-     257.3,
-     0.655
-    ],
-    [
-     -104.4482,
-     0.3116,
-     -128.0849,
-     128.1,
-     0.613
+     -99.9728,
+     -0.0032,
+     -125.2387,
+     228.3,
+     0.646
     ],
     [
      -90.9669,
      -0.1151,
      -128.5635,
-     347.3,
-     0.619
+     315.2,
+     0.618
     ],
     [
-     -47.2407,
-     -0.0808,
-     -128.602,
-     29.5,
-     0.657
+     -39.5135,
+     0.0431,
+     -97.3798,
+     183.9,
+     0.85
     ],
     [
-     -63.5065,
-     0.0256,
-     -126.5261,
-     60.6,
-     0.865
+     -60.5002,
+     0.0089,
+     -127.6227,
+     75.1,
+     0.693
     ],
     [
-     -64.4369,
-     0.0022,
-     -119.3816,
-     312.0,
-     0.925
+     -62.4367,
+     0.0099,
+     -123.2999,
+     220.5,
+     0.6
     ],
     [
-     -53.4235,
-     -0.0378,
-     -126.6048,
-     178.6,
-     0.776
-    ],
-    [
-     -50.4191,
-     -0.0599,
-     -127.7065,
-     196.3,
-     0.917
-    ],
-    [
-     -41.4059,
-     -0.1143,
-     -131.0114,
-     190.8,
-     0.855
-    ],
-    [
-     -38.4015,
-     -0.1242,
-     -132.113,
-     226.6,
-     0.807
+     -56.4279,
+     -0.0173,
+     -125.5032,
+     233.3,
+     0.979
     ],
     [
      -33.5253,
      -0.1554,
      -140.7189,
-     331.2,
-     0.934
+     162.0,
+     0.706
     ],
     [
-     -57.6384,
-     0.0515,
-     -150.7846,
-     357.0,
-     0.932
+     -48.5619,
+     -0.0396,
+     -153.9116,
+     45.3,
+     0.708
+    ],
+    [
+     -60.6639,
+     0.0841,
+     -149.7422,
+     257.3,
+     0.655
+    ],
+    [
+     -63.6893,
+     0.1107,
+     -148.6999,
+     128.1,
+     0.613
+    ],
+    [
+     -71.3557,
+     0.1074,
+     -139.2905,
+     347.3,
+     0.619
     ],
     [
      -59.469,
      0.0794,
      -153.3757,
-     126.5,
-     0.916
+     216.5,
+     0.665
     ],
     [
-     -55.1775,
-     0.297,
-     -169.4881,
-     30.4,
-     0.743
+     -58.1869,
+     0.284,
+     -168.4002,
+     155.4,
+     0.998
     ],
     [
-     -46.1492,
-     0.3464,
-     -172.7516,
-     296.5,
-     0.959
+     -49.1586,
+     0.3268,
+     -171.6638,
+     273.7,
+     0.944
     ],
     [
-     -42.2115,
-     0.4962,
-     -177.5869,
-     250.1,
-     0.667
-    ],
-    [
-     -43.3147,
-     0.6115,
-     -180.5907,
-     7.3,
-     0.685
-    ],
-    [
-     -53.2734,
-     0.9733,
-     -189.241,
-     50.0,
-     0.719
-    ],
-    [
-     -82.9426,
-     0.3166,
-     -172.2199,
-     133.1,
-     0.913
-    ],
-    [
-     -80.8116,
-     0.1996,
-     -166.1851,
-     54.6,
-     0.684
+     -56.2983,
+     0.9317,
+     -188.1972,
+     304.3,
+     0.691
     ],
     [
      -77.6152,
      0.0881,
      -157.1328,
-     294.0,
-     0.837
+     41.2,
+     0.941
     ],
     [
-     -35.2831,
-     0.4563,
-     -176.6832,
-     127.9,
-     0.781
+     -76.5497,
+     0.0783,
+     -154.1154,
+     106.8,
+     0.923
     ],
     [
-     -29.8494,
-     0.127,
-     -165.2419,
-     279.0,
-     0.917
+     -74.4187,
+     0.0978,
+     -148.0806,
+     100.0,
+     0.881
+    ],
+    [
+     -73.3532,
+     0.1079,
+     -145.0632,
+     92.6,
+     0.96
+    ],
+    [
+     -34.2611,
+     0.4776,
+     -177.2576,
+     269.4,
+     0.847
+    ],
+    [
+     -30.9523,
+     0.2049,
+     -168.2459,
+     48.9,
+     0.663
     ],
     [
      -28.7465,
      0.052,
      -162.238,
-     179.5,
-     0.741
+     76.3,
+     0.874
     ],
     [
      -15.1331,
      0.0796,
      -162.2759,
-     216.9,
-     0.683
+     314.6,
+     0.914
     ],
     [
      -12.1243,
      0.1141,
      -163.3654,
-     294.6,
-     0.914
+     101.3,
+     0.984
     ],
     [
-     -1.1656,
-     0.3611,
-     -170.7434,
-     270.3,
-     0.647
+     -48.2512,
+     0.7663,
+     -184.1692,
+     105.7,
+     0.754
     ],
     [
-     -4.4666,
-     0.6487,
-     -179.7581,
-     269.2,
-     0.771
+     -47.1479,
+     0.6452,
+     -181.1654,
+     28.3,
+     0.874
     ],
     [
-     -5.5669,
-     0.7455,
-     -182.763,
-     250.1,
-     0.661
+     -40.5137,
+     -0.1365,
+     -149.8797,
+     254.4,
+     0.654
     ],
     [
-     -38.3063,
-     -0.1544,
-     -143.8724,
-     182.4,
-     0.798
+     -22.4828,
+     -0.1168,
+     -137.8944,
+     250.6,
+     0.893
     ],
     [
-     -25.4923,
-     -0.1223,
-     -136.8069,
-     314.6,
-     0.645
+     -13.4541,
+     -0.1252,
+     -141.1568,
+     178.6,
+     0.776
+    ],
+    [
+     -10.4446,
+     -0.1373,
+     -142.2442,
+     196.3,
+     0.917
     ],
     [
      -1.4159,
      -0.179,
      -145.5067,
-     253.1,
-     0.734
+     190.8,
+     0.855
     ],
     [
-     -7.2442,
-     0.2836,
-     -168.7478,
-     201.4,
-     0.91
+     1.5936,
+     -0.1851,
+     -146.5941,
+     226.6,
+     0.807
     ],
     [
-     -25.2961,
-     0.0598,
-     -162.208,
-     155.6,
-     0.852
-    ],
-    [
-     2.7817,
-     -0.1583,
-     -150.6384,
-     9.7,
-     0.601
-    ],
-    [
-     -9.2559,
-     -0.1453,
-     -146.2868,
-     141.5,
-     0.798
-    ],
-    [
-     -5.7255,
-     -0.1109,
-     -109.3298,
-     78.6,
-     0.946
-    ],
-    [
-     6.3118,
-     -0.1347,
-     -113.6822,
-     36.6,
-     0.733
+     -31.3134,
+     -0.0077,
+     -160.028,
+     357.0,
+     0.932
     ],
     [
      12.3304,
      -0.1006,
      -115.8585,
-     24.9,
-     0.715
+     30.4,
+     0.743
+    ],
+    [
+     15.9564,
+     -0.1132,
+     -123.9832,
+     296.5,
+     0.959
+    ],
+    [
+     14.8547,
+     -0.1355,
+     -126.9876,
+     250.1,
+     0.667
     ],
     [
      13.753,
      -0.1536,
      -129.9919,
-     297.5,
-     0.624
+     7.3,
+     0.685
     ],
     [
-     -11.0454,
-     -0.0782,
-     -124.4285,
-     142.3,
-     0.924
+     9.3461,
+     -0.1951,
+     -142.0094,
+     50.0,
+     0.719
     ],
     [
-     17.6708,
-     -0.1332,
-     45.2369,
-     214.7,
-     0.67
+     -33.5729,
+     -0.0099,
+     -99.4816,
+     54.6,
+     0.684
     ],
     [
-     20.7222,
-     -0.1065,
-     44.2729,
-     58.9,
-     0.702
+     -24.521,
+     -0.0549,
+     -102.6789,
+     294.0,
+     0.837
     ],
     [
-     -144.0846,
-     5.013,
-     66.4929,
-     113.5,
-     0.7
+     -7.7377,
+     -0.1076,
+     -115.4164,
+     127.9,
+     0.781
+    ],
+    [
+     23.7735,
+     -0.0846,
+     43.309,
+     216.9,
+     0.683
+    ],
+    [
+     26.8249,
+     -0.0693,
+     42.345,
+     294.6,
+     0.914
+    ],
+    [
+     -142.7071,
+     4.9102,
+     65.7864,
+     169.7,
+     0.74
     ],
     [
      -159.0085,
      5.2732,
      69.8138,
-     294.1,
-     0.965
+     250.1,
+     0.661
     ],
     [
-     -151.0653,
-     5.2151,
-     82.0517,
-     135.2,
-     0.745
+     -97.7633,
+     0.1033,
+     63.8653,
+     263.7,
+     0.862
     ],
     [
-     -101.1686,
-     0.2081,
-     54.8896,
-     156.1,
-     0.845
-    ],
-    [
-     -123.3647,
-     2.5428,
-     60.5106,
-     83.2,
-     0.849
+     -120.7976,
+     2.1985,
+     52.7087,
+     182.4,
+     0.798
     ],
     [
      -159.8981,
      5.2781,
      76.9167,
-     171.6,
-     0.639
+     253.1,
+     0.734
+    ],
+    [
+     -164.4032,
+     5.9194,
+     64.2562,
+     299.3,
+     0.887
+    ],
+    [
+     -123.2048,
+     2.521,
+     60.3674,
+     210.3,
+     0.742
+    ],
+    [
+     -122.6254,
+     2.4466,
+     53.2501,
+     155.6,
+     0.852
     ],
     [
      -127.4097,
      4.539,
      49.9198,
-     54.9,
-     0.942
+     131.4,
+     0.936
     ],
     [
-     -130.2213,
-     3.7633,
-     102.7362,
-     244.8,
-     0.807
+     -130.8573,
+     5.2557,
+     50.4151,
+     9.7,
+     0.601
+    ],
+    [
+     -131.3422,
+     3.8854,
+     99.7389,
+     141.5,
+     0.798
+    ],
+    [
+     -152.2391,
+     5.0605,
+     101.2794,
+     216.5,
+     0.692
+    ],
+    [
+     -155.3668,
+     5.0461,
+     103.8067,
+     105.3,
+     0.779
+    ],
+    [
+     -157.7024,
+     5.0739,
+     111.503,
+     188.9,
+     0.729
+    ],
+    [
+     -137.7845,
+     4.6139,
+     109.9755,
+     36.6,
+     0.733
+    ],
+    [
+     -132.062,
+     4.0042,
+     106.832,
+     24.9,
+     0.715
+    ],
+    [
+     -109.9352,
+     1.0137,
+     94.9686,
+     221.9,
+     0.856
     ],
     [
      -111.0778,
      1.141,
      91.9796,
-     236.6,
-     0.815
+     297.5,
+     0.624
     ],
     [
-     -91.436,
-     0.0029,
-     82.0528,
-     145.3,
-     0.814
+     -122.4286,
+     2.6293,
+     89.7367,
+     24.9,
+     0.973
     ],
     [
-     -93.5244,
-     0.0151,
-     76.0031,
-     46.4,
-     0.658
+     -115.0601,
+     1.6793,
+     101.409,
+     95.9,
+     0.8
     ],
     [
-     -94.5686,
-     0.025,
-     72.9783,
-     183.5,
+     -112.7552,
+     1.3711,
+     99.4624,
+     277.2,
+     0.86
+    ],
+    [
+     -113.3604,
+     1.418,
+     90.7769,
+     263.9,
+     0.866
+    ],
+    [
+     -96.1974,
+     0.0036,
+     90.4954,
+     180.7,
+     0.713
+    ],
+    [
+     -100.8193,
+     0.2287,
+     64.8004,
+     142.3,
      0.924
-    ],
-    [
-     -109.4148,
-     0.9027,
-     82.6042,
-     60.3,
-     0.615
     ]
    ]
   },
@@ -41559,13 +42348,6 @@
      1.133
     ],
     [
-     10.9354,
-     -0.0031,
-     138.246,
-     137.0,
-     1.016
-    ],
-    [
      160.5865,
      9.935,
      -91.5749,
@@ -41592,13 +42374,6 @@
      122.7218,
      356.6,
      1.027
-    ],
-    [
-     -99.3841,
-     0.1542,
-     -80.4524,
-     138.1,
-     1.326
     ],
     [
      162.4987,
@@ -41669,13 +42444,6 @@
      129.3051,
      326.5,
      1.294
-    ],
-    [
-     -74.5811,
-     -0.1273,
-     -83.613,
-     102.3,
-     1.261
     ],
     [
      59.7244,
@@ -41832,13 +42600,6 @@
      1.3
     ],
     [
-     -142.1738,
-     6.0963,
-     -200.6117,
-     159.3,
-     0.975
-    ],
-    [
      -156.4895,
      5.1552,
      -104.6025,
@@ -41881,13 +42642,6 @@
      1.334
     ],
     [
-     -141.0791,
-     5.9227,
-     -196.8971,
-     339.2,
-     1.056
-    ],
-    [
      51.5889,
      0.0108,
      -107.6853,
@@ -41923,13 +42677,6 @@
      1.294
     ],
     [
-     -160.4039,
-     6.1707,
-     61.2476,
-     202.9,
-     0.954
-    ],
-    [
      -109.9197,
      1.3598,
      -174.4378,
@@ -41942,13 +42689,6 @@
      -180.0141,
      264.0,
      1.056
-    ],
-    [
-     -80.3955,
-     -0.1407,
-     -92.9686,
-     170.1,
-     1.0
     ],
     [
      166.9852,
@@ -42147,13 +42887,6 @@
      1.21
     ],
     [
-     68.5688,
-     0.527,
-     -77.0058,
-     3.8,
-     1.059
-    ],
-    [
      123.9779,
      7.7476,
      -63.2474,
@@ -42287,6 +43020,13 @@
      1.26
     ],
     [
+     107.3443,
+     8.0713,
+     -202.4616,
+     105.0,
+     1.298
+    ],
+    [
      67.3615,
      1.7294,
      -212.1149,
@@ -42299,6 +43039,13 @@
      47.0257,
      352.5,
      1.221
+    ],
+    [
+     122.8363,
+     7.608,
+     -111.7421,
+     174.3,
+     1.295
     ],
     [
      -41.1013,
@@ -42336,25 +43083,18 @@
      1.333
     ],
     [
-     -88.8278,
-     -0.0098,
-     -76.8296,
-     15.0,
-     1.25
-    ],
-    [
-     -79.589,
-     -0.1143,
-     -83.8939,
-     295.1,
-     1.06
-    ],
-    [
      0.6882,
      1.3246,
      -205.9968,
      350.2,
      1.021
+    ],
+    [
+     167.8639,
+     11.2481,
+     -203.7395,
+     72.2,
+     1.252
     ],
     [
      151.7551,
@@ -42441,13 +43181,6 @@
      1.108
     ],
     [
-     167.4904,
-     11.2171,
-     -202.3872,
-     210.7,
-     1.011
-    ],
-    [
      56.9238,
      1.0585,
      -193.1636,
@@ -42497,13 +43230,6 @@
      1.09
     ],
     [
-     -85.9111,
-     -0.0851,
-     -62.7838,
-     249.8,
-     1.137
-    ],
-    [
      17.4904,
      0.0357,
      -99.7751,
@@ -42530,13 +43256,6 @@
      -18.3028,
      150.1,
      1.269
-    ],
-    [
-     -38.8975,
-     -0.185,
-     99.1988,
-     174.3,
-     1.303
     ]
    ]
   },
@@ -42570,13 +43289,6 @@
      1.342
     ],
     [
-     47.6349,
-     1.3279,
-     -204.3271,
-     86.8,
-     1.192
-    ],
-    [
      -108.657,
      0.6977,
      127.6104,
@@ -42596,13 +43308,6 @@
      -95.7665,
      306.5,
      1.285
-    ],
-    [
-     -7.6892,
-     0.0008,
-     -29.3739,
-     174.0,
-     1.176
     ],
     [
      -140.4154,
@@ -42766,13 +43471,6 @@
      1.125
     ],
     [
-     50.1041,
-     1.3532,
-     -208.2162,
-     56.5,
-     1.164
-    ],
-    [
      -22.8141,
      0.074,
      61.8843,
@@ -42848,13 +43546,6 @@
      -121.9697,
      357.7,
      1.338
-    ],
-    [
-     -83.2825,
-     -0.156,
-     -94.8108,
-     72.5,
-     1.217
     ],
     [
      13.4744,
@@ -42969,13 +43660,6 @@
      1.155
     ],
     [
-     -42.2374,
-     -0.0455,
-     140.2812,
-     53.3,
-     1.268
-    ],
-    [
      -1.2854,
      -0.0637,
      129.0063,
@@ -43018,6 +43702,13 @@
      1.247
     ],
     [
+     -152.7347,
+     6.1465,
+     -194.333,
+     342.5,
+     1.212
+    ],
+    [
      -24.5041,
      0.0716,
      44.9668,
@@ -43053,13 +43744,6 @@
      0.964
     ],
     [
-     -143.9007,
-     6.0273,
-     -194.682,
-     219.8,
-     1.168
-    ],
-    [
      38.4896,
      0.0557,
      -101.1508,
@@ -43086,13 +43770,6 @@
      28.2583,
      233.7,
      1.218
-    ],
-    [
-     -164.5173,
-     5.2159,
-     -121.7721,
-     47.6,
-     1.323
     ],
     [
      4.1155,
@@ -43179,13 +43856,6 @@
      1.046
     ],
     [
-     -121.5513,
-     3.1819,
-     -183.6489,
-     356.3,
-     1.27
-    ],
-    [
      -79.6984,
      -0.142,
      -110.8257,
@@ -43233,6 +43903,20 @@
      -31.4817,
      159.1,
      1.115
+    ],
+    [
+     -105.2895,
+     0.9065,
+     -176.1339,
+     216.5,
+     1.249
+    ],
+    [
+     -156.9922,
+     5.1687,
+     19.0169,
+     25.1,
+     0.988
     ],
     [
      75.7909,
@@ -43306,6 +43990,13 @@
      -182.6852,
      227.6,
      1.216
+    ],
+    [
+     52.2238,
+     1.3353,
+     -207.0392,
+     176.9,
+     1.091
     ],
     [
      -155.8811,
@@ -43511,13 +44202,6 @@
      0.94
     ],
     [
-     3.2886,
-     0.0349,
-     -38.1567,
-     339.2,
-     1.258
-    ],
-    [
      -161.0946,
      5.0463,
      104.464,
@@ -43542,22 +44226,22 @@
      -84,
      0.1171,
      34,
-     316.2,
-     0.872
+     42.3,
+     0.916
     ],
     [
      -54,
      0.2886,
      36,
-     181.7,
-     0.804
+     350.9,
+     0.888
     ],
     [
      -36,
      0.2159,
      -128,
-     38.8,
-     0.889
+     13.1,
+     0.939
     ]
    ]
   },
@@ -43589,13 +44273,6 @@
      -188.2002,
      113.1,
      1.018
-    ],
-    [
-     -101.8885,
-     0.2486,
-     -85.5588,
-     56.6,
-     1.206
     ],
     [
      -134.6707,
@@ -43647,6 +44324,13 @@
      1.108
     ],
     [
+     -158.313,
+     6.1403,
+     -194.4817,
+     27.6,
+     0.922
+    ],
+    [
      -31.3718,
      0.0873,
      -36.302,
@@ -43668,11 +44352,11 @@
      1.292
     ],
     [
-     -59.2313,
-     0.0404,
-     -92.3091,
-     54.8,
-     1.282
+     -139.8456,
+     5.8271,
+     -196.7991,
+     50.3,
+     0.912
     ],
     [
      -57.7764,
@@ -43771,13 +44455,6 @@
      4.2756,
      227.0,
      1.155
-    ],
-    [
-     78.8014,
-     2.8367,
-     -150.0135,
-     252.6,
-     1.267
     ],
     [
      -87.295,
@@ -43895,15 +44572,15 @@
      -64,
      0.1775,
      37,
-     313.0,
-     0.921
+     101.7,
+     0.93
     ],
     [
      -70,
      0.1902,
      10,
-     39.3,
-     0.813
+     100.6,
+     0.91
     ]
    ]
   },
@@ -44238,13 +44915,6 @@
      0.979
     ],
     [
-     119.4788,
-     7.3965,
-     -111.0853,
-     166.5,
-     1.17
-    ],
-    [
      160.6283,
      9.9151,
      17.3626,
@@ -44341,6 +45011,13 @@
      -59.9954,
      247.0,
      1.052
+    ],
+    [
+     116.7844,
+     7.2375,
+     -108.5097,
+     336.4,
+     1.213
     ],
     [
      152.7648,
@@ -44484,13 +45161,6 @@
      -196.6744,
      15.3,
      1.021
-    ],
-    [
-     -93.4616,
-     0.0194,
-     -70.2517,
-     314.1,
-     1.06
     ],
     [
      117.2959,
@@ -44696,6 +45366,13 @@
      1.005
     ],
     [
+     104.4321,
+     6.6784,
+     -103.7155,
+     300.0,
+     0.922
+    ],
+    [
      98.295,
      8.0761,
      -211.2866,
@@ -44743,6 +45420,13 @@
      138.0675,
      127.2,
      0.92
+    ],
+    [
+     -46.3241,
+     -0.0057,
+     141.5313,
+     268.5,
+     0.988
     ],
     [
      155.4175,
@@ -44927,6 +45611,13 @@
      1.096
     ],
     [
+     -0.1291,
+     0.025,
+     -37.5791,
+     147.4,
+     1.036
+    ],
+    [
      126.8813,
      7.8136,
      -13.2123,
@@ -45067,6 +45758,13 @@
      1.117
     ],
     [
+     117.6468,
+     7.2817,
+     -114.219,
+     234.7,
+     1.082
+    ],
+    [
      159.7326,
      9.8582,
      147.4321,
@@ -45144,6 +45842,13 @@
      1.1
     ],
     [
+     67.4114,
+     0.3521,
+     -75.5152,
+     192.3,
+     1.222
+    ],
+    [
      130.2323,
      9.5698,
      -212.978,
@@ -45214,13 +45919,6 @@
      1.244
     ],
     [
-     126.6189,
-     7.8596,
-     -109.7962,
-     110.0,
-     0.961
-    ],
-    [
      160.3978,
      9.9381,
      -32.8069,
@@ -45233,6 +45931,13 @@
      -72.3879,
      136.9,
      1.269
+    ],
+    [
+     104.0379,
+     6.6258,
+     -124.1614,
+     40.9,
+     1.18
     ],
     [
      49.8393,
@@ -45371,6 +46076,13 @@
      1.047
     ],
     [
+     -122.4053,
+     3.3982,
+     -186.6722,
+     306.0,
+     1.271
+    ],
+    [
      115.7735,
      7.0961,
      61.7725,
@@ -45411,13 +46123,6 @@
      -116.3843,
      95.4,
      0.933
-    ],
-    [
-     104.5862,
-     6.6827,
-     -103.4868,
-     344.8,
-     0.954
     ],
     [
      44.0505,
@@ -45462,6 +46167,13 @@
      1.261
     ],
     [
+     10.8482,
+     0.0299,
+     141.1932,
+     105.6,
+     1.018
+    ],
+    [
      116.8479,
      7.2092,
      9.2233,
@@ -45490,13 +46202,6 @@
      0.959
     ],
     [
-     -93.1268,
-     0.0362,
-     -76.127,
-     351.6,
-     1.035
-    ],
-    [
      167.1994,
      9.9749,
      13.4313,
@@ -45523,13 +46228,6 @@
      -165.6652,
      355.4,
      1.122
-    ],
-    [
-     -123.5131,
-     3.6176,
-     -188.6027,
-     20.9,
-     1.049
     ],
     [
      -95.0789,
@@ -45668,20 +46366,6 @@
      1.113
     ],
     [
-     -75.5136,
-     -0.118,
-     -91.4902,
-     21.4,
-     1.17
-    ],
-    [
-     -154.3489,
-     6.1405,
-     -194.3035,
-     236.7,
-     1.029
-    ],
-    [
      -99.1764,
      0.1729,
      -26.8273,
@@ -45724,13 +46408,6 @@
      0.908
     ],
     [
-     -3.8767,
-     0.0104,
-     -34.2829,
-     312.0,
-     0.967
-    ],
-    [
      -11.0288,
      0.033,
      -32.5578,
@@ -45741,21 +46418,81 @@
   },
   {
    "id": "view_0",
-   "name": "Station entrance",
+   "name": "Station entrance (shop street)",
    "type": "marker",
    "semantic": "viewpoint",
    "transform": {
     "position": [
-     -27,
-     0.1913,
-     14
+     -67.0582,
+     0.0734,
+     9.7418
     ]
    },
-   "yaw": 5,
-   "pitch": 10
+   "yaw": 69.81069087309893,
+   "pitch": 6
   },
   {
    "id": "view_1",
+   "name": "Ticket hall and barrier",
+   "type": "marker",
+   "semantic": "viewpoint",
+   "transform": {
+    "position": [
+     -54.8629,
+     0.2429,
+     -1.1355
+    ]
+   },
+   "yaw": 31.810690873098935,
+   "pitch": -4
+  },
+  {
+   "id": "view_2",
+   "name": "Stairs to the platform",
+   "type": "marker",
+   "semantic": "viewpoint",
+   "transform": {
+    "position": [
+     -48.3778,
+     0.2429,
+     5.2002
+    ]
+   },
+   "yaw": 69.81069087309893,
+   "pitch": 18
+  },
+  {
+   "id": "view_3",
+   "name": "Platform, stair house",
+   "type": "marker",
+   "semantic": "viewpoint",
+   "transform": {
+    "position": [
+     -50.1739,
+     8.25,
+     4.662
+    ]
+   },
+   "yaw": 73.81069087309893,
+   "pitch": -2
+  },
+  {
+   "id": "view_4",
+   "name": "H\u00e4sselby torg, Resen\u00e4rer",
+   "type": "marker",
+   "semantic": "viewpoint",
+   "transform": {
+    "position": [
+     -79,
+     0.0323,
+     -55
+    ]
+   },
+   "yaw": -26,
+   "pitch": 2
+  },
+  {
+   "id": "view_5",
    "name": "Forecourt shops",
    "type": "marker",
    "semantic": "viewpoint",
@@ -45770,7 +46507,7 @@
    "pitch": 6
   },
   {
-   "id": "view_2",
+   "id": "view_6",
    "name": "Astrakangatan under the bridge",
    "type": "marker",
    "semantic": "viewpoint",
@@ -45785,7 +46522,7 @@
    "pitch": 6
   },
   {
-   "id": "view_3",
+   "id": "view_7",
    "name": "Courtyard, H\u00e4sselby torg 14-22",
    "type": "marker",
    "semantic": "viewpoint",
@@ -45800,22 +46537,7 @@
    "pitch": 4
   },
   {
-   "id": "view_4",
-   "name": "Platform",
-   "type": "marker",
-   "semantic": "viewpoint",
-   "transform": {
-    "position": [
-     -34,
-     8.25,
-     -3.0
-    ]
-   },
-   "yaw": 68,
-   "pitch": 0
-  },
-  {
-   "id": "view_5",
+   "id": "view_8",
    "name": "Rock cut",
    "type": "marker",
    "semantic": "viewpoint",
@@ -45830,7 +46552,7 @@
    "pitch": 3
   },
   {
-   "id": "view_6",
+   "id": "view_9",
    "name": "Overview",
    "type": "marker",
    "semantic": "viewpoint",

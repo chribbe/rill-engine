@@ -65,6 +65,9 @@ fn computeFog(camPos: vec3f, dir: vec3f, distIn: f32, isSky: bool) -> FogResult 
   let fogIn = frame.fogColor.rgb * (ambient + frame.sunColor.rgb * phase * frame.fogColor.w);
   let hazeIn = hazeColor(dir) + frame.sunColor.rgb * phase * 0.02;
   let inC = (odFog * fogIn + odHaze * hazeIn) / total;
+  // Indoors (camera in an enclosed space) the fog is thinner and not lit by daylight.
+  let indoor = frame.fog1.w;
+  T = mix(1.0, T, indoor);
   r.transmittance = T;
   r.inscatter = inC * (1.0 - T);
   return r;

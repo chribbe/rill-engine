@@ -44,7 +44,7 @@
     "ev100": 11.4,
     "compensation": 0.2,
     "auto": true,
-    "min": 9.8,
+    "min": 7.4,
     "max": 12.8
   },
   "ambient": {

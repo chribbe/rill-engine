@@ -1,5 +1,5 @@
 // Top-down preview of the OSM extract (layout reference for build_hasselby.py).
-//   node tools/hasselby/plot_osm.mjs [out.png] [halfSizeMetres] [pxPerMetre]
+//   node tools/hasselby/plot_osm.mjs [out.png] [halfSizeMetres] [pxPerMetre] [centreX] [centreY]
 // Projection: local metres around Hässelby gård station (x east, y north).
 import { PNG } from 'pngjs';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -9,6 +9,7 @@ const LAT0 = 59.36694, LON0 = 17.84444;
 const KX = 111320 * Math.cos((LAT0 * Math.PI) / 180), KY = 110540;
 const out = process.argv[2] ?? 'osm_plot.png';
 const HALF = +(process.argv[3] ?? 200), PPM = +(process.argv[4] ?? 2.5);
+const OX = +(process.argv[5] ?? 0), OY = +(process.argv[6] ?? 0);   // view centre (local metres)
 const d = JSON.parse(readFileSync(join(import.meta.dirname, 'osm.json'), 'utf8'));
 const nodes = new Map();
 // Overpass lists tagged nodes and again as untagged skeleton nodes: keep the tags.
@@ -17,7 +18,7 @@ const ways = d.elements.filter((e) => e.type === 'way' && e.tags);
 const W = Math.round(HALF * 2 * PPM);
 const img = new PNG({ width: W, height: W });
 img.data.fill(255);
-const px = (x, y) => [(x + HALF) * PPM, (HALF - y) * PPM];
+const px = (x, y) => [(x - OX + HALF) * PPM, (HALF - (y - OY)) * PPM];
 const xy = (n) => [(n.lon - LON0) * KX, (n.lat - LAT0) * KY];
 function set(x, y, c, a = 1) {
   x = Math.round(x); y = Math.round(y);
@@ -79,7 +80,7 @@ for (const w of ways) {
 for (const n of nodes.values()) {
   if (!n.tags) continue;
   const [x, y] = xy(n);
-  const c = n.tags.natural === 'tree' ? [30, 140, 30] : n.tags.highway === 'street_lamp' ? [230, 180, 0] : n.tags.shop || n.tags.amenity ? [200, 0, 160] : null;
+  const c = n.tags.natural === 'tree' ? [30, 140, 30] : n.tags.highway === 'street_lamp' ? [230, 180, 0] : n.tags.tourism === 'artwork' ? [0, 160, 220] : n.tags.railway === 'subway_entrance' ? [255, 0, 0] : n.tags.shop || n.tags.amenity ? [200, 0, 160] : null;
   if (!c) continue;
   const [X, Y] = px(x, y);
   for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) set(X + a, Y + b, c);

@@ -132,6 +132,16 @@ def get_bake_material(name):
     nrgb.name = 'rnm_color'
     nt.links.new(nrgb.outputs[0], nmap.inputs['Color'])
     nt.links.new(nmap.outputs[0], dif.inputs['Normal'])
+    if d.get('alphaMode') == 'blend':
+        # Glass: almost fully transparent to the bake rays.
+        mix = nt.nodes.new('ShaderNodeMixShader')
+        mix.inputs[0].default_value = 0.08
+        tr = nt.nodes.new('ShaderNodeBsdfTransparent')
+        nt.links.new(tr.outputs[0], mix.inputs[1])
+        nt.links.new(dif.outputs[0], mix.inputs[2])
+        nt.links.new(mix.outputs[0], out.inputs['Surface'])
+        bake_mats[name] = m
+        return m
     if d.get('alphaMode') == 'mask' and d.get('baseColor'):
         img = bpy.data.images.load(os.path.join(PUBLIC, 'textures', d['baseColor']), check_existing=True)
         img.alpha_mode = 'STRAIGHT'

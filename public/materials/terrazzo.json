@@ -1,0 +1,12 @@
+{
+ "baseColor": "terrazzo_albedo.png",
+ "normal": "terrazzo_normal.png",
+ "orm": "terrazzo_orm.png",
+ "physicalSize": 2,
+ "roughness": 1,
+ "roughnessRange": [0.25, 0.7],
+ "specular": 0.55,
+ "porosity": 0.2,
+ "macro": { "texture": "macro_variation.png", "physicalSize": 11, "albedoStrength": 0.1, "stainStrength": 0.15 },
+ "notes": "Terrazzo / mosaic floor of the ticket hall and stairs."
+}

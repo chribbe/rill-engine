@@ -364,6 +364,18 @@ World (runtime, derived) ───────────────┐       
     cut-outs whose triangulation lost coverage (holes in the roads); the build now checks
     that the plan area of every surface tile is preserved.
 
+43. **Transparent glass as a blended pass after the sky.** Materials with
+    `alphaMode: 'blend'` (`glass_clear`) are drawn after opaque geometry and the sky, lit by the
+    standard shader (reflections, glints) and blended into the weighted (rgb·w, w) target the
+    same way particles are (source scaled by the destination weight, weight kept), opacity
+    rising with Fresnel; no depth writes, no shadow casting, nearly transparent to the bake.
+    Real interiors (the ticket hall) are seen through it; facades without interiors keep
+    interior mapping (decision 39).
+44. **Small world behaviours live in the map document.** A mesh object may carry a
+    `turnstile` block (pivot, axis, lane, passing direction); `World.update` turns the rotor
+    120° when the player crosses its lane (`InstanceBuffer.setModel`). The pattern for
+    future interactive props (doors, gates) before a real gameplay/scripting layer exists.
+
 ## 5. Content pipeline
 
 ```
@@ -604,10 +616,20 @@ gitignored `reference/hasselby` with their licences.
   T-bana viaduct and platform, lamps, bus stops. Terrain is an invented valley (no elevation
   data yet): the square low under the viaduct, embankment west, rock cut east.
 - **T-bana**: two single-track decks joined under the wedge island platform, parapets with
-  flat-bar railings, board-formed bents kept out of the carriageways, abutments, ballast,
-  sleepers, rails and third rail (away from the platform), slatted canopy on a central column
-  row with fluorescent fittings; the station hall under the platform's west end (glazed front,
-  brown tiles, entrance canopy, the blue name band and the SL T sign on the bent in front).
+  flat-bar railings, board-formed bents kept out of the carriageways and the ticket hall's
+  barrier zone, abutments, ballast, sleepers, rails and third rail (away from the platform),
+  slatted canopy on a central column row with fluorescent fittings.
+- **Station** (walkable): the ticket hall fills the centre building's south wing under the
+  platform's west end, its steel-framed glass front (real transparent glass) facing the shop
+  street at the OSM entrance, with the entrance canopy, the blue name band and the T sign.
+  Inside: terrazzo floor, brown tiles, fluorescent ceiling, the barrier line with a glazed teak
+  ticket booth ("Biljetter") and four tripod turnstiles that turn as you pass, then a
+  switchback stair (47 × 170 mm) through an opening in the deck and platform to a glazed stair
+  house at the platform's west end ("Mot T-Centralen").
+- **Hässelby torg**: the paved shop street runs north from the station to the square, where
+  *Resenärer* (Thomas Qvarsebo, 1989: eight bronze travellers with suitcases on a granite
+  plinth) stands at its OSM position; the play sculpture and the stage are later additions
+  and are not modelled. One kiosk on the forecourt (the smaller pavilions are later).
 - **Life**: 26 fictional 1993 shop and kiosk fascias, 114 parked cars (five fictional
   lookalikes: 240/245, 740, 900, Golf II) with period plates, ~1000 trees and shrubs (bare
   birches and maples — `broadleaf` in `trees.py` — pines and spruces on the hill, maples in
@@ -623,7 +645,6 @@ gitignored `reference/hasselby` with their licences.
 - **Viewpoints**: station entrance, forecourt shops, Astrakangatan under the bridge, courtyard,
   platform, rock cut, overview (`rill.shotViews('hb')`).
 
-Known gaps: the platform is not reachable on foot (no stairs/escalator geometry yet), cars are
-static props without door seams or interiors, no traffic signs or bus shelters yet, deciduous
-trees are all birches (a bare broadleaf species would add variety), terrain heights are
-invented.
+Known gaps: no trains; cars are static props; no traffic signs; the rock cut has grassy banks
+rather than rock walls; terrain heights are invented (no elevation data); the shops are
+interior-mapped, not enterable.
