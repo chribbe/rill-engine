@@ -46,7 +46,13 @@ export class BlenderBridge {
       let j: JobState;
       try {
         const r = await fetch(`/__blender/jobs/${id}?from=${this.seen}`);
-        if (!r.ok) return;
+        if (r.status === 404) {
+          this.ed.log('warn', `[${this.job.task}] the dev server lost track of job ${id} (restarted?); the process may still be running`);
+          this.job = { ...this.job, status: 'failed' };
+          this.ed.emit('status');
+          return;
+        }
+        if (!r.ok) continue;
         j = await r.json();
       } catch {
         continue;

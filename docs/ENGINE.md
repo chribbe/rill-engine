@@ -4,8 +4,9 @@ Living document: architecture, decisions, measurements, image-quality notes,
 known issues, technical debt and milestone status. Update it whenever a system
 changes or a measurement is taken.
 
-**Current milestone:** M0/M1 foundation (renderer fundamentals + engine test map) — functional, see status below.
-**Next milestone:** M1 completion — surface quality (real materials, directional lightmaps, reflection probes), then M2.
+**Current milestone:** renderer phase complete (M1). The project is now in the **world-building /
+editor phase**: see **[EDITOR.md](EDITOR.md)** (editor architecture, map format v2, operations,
+assets, Blender bridge, tools API). The renderer is treated as a stable subsystem.
 
 ---
 
@@ -18,8 +19,9 @@ materials, restrained post. Simple techniques, measured, executed well.
 ## 2. Architecture overview
 
 ```
-map.json (MapDocument, source of truth)          environments/*.json (EnvironmentState)
-   │ objects: mesh | instances | light | decal | marker       │ sun, sky, fog, exposure, weather
+map.json (MapDocument v2, authored in the editor) environments/*.json (EnvironmentState)
+   │ entities: mesh | light | decal | sign | marker | group…  │ sun, sky, fog, exposure, weather
+   │ (SceneStore: patches from editor operations, EDITOR.md)
    ▼                                                           ▼
 World (runtime, derived) ───────────────┐               Environment ──► derive(): sun dir/lux, pre-exposure
    │ GLB assets → GeometryArena          │
@@ -393,7 +395,8 @@ World (runtime, derived) ───────────────┐       
 ```
 npm run textures   # tools/textures/generate.ts   → public/textures (+ manifest.json avg albedo)
 npm run map        # Blender: build_testmap.py    → public/assets/testmap/*.glb, *.model.json, impostor +
-                   #   tree-line textures, maps/testmap/map.json  (~25 s)
+                   #   tree-line textures (legacy whole-map generator: refuses to run now that
+                   #   maps/testmap/map.json is editor-owned; see EDITOR.md §8)
 npm run bake       # Blender/Cycles: bake_lightmaps.py -- [--samples 256] [--size 2048] [--no-denoise]
                    #   → maps/testmap/lightmaps/{lm_0_{sky,rnm0,rnm1,rnm2,sun}.hdr, probes_*.bin, lightmapset.json}
 npm run scanned    # tools/textures/scanned.ts  → Poly Haven 2K maps (.texture-cache) → 1K PNGs + manifest + material sizes
@@ -603,7 +606,13 @@ cost-based tree LODs (decisions 18–38).
 5. **Exposure**: optional local exposure for sun-vs-shade scenes.
 6. **Hässelby slice polish** (see §13).
 
+The world-building phase (editor, scene format, tools) has its own plan: EDITOR.md §12.
+
 ## 12. Automation API (precursor of future editor/AI tools)
+
+The editor adds structured tools at `window.rill.editor.tools` (scene queries, every editor
+operation, `capture_view`, transactions, save / bake): see EDITOR.md §9. The runtime API below is
+shared by the editor (index.html) and the game view (play.html).
 
 `window.rill` in the running app: `getScene()`, `setPreset(name)`, `setView(name)`,
 `setCamera(pos, yawDeg, pitchDeg)`, `getCamera()`, `stats()`, `shot(name, w, h)` (writes

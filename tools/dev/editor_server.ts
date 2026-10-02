@@ -95,8 +95,10 @@ interface Job {
   result?: Record<string, unknown>;
   proc?: ChildProcess;
 }
-const jobs = new Map<string, Job>();
-let jobSeq = 0;
+// On globalThis: vite re-instantiates plugins when the config (or this file) changes, and
+// running jobs must stay reachable across that.
+const G = globalThis as unknown as { __rillJobs?: Map<string, Job>; __rillJobSeq?: number };
+const jobs = (G.__rillJobs ??= new Map<string, Job>());
 
 function startJob(task: string, params: Record<string, unknown>): Job {
   const def = TASKS[task];
@@ -105,8 +107,9 @@ function startJob(task: string, params: Record<string, unknown>): Job {
   if (params.map !== undefined && !NAME.test(String(params.map))) throw Object.assign(new Error('bad map name'), { status: 400 });
   for (const j of jobs.values()) if (j.status === 'running' && j.task === task) throw Object.assign(new Error(`a ${task} job is already running (${j.id})`), { status: 409 });
   const { cmd, args } = def.command(params);
-  const job: Job = { id: `job_${++jobSeq}_${Date.now().toString(36)}`, task, params, status: 'running', log: [`$ ${relative(ROOT, cmd) || cmd} ${args.join(' ')}`], startedAt: Date.now() };
-  const proc = spawn(cmd, args, { cwd: ROOT, env: process.env });
+  const job: Job = { id: `job_${(G.__rillJobSeq = (G.__rillJobSeq ?? 0) + 1)}_${Date.now().toString(36)}`, task, params, status: 'running', log: [`$ ${relative(ROOT, cmd) || cmd} ${args.join(' ')}`], startedAt: Date.now() };
+  // Unbuffered Python so Blender's progress lines stream as they happen.
+  const proc = spawn(cmd, args, { cwd: ROOT, env: { ...process.env, PYTHONUNBUFFERED: '1' } });
   job.proc = proc;
   let partial = '';
   const onData = (b: Buffer) => {
