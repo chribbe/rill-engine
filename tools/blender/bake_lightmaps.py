@@ -51,8 +51,26 @@ PAGE = arg('--size', 2048)
 DENOISE = '--no-denoise' not in argv
 MAP = arg('--map', 'testmap')
 MAP_DIR = os.path.join(PUBLIC, 'maps', MAP)
-OUT_DIR = os.path.join(MAP_DIR, 'lightmaps')
+# --out: write the LightmapSet elsewhere (test bakes that must not replace the map's).
+OUT_DIR = arg('--out', os.path.join(MAP_DIR, 'lightmaps'))
 doc = load_json(os.path.join(MAP_DIR, 'map.json'))
+# Map format v2 (editor-owned): `entities` with an outliner hierarchy; hidden entities
+# (or descendants of hidden groups) are not part of the bake. v1: `objects`.
+_ents = doc.get('entities', doc.get('objects', []))
+_by_id = {e['id']: e for e in _ents}
+
+
+def _visible(e):
+    seen = set()
+    while e is not None and e['id'] not in seen:
+        if e.get('visible') is False:
+            return False
+        seen.add(e['id'])
+        e = _by_id.get(e.get('parent'))
+    return True
+
+
+doc['objects'] = [e for e in _ents if _visible(e)]
 manifest = load_json(os.path.join(PUBLIC, 'textures', 'manifest.json'))
 t_start = time.time()
 

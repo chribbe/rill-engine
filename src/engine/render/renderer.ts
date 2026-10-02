@@ -1888,9 +1888,11 @@ export class Renderer {
     this.shadows.update(camera.position as Float32Array, camera.forward as Float32Array, camera.fovY, camera.aspect, camera.near, de.sunDir, S.shadows);
     // Shadow casters sway with the same wind as the lit pass (written after the view matrices).
     const [wind1, wind2] = env.windUniforms();
+    // "Animate vegetation" off: casters stand still too (as in the lit pass).
+    if (!S.wind) wind1[2] = 0;
     this.shadows.writeWind(wind1, wind2);
     // Smoke drifts with the wind (strength 1 ~ 8 m/s near the ground).
-    const airK = (S.wind ? wind1[2] : 0) * 8;
+    const airK = wind1[2] * 8;
     this.particles.air = [wind1[0] * airK, wind1[1] * airK];
     this.spotShadows.writeWind(wind1, wind2);
     this.writeFrameUniforms(this.frame, this.frameBuffer, camera, this.width, this.height, env, de, preExposure, ev, flags, S.debugView);

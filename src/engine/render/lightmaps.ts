@@ -45,8 +45,8 @@ function halfToFloat(h: number): number {
  * into one 3D rgba16float texture of size (nx, ny, nz * 12) - one z-slab per
  * (component, face) so hardware trilinear filtering works within each slab.
  */
-async function loadProbeVolume(device: GPUDevice, base: string, pv: NonNullable<LightmapSetDocument['probeVolumes']>[number]): Promise<LoadedProbeVolume> {
-  const r = await fetch(base + pv.file);
+async function loadProbeVolume(device: GPUDevice, base: string, pv: NonNullable<LightmapSetDocument['probeVolumes']>[number], q = ''): Promise<LoadedProbeVolume> {
+  const r = await fetch(base + pv.file + q);
   if (!r.ok) throw new Error(`Probe volume fetch failed: ${pv.file}`);
   const src = new Uint16Array(await r.arrayBuffer());
   const [nx, ny, nz] = pv.dims;
@@ -173,8 +173,10 @@ export function packRgb9e5(rgb: Float32Array, n: number): Uint32Array<ArrayBuffe
   return out;
 }
 
-export async function loadLightmapSet(device: GPUDevice, url: string): Promise<LoadedLightmaps> {
-  const res = await fetch(url);
+/** `bust`: cache-busting token appended to every file request (reload after a re-bake). */
+export async function loadLightmapSet(device: GPUDevice, url: string, bust?: string): Promise<LoadedLightmaps> {
+  const q = bust ? `?v=${encodeURIComponent(bust)}` : '';
+  const res = await fetch(url + q);
   if (!res.ok) throw new Error(`LightmapSet fetch failed: ${url}`);
   const doc = (await res.json()) as LightmapSetDocument;
   const base = url.slice(0, url.lastIndexOf('/') + 1);
@@ -192,7 +194,7 @@ export async function loadLightmapSet(device: GPUDevice, url: string): Promise<L
   });
   await Promise.all(
     files.map(async ({ layer, file }) => {
-      const r = await fetch(base + file);
+      const r = await fetch(base + file + q);
       if (!r.ok) throw new Error(`Lightmap fetch failed: ${file}`);
       const img = parseHdr(await r.arrayBuffer());
       if (img.width !== w || img.height !== h) throw new Error(`Lightmap ${file} size mismatch`);
@@ -200,7 +202,7 @@ export async function loadLightmapSet(device: GPUDevice, url: string): Promise<L
       device.queue.writeTexture({ texture, origin: [0, 0, layer] }, packed, { bytesPerRow: w * 4, rowsPerImage: h }, [w, h, 1]);
     }),
   );
-  const probeVolume = doc.probeVolumes?.length ? await loadProbeVolume(device, base, doc.probeVolumes[0]) : null;
+  const probeVolume = doc.probeVolumes?.length ? await loadProbeVolume(device, base, doc.probeVolumes[0], q) : null;
   return {
     doc, texture, view: texture.createView({ dimension: '2d-array' }), layers, bytes: w * h * 4 * layers + (probeVolume?.bytes ?? 0),
     directional: doc.components[1] === 'skyRnm0',

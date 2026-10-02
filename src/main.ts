@@ -90,7 +90,7 @@ async function main() {
 
   const player = new FirstPersonController(camera, canvas, world.collision);
   const sandbox = new Sandbox(renderer, camera, world);
-  const sp = world.doc.spawn;
+  const sp = world.spawn();
   player.teleport(sp.position, sp.yaw, sp.pitch);
 
   const stats = new StatsOverlay(document.body);
@@ -109,14 +109,12 @@ async function main() {
     a.click();
   };
   const bookmarks: Record<string, () => void> = { Spawn: () => player.teleport(sp.position, sp.yaw, sp.pitch) };
-  for (const o of world.doc.objects) {
-    if (o.type === 'marker' && o.semantic === 'viewpoint') {
-      const q = o.transform;
-      bookmarks[o.name ?? o.id] = () => {
-        player.fly = true;
-        player.teleport([q.position[0], q.position[1], q.position[2]], o.yaw ?? 0, o.pitch ?? 0);
-      };
-    }
+  for (const o of world.viewpoints()) {
+    const q = o.transform;
+    bookmarks[o.name ?? o.id] = () => {
+      player.fly = true;
+      player.teleport([q.position[0], q.position[1], q.position[2]], o.yaw ?? 0, o.pitch ?? 0);
+    };
   }
   const gui = createPlayground(renderer, env, player, {
     setPreset,
@@ -229,12 +227,11 @@ async function main() {
     setSize: (w: number, h: number) => { sizeOverride = w > 0 ? [w, h] : null; },
     /** Captures every viewpoint marker (optionally a subset by index) to screenshots/<prefix>_<i>.png. */
     shotViews: async (prefix: string, w = 1280, h = 720, only?: number[]) => {
-      const views = world.doc.objects.filter((o) => o.type === 'marker' && o.semantic === 'viewpoint');
+      const views = world.viewpoints();
       const files: string[] = [];
       for (let i = 0; i < views.length; i++) {
         if (only && !only.includes(i)) continue;
         const v = views[i];
-        if (v.type !== 'marker') continue;
         player.fly = true;
         player.teleport([v.transform.position[0], v.transform.position[1], v.transform.position[2]], v.yaw ?? 0, v.pitch ?? 0);
         files.push(await api.shot(`${prefix}_${i}`, w, h));
@@ -290,6 +287,7 @@ async function main() {
     const c0 = performance.now();
     applySize();
     if (renderer.settings.clutter) world.ensureClutter();
+    world.flush();
     player.update(dt);
     world.update(dt, player.feet);
     sandbox.update(dt);

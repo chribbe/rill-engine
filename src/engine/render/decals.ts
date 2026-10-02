@@ -61,6 +61,20 @@ export class DecalSet {
     return this.staticBoxes.length + this.dynBoxes.length;
   }
 
+  /** True when every decal's material is already in the atlas (else rebuild with `buildDecals`). */
+  covers(decals: DecalObject[]) {
+    return decals.every((d) => this.mats.has(d.decal.material));
+  }
+
+  /** Replaces the static (map) decals, e.g. after editor edits; runtime decals are kept. */
+  setStatic(decals: DecalObject[]) {
+    this.staticPacked = new Float32Array(decals.length * DECAL_FLOATS);
+    this.staticBoxes = decals.map((d, i) => {
+      const t = d.transform;
+      return this.pack(this.staticPacked, i * DECAL_FLOATS, d.decal.material, t.position, t.rotation ?? [0, 0, 0, 1], d.decal.size, d.decal.opacity ?? 1, d.decal.repeat ?? 1);
+    });
+  }
+
   has(material: string) {
     return this.mats.has(material);
   }

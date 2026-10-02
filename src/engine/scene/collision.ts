@@ -23,6 +23,14 @@ export class CollisionWorld {
   readonly cell = 4;
   triangleCount = 0;
 
+  /** Removes every triangle (the editor rebuilds collision after scene edits). */
+  clear() {
+    this.tris.length = 0;
+    this.surf.length = 0;
+    this.grid.clear();
+    this.triangleCount = 0;
+  }
+
   private key(ix: number, iz: number) {
     return (ix + 32768) * 65536 + (iz + 32768);
   }

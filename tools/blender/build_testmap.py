@@ -23,7 +23,9 @@ from common import (PUBLIC, MeshBuilder, export_glb, quat_mul, reset_scene,  # n
 
 ASSET_REL = 'assets/testmap'
 ASSET_DIR = os.path.join(PUBLIC, ASSET_REL)
-MAP_PATH = os.path.join(PUBLIC, 'maps', 'testmap', 'map.json')
+# The editor owns maps/testmap/map.json (format v2): the generator writes its v1 output where
+# run.ts points it (RILL_MAP_OUT), to be imported with tools/scene/migrate.ts --in.
+MAP_PATH = os.environ.get('RILL_MAP_OUT') or os.path.join(PUBLIC, 'maps', 'testmap', 'map.json')
 
 # Lightmap texel densities (texels per metre).
 TPM_TERRAIN = 4

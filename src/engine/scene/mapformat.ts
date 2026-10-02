@@ -1,22 +1,40 @@
 import type { MaterialDef } from '../render/materials';
 
 /**
- * Map document format (public/maps/<name>/map.json). This is the single source
- * of truth for world content: renderer state is always derived from it, so a
- * future editor (or an AI tool) can inspect and modify the world by editing
- * this structure and re-applying it.
+ * Map document format (public/maps/<name>/map.json), version 2. The map
+ * document is the authoritative world: the web editor owns it (Blender only
+ * produces assets and bakes), renderer state is always derived from it, and
+ * every edit goes through editor commands (src/editor/commands.ts) that patch
+ * it. See docs/EDITOR.md.
+ *
+ * Every entity stores its own world transform; `parent` is the outliner
+ * hierarchy (editor transforms carry descendants along), never a transform
+ * inheritance the runtime has to resolve.
  */
 
 export interface MapDocument {
   format: 'rill.map';
-  version: 1;
+  version: 2;
   name: string;
   description?: string;
   environment: { preset: string; overrides?: Record<string, unknown> };
   /** LightmapSet manifest, relative to the map directory. */
   lightmaps?: string;
+  /** Counter for generated entity IDs: IDs are never reused (lightmaps and tools key on them). */
+  nextId?: number;
+  entities: Entity[];
+}
+
+/** Version 1 (Blender-generated maps before the editor): `objects`, a document-level spawn, world-space turnstiles. */
+export interface MapDocumentV1 {
+  format: 'rill.map';
+  version: 1;
+  name: string;
+  description?: string;
+  environment: { preset: string; overrides?: Record<string, unknown> };
+  lightmaps?: string;
   spawn: { position: [number, number, number]; yaw: number; pitch: number };
-  objects: MapObject[];
+  objects: Entity[];
 }
 
 export interface Transform {
@@ -26,14 +44,28 @@ export interface Transform {
   scale?: [number, number, number];
 }
 
-interface MapObjectBase {
+interface EntityCommon {
   /** Stable identifier: never reused, survives renames and edits. */
   id: string;
   name?: string;
-  /** Semantic tag for tools ("building", "road", "tree", "streetlight", ...). */
+  /** Semantic class for tools and queries ("building", "road", "tree", "streetlight", ...). */
   semantic?: string;
-  transform: Transform;
   tags?: string[];
+  /** Outliner parent (a group or any entity). Organisational only: transforms are stored in world space. */
+  parent?: string;
+  /** false: not rendered, not collided (editor and play). */
+  visible?: boolean;
+  /** Not pickable in the viewport; transform / delete commands refuse it (other properties stay editable). */
+  locked?: boolean;
+}
+
+interface MapObjectBase extends EntityCommon {
+  transform: Transform;
+}
+
+/** Outliner folder. No transform: moving a group moves its descendants. */
+export interface GroupObject extends EntityCommon {
+  type: 'group';
 }
 
 export interface MeshObject extends MapObjectBase {
@@ -49,7 +81,8 @@ export interface MeshObject extends MapObjectBase {
   receiveDecals?: boolean;
   /**
    * Turnstile rotor (tripod arms): turns 120° about `axis` through `pivot` when the
-   * player walks through the lane (centre `lane`, passing direction `dir`). World space.
+   * player walks through the lane (centre `lane`, passing direction `dir`). Entity-local
+   * space (so the turnstile moves with its entity).
    */
   turnstile?: { pivot: [number, number, number]; axis: [number, number, number]; lane: [number, number, number]; dir: [number, number, number] };
 }
@@ -93,7 +126,7 @@ export interface DecalObject extends MapObjectBase {
   };
 }
 
-/** Non-rendered marker (viewpoints, spawn candidates, probe placement later). */
+/** Non-rendered marker: semantic 'viewpoint' (camera bookmarks) or 'spawn' (player start). */
 export interface MarkerObject extends MapObjectBase {
   type: 'marker';
   yaw?: number;
@@ -144,7 +177,16 @@ export interface SignObject extends MapObjectBase {
   };
 }
 
-export type MapObject = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject | SignObject;
+export type Entity = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject | SignObject | GroupObject;
+export type EntityType = Entity['type'];
+/** Entities with a transform (everything but groups). */
+export type SpatialEntity = Exclude<Entity, GroupObject>;
+/** @deprecated name from format v1. */
+export type MapObject = Entity;
+
+export function isSpatial(e: Entity): e is SpatialEntity {
+  return e.type !== 'group';
+}
 
 export interface LightmapSetDocument {
   format: 'rill.lightmapset';

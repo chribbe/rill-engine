@@ -31,7 +31,9 @@ import hasselby_surfaces as HS  # noqa: E402
 
 ASSET_REL = 'assets/hasselby'
 ASSET_DIR = os.path.join(PUBLIC, ASSET_REL)
-MAP_PATH = os.path.join(PUBLIC, 'maps', 'hasselby', 'map.json')
+# The editor owns maps/hasselby/map.json (format v2): the generator writes its v1 output where
+# run.ts points it (RILL_MAP_OUT), to be imported with tools/scene/migrate.ts --in.
+MAP_PATH = os.environ.get('RILL_MAP_OUT') or os.path.join(PUBLIC, 'maps', 'hasselby', 'map.json')
 os.makedirs(ASSET_DIR, exist_ok=True)
 
 # Lightmap texel densities (texels per metre). Lightmaps carry sky occlusion and

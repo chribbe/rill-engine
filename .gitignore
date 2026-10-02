@@ -8,3 +8,4 @@ dist
 /screenshots
 /public/textures/bc7
 /.texture-cache
+/build

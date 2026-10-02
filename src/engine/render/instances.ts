@@ -29,7 +29,32 @@ export class InstanceStore {
     return this.device.createBuffer({ label: 'instances', size: n * INSTANCE_BYTES, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
   }
 
+  private freeSlots: number[] = [];
+
+  /** A slot for one instance; reuses slots released by `free` (editor deletes). */
   alloc(): number {
+    const f = this.freeSlots.pop();
+    if (f !== undefined) return f;
+    return this.allocNew();
+  }
+
+  /** `n` consecutive new slots (never recycled ones): returns the first. */
+  allocContiguous(n: number): number {
+    const first = this.allocNew();
+    for (let i = 1; i < n; i++) this.allocNew();
+    return first;
+  }
+
+  /** Releases a slot. The caller must have stopped drawing it; its record is zeroed. */
+  free(slot: number) {
+    const o = slot * INSTANCE_FLOATS;
+    this.cpu.fill(0, o, o + INSTANCE_FLOATS);
+    this.dirtyMin = Math.min(this.dirtyMin, slot);
+    this.dirtyMax = Math.max(this.dirtyMax, slot);
+    this.freeSlots.push(slot);
+  }
+
+  private allocNew(): number {
     if (this.count >= this.capacity) {
       const cap = this.capacity * 2;
       const cpu = new Float32Array(cap * INSTANCE_FLOATS);
@@ -62,6 +87,14 @@ export class InstanceStore {
   /** Moves an instance (animated props); the rest of its record is kept. */
   setModel(slot: number, model: ArrayLike<number>) {
     this.cpu.set(model as Float32Array, slot * INSTANCE_FLOATS);
+    this.dirtyMin = Math.min(this.dirtyMin, slot);
+    this.dirtyMax = Math.max(this.dirtyMax, slot);
+  }
+
+  /** Behaviour flags (low 8 bits: no-decals, wind...); the reflection probe bits are kept. */
+  setFlags(slot: number, flags: number) {
+    const o = slot * INSTANCE_FLOATS;
+    this.u32[o + 21] = ((this.u32[o + 21] & 0xffffff00) | (flags & 0xff)) >>> 0;
     this.dirtyMin = Math.min(this.dirtyMin, slot);
     this.dirtyMax = Math.max(this.dirtyMax, slot);
   }
