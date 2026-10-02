@@ -1,0 +1,12 @@
+{
+  "format": "rill.spline",
+  "name": "Granite kerb",
+  "description": "Single 15 x 12 cm granite kerb line (edges of lawns, squares, parking).",
+  "semantic": "kerb",
+  "width": 0.15,
+  "sampleSpacing": 0.5,
+  "texelDensity": 8,
+  "parts": [
+    { "kind": "profile", "material": "granite_curb", "profile": [[-0.075, 0.0], [-0.075, 0.12], [0.075, 0.12], [0.075, 0.0]] }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "format": "rill.spline",
+  "name": "Chain-link fence",
+  "description": "1.9 m galvanised chain-link fence in 2.5 m segments (school yards, sports grounds, railway).",
+  "semantic": "fence",
+  "sampleSpacing": 1,
+  "collision": true,
+  "parts": [
+    { "kind": "repeat", "asset": "assets/testmap/fence_segment.glb", "spacing": 2.5, "chord": true }
+  ]
+}

@@ -9,7 +9,10 @@ import { loadLightmapSet, type LoadedLightmaps } from '../render/lightmaps';
 import { buildDecals, type DecalSet } from '../render/decals';
 import { ClutterSystem, type ClutterSource } from '../render/clutter';
 import { CollisionWorld, Surface } from './collision';
-import type { DecalObject, Entity, LightObject, MapDocument, MarkerObject, MeshObject, ReflectionProbeObject, SignObject, Transform } from './mapformat';
+import type { DecalObject, Entity, LightObject, MapDocument, MarkerObject, MeshObject, ReflectionProbeObject, ScatterObject, SignObject, Transform } from './mapformat';
+import { evaluateScatter, type ScatterInstance, type ScatterPreset } from './scatter';
+import { buildSpline, type SplineBuild, type SplinePreset } from './splines';
+import type { SplineObject } from './mapformat';
 import { SceneStore, type SceneChange } from './scene';
 import { buildSigns } from '../render/signs';
 
@@ -26,11 +29,17 @@ const RUNTIME_DECALS = ['decal_bullet', 'decal_bullet_metal'];
  * rebuilt lazily (`ensureCollision`, before play).
  */
 
+type Lods = { mesh: GpuMesh; distance: number; materials: Material[] }[];
+
 export interface RuntimeObject {
   doc: Entity;
   renderables: Renderable[];
   /** Mesh entities: resolved LOD chain (LOD0 = renderables[0].mesh). */
-  lods?: { mesh: GpuMesh; distance: number; materials: Material[] }[];
+  lods?: Lods;
+  /** Scatter entities: preset, species models and the evaluated instances (renderables[i] = instances[i]). */
+  scatter?: { preset: ScatterPreset; species: Lods[]; instances: ScatterInstance[]; ms: number; groundRev: number };
+  /** Spline entities: preset, repeated-part models, the last build and its uploaded mesh. */
+  spline?: { preset: SplinePreset; assets: Map<string, Lods>; build: SplineBuild | null; mesh: GpuMesh | null; version: number; ms: number };
 }
 
 export function fnv1a(s: string): number {
@@ -99,7 +108,16 @@ export class World {
   reflectionProbes: ReflectionProbeObject[] = [];
   readonly collision = new CollisionWorld();
   /** Collision no longer matches the scene (rebuilt by `ensureCollision`). */
-  collisionDirty = true;
+  private _collisionDirty = true;
+  get collisionDirty() { return this._collisionDirty; }
+  set collisionDirty(v: boolean) {
+    this._collisionDirty = v;
+    // Scatters stand on the collision surfaces: re-drop them once edits pause.
+    if (v) this.regroundAt = performance.now() + 500;
+  }
+  private regroundAt = 0;
+  /** Bumped on every collision rebuild (scatters remember the ground they were dropped on). */
+  collisionRev = 0;
   /** Static geometry changed since the lightmaps were baked (re-bake to update). */
   lightingStale = false;
   private meshes = new Map<string, Promise<GpuMesh>>();
@@ -164,10 +182,18 @@ export class World {
   }
 
   /** Builds every runtime object from the current document (initial load / reload). */
+  /** True while the initial build runs: scatters wait for the complete ground. */
+  private building = false;
+
   private async build(onProgress?: (msg: string) => void) {
     const doc = this.doc;
     onProgress?.(`Loading ${doc.entities.length} entities`);
-    await Promise.all(doc.entities.map((o) => this.addObject(o)));
+    this.building = true;
+    try {
+      await Promise.all(doc.entities.map((o) => this.addObject(o)));
+    } finally {
+      this.building = false;
+    }
     if (doc.lightmaps) {
       onProgress?.('Loading lightmaps');
       try {
@@ -181,6 +207,15 @@ export class World {
     this.rebuildLights();
     this.rebuildReflectionProbes();
     this.ensureCollision();
+    // Splines drape on the loaded ground; then the collision includes them for scatters.
+    const splines = [...this.objects.values()].filter((r) => r.spline);
+    if (splines.length) {
+      for (const r of splines) await this.populateSpline(r);
+      this.ensureCollision();
+    }
+    // Scatters that evaluated while the ground was still loading: drop them again.
+    for (const r of this.objects.values()) if (r.scatter && r.scatter.groundRev !== this.collisionRev) this.populateScatter(r);
+    this.compactRenderables();
     // Everything above was built from the final document: nothing left for flush().
     this.dirtyKinds.clear();
     if (this.renderer.settings.clutter) {
@@ -222,8 +257,21 @@ export class World {
     return this.dirty.size;
   }
 
+  /** Ground under scatters changed and edits paused: rebuild collision, re-drop every scatter. */
+  private maybeReground() {
+    if (!this.regroundAt || performance.now() < this.regroundAt) return;
+    this.regroundAt = 0;
+    const scatters = [...this.objects.values()].filter((r) => r.scatter);
+    if (!scatters.length) return;
+    // Full rebuild (splines included), so scatters keep off newly drawn paths.
+    this.ensureCollision();
+    for (const r of scatters) if (r.scatter!.groundRev !== this.collisionRev) this.populateScatter(r);
+    this.compactRenderables();
+  }
+
   /** Applies queued scene changes to the runtime (call once per frame, before rendering). */
   flush() {
+    if (this.regroundAt && this.dirty.size === 0) this.maybeReground();
     if (this.dirty.size === 0 && this.dirtyKinds.size === 0) return;
     const ids = [...this.dirty];
     this.dirty.clear();
@@ -240,6 +288,7 @@ export class World {
       }
     }
     this.compactRenderables();
+    this.maybeReground();
     const k = this.dirtyKinds;
     if (k.has('light')) this.rebuildLights();
     if (k.has('reflectionProbe')) this.rebuildReflectionProbes();
@@ -250,7 +299,18 @@ export class World {
 
   private syncEntity(rt: RuntimeObject, e: Entity) {
     const prev = rt.doc;
-    if (prev.type !== e.type || (e.type === 'mesh' && meshIdentity(prev as MeshObject) !== meshIdentity(e)) || e.type === 'instances') {
+    if (e.type === 'scatter' && prev.type === 'scatter' && prev.scatter.preset === e.scatter.preset) {
+      // Same species: re-evaluate in place (painting, moving, density...).
+      rt.doc = e;
+      if (rt.scatter) this.populateScatter(rt);
+      return;
+    }
+    if (e.type === 'spline' && prev.type === 'spline' && prev.spline.preset === e.spline.preset) {
+      rt.doc = e;
+      if (rt.spline) void this.populateSpline(rt);
+      return;
+    }
+    if (prev.type !== e.type || (e.type === 'mesh' && meshIdentity(prev as MeshObject) !== meshIdentity(e)) || e.type === 'instances' || e.type === 'scatter' || e.type === 'spline') {
       // New mesh, materials or instance list: re-create.
       this.removeRuntime(e.id);
       void this.addObject(e);
@@ -286,6 +346,13 @@ export class World {
     for (const r of rt.renderables) {
       this.removed.add(r);
       this.renderer.instances.free(r.slot);
+    }
+    if (rt.spline?.mesh) {
+      this.renderer.arena.free(rt.spline.mesh);
+      rt.spline.mesh = null;
+      rt.spline.version++;
+      this.splineCollisionStale = true;
+      this.regroundAt = performance.now() + 500;
     }
     if (rt.doc.type === 'mesh' || rt.doc.type === 'instances') {
       this.collisionDirty = true;
@@ -433,13 +500,27 @@ export class World {
     try { await this.signBuild; } finally { this.signBuild = null; }
   }
 
-  /** Rebuilds the collision soup from visible, collidable mesh entities if anything changed. */
-  ensureCollision() {
-    if (!this.collisionDirty) return;
+  /** Spline geometry changed since the collision was built (ignored by ground queries during editing). */
+  private splineCollisionStale = false;
+
+  /**
+   * Rebuilds the collision soup from visible, collidable mesh entities if anything changed.
+   * `forGround`: a ground query while editing (splines being dragged don't force a rebuild).
+   */
+  ensureCollision(forGround = false) {
+    if (!this.collisionDirty && (forGround || !this.splineCollisionStale)) return;
+    this.splineCollisionStale = false;
     const t0 = performance.now();
     this.collision.clear();
     for (const rt of this.objects.values()) {
       const o = rt.doc;
+      if (o.type === 'spline' && rt.spline?.build && (o.collision ?? rt.spline.preset.collision ?? true) && this.scene.effectiveVisible(o.id)) {
+        for (const p of rt.spline.build.primitives) this.collision.addMesh(p.positions, p.indices, mat4.identity(), Surface.Default, o.id);
+        for (const r of rt.renderables.slice(rt.spline.mesh ? 1 : 0)) {
+          for (const p of r.mesh.primitives) this.collision.addMesh(p.positions, p.indices, this.renderer.instances.model(r.slot), Surface.Default, o.id);
+        }
+        continue;
+      }
       if (o.type !== 'mesh' || !(o.collision ?? o.static ?? true) || !this.scene.effectiveVisible(o.id)) continue;
       const r = rt.renderables[0];
       if (!r) continue;
@@ -447,11 +528,139 @@ export class World {
       r.mesh.primitives.forEach((p, k) => {
         const m = r.materials[k];
         if (m.def.shader === 'foliage') return;
-        this.collision.addMesh(p.positions, p.indices, model, (m.def.metallic ?? 0) > 0.5 ? Surface.Metal : Surface.Default);
+        this.collision.addMesh(p.positions, p.indices, model, (m.def.metallic ?? 0) > 0.5 ? Surface.Metal : Surface.Default, o.id);
       });
     }
     this.collisionDirty = false;
+    this.collisionRev++;
     console.info(`[world] collision: ${this.collision.triangleCount} triangles in ${(performance.now() - t0).toFixed(0)} ms`);
+  }
+
+  // ------------------------------------------------------------------ scatter
+
+  private scatterPresets = new Map<string, Promise<ScatterPreset>>();
+  scatterPreset(name: string): Promise<ScatterPreset> {
+    let p = this.scatterPresets.get(name);
+    if (!p) {
+      p = fetch(`/scatter/${encodeURIComponent(name)}.json`).then((r) => {
+        if (!r.ok) throw new Error(`scatter preset '${name}' not found`);
+        return r.json() as Promise<ScatterPreset>;
+      });
+      p.catch(() => this.scatterPresets.delete(name));
+      this.scatterPresets.set(name, p);
+    }
+    return p;
+  }
+
+  /** Re-evaluates a scatter against the current ground and rebuilds its instances. */
+  populateScatter(rt: RuntimeObject) {
+    const e = rt.doc as ScatterObject;
+    const sc = rt.scatter!;
+    const t0 = performance.now();
+    for (const r of rt.renderables) {
+      this.removed.add(r);
+      this.renderer.instances.free(r.slot);
+    }
+    rt.renderables = [];
+    this.ensureCollision(true);
+    const m = transformMatrix({ position: e.transform.position, rotation: e.transform.rotation });
+    const toWorld = (x: number, z: number): [number, number] => [m[0] * x + m[8] * z + m[12], m[2] * x + m[10] * z + m[14]];
+    const inst = evaluateScatter(e, sc.preset, toWorld, (x, z) => this.collision.groundHit(x, 1e4, z, 2e4), (id) => this.scene.get(id)?.semantic);
+    const vis = this.scene.effectiveVisible(e.id);
+    const semantic = e.semantic ?? sc.preset.semantic ?? 'vegetation';
+    const flags = 2 | (semantic === 'vegetation' ? 8 : 0);
+    const shadow = sc.preset.castShadow ?? true;
+    for (const it of inst) {
+      const lods = sc.species[it.species];
+      const model = yawMatrix(it.position[0], it.position[1], it.position[2], it.yawDeg, it.scale);
+      const id = `${e.id}#${it.key}`;
+      const r = this.makeRenderable(id, lods[0].mesh, lods[0].materials, model, shadow, flags, fnv1a(id));
+      r.lods = World.lodChain(lods, it.scale);
+      r.visible = vis;
+      this.renderer.instances.setProbes(r.slot, this.renderer.probeBits(r.worldMin, r.worldMax));
+      rt.renderables.push(r);
+    }
+    sc.instances = inst;
+    sc.groundRev = this.collisionRev;
+    sc.ms = performance.now() - t0;
+  }
+
+  /** Evaluated instances of a scatter entity (world transforms, cell keys, species assets). */
+  scatterInstances(id: string): { key: string; asset: string; position: [number, number, number]; yawDeg: number; scale: number }[] {
+    const rt = this.objects.get(id);
+    if (!rt?.scatter) return [];
+    return rt.scatter.instances.map((i) => ({ key: i.key, asset: rt.scatter!.preset.species[i.species].asset, position: i.position, yawDeg: i.yawDeg, scale: i.scale }));
+  }
+
+  // ------------------------------------------------------------------ splines
+
+  private splinePresets = new Map<string, Promise<SplinePreset>>();
+  splinePreset(name: string): Promise<SplinePreset> {
+    let p = this.splinePresets.get(name);
+    if (!p) {
+      p = fetch(`/splines/${encodeURIComponent(name)}.json`).then((r) => {
+        if (!r.ok) throw new Error(`spline preset '${name}' not found`);
+        return r.json() as Promise<SplinePreset>;
+      });
+      p.catch(() => this.splinePresets.delete(name));
+      this.splinePresets.set(name, p);
+    }
+    return p;
+  }
+
+  /** Rebuilds a spline's geometry (draped on the current ground, itself excluded). */
+  async populateSpline(rt: RuntimeObject) {
+    const sp = rt.spline!;
+    const v = ++sp.version;
+    const e = rt.doc as SplineObject;
+    const t0 = performance.now();
+    this.ensureCollision(true);
+    const m = transformMatrix(e.transform);
+    const toWorld = (p: [number, number, number]): [number, number, number] => {
+      const w = vec3.transformMat4(p, m);
+      return [w[0], w[1], w[2]];
+    };
+    // Ground within a window below the curve (2 m above, 12 m below); else the topmost surface.
+    const C = this.collision;
+    const build = buildSpline(e, sp.preset, toWorld, (x, z, y) => (C.groundHit(x, y + 2, z, 14, e.id) ?? C.groundHit(x, 1e4, z, 2e4, e.id))?.height ?? null);
+    const mats = await Promise.all(build.primitives.map((p) => this.renderer.materials.get(p.material)));
+    if (sp.version !== v || this.objects.get(e.id) !== rt) return;
+    for (const r of rt.renderables) {
+      this.removed.add(r);
+      this.renderer.instances.free(r.slot);
+    }
+    if (sp.mesh) this.renderer.arena.free(sp.mesh);
+    rt.renderables = [];
+    sp.mesh = null;
+    const vis = this.scene.effectiveVisible(e.id);
+    const shadow = e.castShadow ?? sp.preset.castShadow ?? true;
+    if (build.primitives.length) {
+      const mesh = this.renderer.arena.upload({ name: e.id, primitives: build.primitives });
+      const r = this.makeRenderable(e.id, mesh, mats, mat4.identity(), shadow, 0, fnv1a(e.id));
+      r.visible = vis;
+      this.applyLightmapTo(e.id, r);
+      this.renderer.instances.setProbes(r.slot, this.renderer.probeBits(r.worldMin, r.worldMax));
+      rt.renderables.push(r);
+      sp.mesh = mesh;
+    }
+    build.instances.forEach((it, k) => {
+      const lods = sp.assets.get(it.asset);
+      if (!lods) return;
+      const id = `${e.id}#${k}`;
+      const r = this.makeRenderable(id, lods[0].mesh, lods[0].materials, it.matrix, shadow, 0, fnv1a(id));
+      r.lods = World.lodChain(lods, 1);
+      r.visible = vis;
+      this.renderer.instances.setProbes(r.slot, this.renderer.probeBits(r.worldMin, r.worldMax));
+      rt.renderables.push(r);
+    });
+    // A lightmapped spline whose chart changed shows its old bake until re-baked.
+    const prevRes = sp.build?.lightmapResolution;
+    if (prevRes && JSON.stringify(prevRes) !== JSON.stringify(build.lightmapResolution) && this.lightmaps?.doc.objects[e.id]) this.lightingStale = true;
+    sp.build = build;
+    sp.ms = performance.now() - t0;
+    this.compactRenderables();
+    this.splineCollisionStale = true;
+    this.regroundAt = performance.now() + 500;
   }
 
   // ------------------------------------------------------------------ queries
@@ -664,6 +873,37 @@ export class World {
             rt.renderables.push(r);
             this.renderer.instances.setProbes(r.slot, this.renderer.probeBits(r.worldMin, r.worldMax));
           });
+        }
+        break;
+      }
+      case 'scatter': {
+        this.pendingLoads++;
+        try {
+          const preset = await this.scatterPreset(o.scatter.preset);
+          const species = await Promise.all(preset.species.map(async (sp) => this.lodMaterials(await this.model(sp.asset), sp.asset)));
+          if (this.objects.get(o.id) !== rt) return;
+          rt.scatter = { preset, species, instances: [], ms: 0, groundRev: -1 };
+          if (!this.building) this.populateScatter(rt);
+        } catch (e) {
+          console.warn(`[world] ${o.id}: ${(e as Error).message}`);
+        } finally {
+          this.pendingLoads--;
+        }
+        break;
+      }
+      case 'spline': {
+        this.pendingLoads++;
+        try {
+          const preset = await this.splinePreset(o.spline.preset);
+          const assets = new Map<string, Lods>();
+          for (const part of preset.parts) if (part.kind === 'repeat' && part.asset && !assets.has(part.asset)) assets.set(part.asset, await this.lodMaterials(await this.model(part.asset), part.asset));
+          if (this.objects.get(o.id) !== rt) return;
+          rt.spline = { preset, assets, build: null, mesh: null, version: 0, ms: 0 };
+          if (!this.building) await this.populateSpline(rt);
+        } catch (e) {
+          console.warn(`[world] ${o.id}: ${(e as Error).message}`);
+        } finally {
+          this.pendingLoads--;
         }
         break;
       }

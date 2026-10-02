@@ -1,4 +1,5 @@
 import { isSpatial, type Entity, type Transform } from '../../engine/scene/mapformat';
+import { transformMatrix } from '../../engine/scene/world';
 import type { Editor } from '../editor';
 import { editableProperties } from '../commands';
 import { eulerToQuat, quatToEuler, type V3 } from '../xform';
@@ -22,7 +23,7 @@ export class Inspector {
     const refresh = () => {
       if (this.scrubbing) return;
       const p = ed.primary ?? null;
-      const key = ed.selection.join('|');
+      const key = `${ed.selection.join('|')}#${ed.subSelection ?? ''}`;
       if (p === this.shown && key === this.shownSel) return;
       this.render();
     };
@@ -37,7 +38,7 @@ export class Inspector {
     clear(this.body);
     const e = ed.primary ?? null;
     this.shown = e;
-    this.shownSel = ed.selection.join('|');
+    this.shownSel = `${ed.selection.join('|')}#${ed.subSelection ?? ''}`;
     if (!e) {
       this.body.append(h('div', { class: 'insp-empty' }, 'Nothing selected.', h('br'), h('small', {}, 'Click an object in the viewport or the scene list. Drag assets from the Assets tab into the view to place them.')));
       return;
@@ -137,6 +138,63 @@ export class Inspector {
           h('div', { class: 'insp-note' }, 'Probe volumes are baked with the lightmaps (Bake lighting).'),
         );
         break;
+      case 'scatter': {
+        const sc = e.scatter;
+        const rto = ed.rt.world.objects.get(e.id);
+        const presets = ed.scatterPresets.map((p) => p.name);
+        const pinfo = ed.scatterPresets.find((p) => p.name === sc.preset);
+        const n = rto?.renderables.length ?? 0;
+        const brush = sc.brush ?? [];
+        sec('Scatter',
+          row('Preset', select(presets.includes(sc.preset) ? presets : [sc.preset, ...presets], sc.preset, (v) => set('scatter.preset', v), Object.fromEntries(ed.scatterPresets.map((p) => [p.name, p.title])))),
+          pinfo?.description ? h('div', { class: 'insp-note' }, pinfo.description) : null,
+          row('Density', this.num('/100m²', sc.density ?? pinfo?.density ?? 1, 0.05, 2, (v, m) => this.prop([e.id], 'scatter.density', Math.max(0.05, Math.min(60, v)), m)),
+            h('button', { class: 'mini', title: 'Use the preset density', onclick: () => set('scatter.density', null) }, '↺')),
+          row('Seed', this.num('', sc.seed, 1, 0, (v, m) => this.prop([e.id], 'scatter.seed', Math.round(Math.abs(v)), m)),
+            h('button', { onclick: () => set('scatter.seed', Math.floor(Math.random() * 100000)) }, 'Reroll')),
+          row('Slope max', this.num('°', sc.slopeMax ?? 40, 0.5, 1, (v, m) => this.prop([e.id], 'scatter.slopeMax', Math.max(1, Math.min(89, v)), m))),
+          row('On', textField((sc.surfaces ?? ['terrain']).join(', '), (v) => set('scatter.surfaces', v.trim() ? v.split(',').map((x) => x.trim()).filter(Boolean) : null), { placeholder: 'ground semantics, e.g. terrain' })),
+          row('', h('span', { class: 'insp-ro small' }, `${n} instances · ${brush.length} brush circles${sc.area ? ' · area polygon' : ''} · ${sc.exclude?.length ?? 0} removed${rto?.scatter ? ` · ${rto.scatter.ms.toFixed(1)} ms` : ''}`)),
+          row('', h('button', { onclick: () => { ed.tool = 'paint'; ed.emit('tool'); } }, 'Paint (B)'),
+            h('button', { disabled: !brush.length, onclick: () => set('scatter.brush', null) }, 'Clear brush'),
+            h('button', { disabled: !sc.exclude?.length, onclick: () => set('scatter.exclude', null) }, 'Restore removed')),
+          row('', h('button', { title: 'Replace the scatter by ordinary mesh entities (hand placement)', onclick: () => ed.tryExec('scatter_detach', { id: e.id }) }, 'Convert to entities')),
+          ed.subSelection ? h('div', { class: 'insp-sub' },
+            h('span', {}, `Instance ${ed.subSelection}`),
+            h('button', { onclick: () => ed.tryExec('scatter_remove', { id: e.id, keys: [ed.subSelection!] }) }, 'Remove (Del)'),
+            h('button', { title: 'Make this instance an ordinary entity', onclick: () => { const r = ed.tryExec<{ ids: string[] }>('scatter_detach', { id: e.id, keys: [ed.subSelection!] }); if (r) ed.setSelection(r.ids); } }, 'Detach')) : null,
+        );
+        break;
+      }
+      case 'spline': {
+        const sp = e.spline;
+        const rto = ed.rt.world.objects.get(e.id);
+        const b = rto?.spline?.build;
+        const presets = ed.splinePresets.map((p) => p.name);
+        const pinfo = ed.splinePresets.find((p) => p.name === sp.preset);
+        const widthy = rto?.spline?.preset.parts.some((pt) => pt.widthFromSpline);
+        const pi = ed.subSelection?.startsWith('p') ? +ed.subSelection.slice(1) : -1;
+        // World XZ of the selected point (local -> world through the entity transform).
+        const wp = pi >= 0 && sp.points[pi] ? (() => {
+          const M = transformMatrix(e.transform), q = sp.points[pi];
+          return [M[0] * q[0] + M[8] * q[2] + M[12], 0, M[2] * q[0] + M[10] * q[2] + M[14]];
+        })() : undefined;
+        sec('Spline',
+          row('Preset', select(presets.includes(sp.preset) ? presets : [sp.preset, ...presets], sp.preset, (v) => ed.tryExec('modify_spline', { id: e.id, preset: v }), Object.fromEntries(ed.splinePresets.map((p) => [p.name, p.title])))),
+          pinfo?.description ? h('div', { class: 'insp-note' }, pinfo.description) : null,
+          widthy ? row('Width', this.num('m', sp.width ?? rto?.spline?.preset.width ?? 2.5, 0.01, 2, (v, m) => this.prop([e.id], 'spline.width', Math.max(0.2, v), m)),
+            h('button', { class: 'mini', title: 'Preset width', onclick: () => set('spline.width', null) }, '↺')) : null,
+          row('', checkbox(!!sp.closed, (v) => ed.tryExec('modify_spline', { id: e.id, closed: v }), 'Closed loop'), checkbox(sp.drape !== false, (v) => set('spline.drape', v ? null : false), 'Follow ground')),
+          row('', h('span', { class: 'insp-ro small' }, `${sp.points.length} points · ${b ? b.length.toFixed(1) : '?'} m${b?.lightmapResolution ? ` · lightmap ${b.lightmapResolution.join('×')}` : ' · not lightmapped'}${rto?.spline ? ` · ${rto.spline.ms.toFixed(1)} ms` : ''}`)),
+          row('', h('button', { onclick: () => set('spline.points', [...sp.points].reverse()) }, 'Reverse'), h('button', { onclick: () => { ed.tool = 'spline'; ed.emit('tool'); } }, 'Extend (N)')),
+          h('div', { class: 'insp-note' }, 'Drag the orange points in the view; with the Spline tool, clicks extend from the nearest end. Del removes a selected point.'),
+          pi >= 0 && wp ? h('div', { class: 'insp-sub' },
+            h('span', {}, `Point ${pi}`),
+            ...[0, 2].map((k) => this.num('xz'[k / 2], wp[k], 0.05, 2, (v) => { const q = [...wp]; q[k] = v; ed.tryExec('modify_spline', { id: e.id, move: { index: pi, point: q } }); })),
+            h('button', { disabled: sp.points.length <= 2, onclick: () => { ed.tryExec('modify_spline', { id: e.id, remove: pi }); ed.setSelection([e.id]); } }, 'Remove')) : null,
+        );
+        break;
+      }
       case 'group': {
         const n = ed.scene.descendants(e.id).length;
         sec('Group', row('Members', h('span', { class: 'insp-ro' }, `${ed.scene.children(e.id).length} children, ${n} descendants`)),
@@ -181,7 +239,7 @@ export class Inspector {
     const withRot = (k: number, v: number): Transform => { const r = [...eul] as V3; r[k] = v; const q = eulerToQuat(r); return { ...t, rotation: Math.abs(q[3]) > 1 - 1e-12 ? undefined : q }; };
     const withScale = (k: number, v: number): Transform => { const s = [...sc] as V3; s[k] = v; return { ...t, scale: s.every((x) => x === 1) ? undefined : s }; };
     const pivot = ed.pivotOf(e.id);
-    const anchored = pivot && Math.hypot(pivot[0] - t.position[0], pivot[2] - t.position[2]) > 1;
+    const anchored = e.type === 'mesh' && pivot && Math.hypot(pivot[0] - t.position[0], pivot[2] - t.position[2]) > 1;
     sec('Transform',
       row('Position', ...[0, 1, 2].map((k) => this.num('xyz'[k], t.position[k], 0.01, 3, (v, m) => commit(withPos(k, v), m)))),
       e.type !== 'marker' && row('Rotation', ...[0, 1, 2].map((k) => this.num('xyz'[k], eul[k], 0.5, 2, (v, m) => commit(withRot(k, v), m)))),

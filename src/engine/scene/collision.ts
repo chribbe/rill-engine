@@ -19,6 +19,9 @@ export interface RayHit {
 export class CollisionWorld {
   private tris: number[] = []; // 9 floats per triangle
   private surf: Surface[] = [];
+  /** Per triangle: index into `owners` (the entity that contributed it). */
+  private own: number[] = [];
+  private owners: string[] = [];
   private grid = new Map<number, number[]>();
   readonly cell = 4;
   triangleCount = 0;
@@ -27,6 +30,8 @@ export class CollisionWorld {
   clear() {
     this.tris.length = 0;
     this.surf.length = 0;
+    this.own.length = 0;
+    this.owners.length = 0;
     this.grid.clear();
     this.triangleCount = 0;
   }
@@ -36,7 +41,9 @@ export class CollisionWorld {
   }
 
   /** Adds world-space triangles from positions (xyz) + indices, transformed by a column-major matrix. */
-  addMesh(pos: Float32Array, idx: Uint32Array, m: ArrayLike<number>, surface: Surface = Surface.Default) {
+  addMesh(pos: Float32Array, idx: Uint32Array, m: ArrayLike<number>, surface: Surface = Surface.Default, owner = '') {
+    const oi = this.owners.length;
+    this.owners.push(owner);
     const wp = new Float32Array(pos.length);
     for (let i = 0; i < pos.length; i += 3) {
       const x = pos[i], y = pos[i + 1], z = pos[i + 2];
@@ -54,6 +61,7 @@ export class CollisionWorld {
       const ti = this.tris.length / 9;
       this.tris.push(wp[a], wp[a + 1], wp[a + 2], wp[b], wp[b + 1], wp[b + 2], wp[c], wp[c + 1], wp[c + 2]);
       this.surf.push(surface);
+      this.own.push(oi);
       const minX = Math.min(wp[a], wp[b], wp[c]), maxX = Math.max(wp[a], wp[b], wp[c]);
       const minZ = Math.min(wp[a + 2], wp[b + 2], wp[c + 2]), maxZ = Math.max(wp[a + 2], wp[b + 2], wp[c + 2]);
       for (let ix = Math.floor(minX / this.cell); ix <= Math.floor(maxX / this.cell); ix++) {
@@ -104,6 +112,41 @@ export class CollisionWorld {
       if (h <= y + 1e-3 && h >= y - maxDrop && h > best) best = h;
     }
     return best;
+  }
+
+  /**
+   * Topmost upward-facing surface below (x, y, z) within maxDrop: height, the owning
+   * entity ID (as passed to addMesh) and the face normal's Y (1 = flat). Scatter and
+   * spline draping use it to keep to terrain and off roads and roofs.
+   */
+  groundHit(x: number, y: number, z: number, maxDrop: number, ignore?: string): { height: number; owner: string; ny: number } | null {
+    const set = this.query(x, z, x, z, this.tmp);
+    let best = -Infinity, bt = -1, bny = 1;
+    const T = this.tris;
+    for (const t of set) {
+      if (ignore !== undefined && this.owners[this.own[t]] === ignore) continue;
+      const o = t * 9;
+      const ax = T[o], ay = T[o + 1], az = T[o + 2];
+      const bx = T[o + 3], by = T[o + 4], bz = T[o + 5];
+      const cx = T[o + 6], cy = T[o + 7], cz = T[o + 8];
+      const v0x = bx - ax, v0z = bz - az, v1x = cx - ax, v1z = cz - az, v2x = x - ax, v2z = z - az;
+      const den = v0x * v1z - v1x * v0z;
+      if (Math.abs(den) < 1e-9) continue;
+      const u = (v2x * v1z - v1x * v2z) / den;
+      const v = (v0x * v2z - v2x * v0z) / den;
+      if (u < -1e-6 || v < -1e-6 || u + v > 1 + 1e-6) continue;
+      const nx = (by - ay) * (cz - az) - (bz - az) * (cy - ay);
+      const ny = (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
+      const nz = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+      if (ny <= 0) continue;
+      const h = ay + u * (by - ay) + v * (cy - ay);
+      if (h <= y + 1e-3 && h >= y - maxDrop && h > best) {
+        best = h;
+        bt = t;
+        bny = ny / Math.hypot(nx, ny, nz);
+      }
+    }
+    return bt < 0 ? null : { height: best, owner: this.owners[this.own[bt]], ny: bny };
   }
 
   /**

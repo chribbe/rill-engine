@@ -1,0 +1,16 @@
+{
+  "format": "rill.scatter",
+  "name": "Shrubs and undergrowth",
+  "description": "Bushes for forest edges, embankments and leftover corners.",
+  "semantic": "vegetation",
+  "density": 9,
+  "clumping": 0.55,
+  "clumpScale": 8,
+  "edgeFalloff": 1,
+  "slopeMax": 45,
+  "surfaces": ["terrain"],
+  "species": [
+    { "name": "shrub", "asset": "assets/testmap/shrub_a.model.json", "weight": 0.5, "scale": [0.6, 1.3], "sink": 0.05 },
+    { "name": "shrub", "asset": "assets/testmap/shrub_b.model.json", "weight": 0.5, "scale": [0.6, 1.3], "sink": 0.05 }
+  ]
+}

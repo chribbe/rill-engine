@@ -1,4 +1,5 @@
 import type { Editor } from './editor';
+import { writeGlb } from '../engine/assets/glbwrite';
 
 /**
  * Client of the Blender bridge (tools/dev/editor_server.ts): starts offline
@@ -90,13 +91,51 @@ export class BlenderBridge {
     if (this.job?.status === 'running') await fetch(`/__blender/jobs/${this.job.id}`, { method: 'DELETE' });
   }
 
-  /** Bake lighting: saves the map first (the bake reads the saved document), then runs Cycles. */
+  /**
+   * Generated geometry the bake needs besides map.json: spline meshes (world space, with
+   * their lightmap charts) and the instances of scatters and spline repeats (occluders).
+   */
+  async exportBakeExtras(): Promise<string | null> {
+    const w = this.ed.rt.world;
+    const meshes: { id: string; glb: string; resolution: [number, number] | null }[] = [];
+    const instances: { asset: string; matrix: number[] }[] = [];
+    for (const [id, rt] of w.objects) {
+      if (!this.ed.scene.effectiveVisible(id)) continue;
+      const b = rt.spline?.build;
+      if (b) {
+        if (b.primitives.length) meshes.push({ id, glb: toBase64(writeGlb({ name: id, primitives: b.primitives })), resolution: b.lightmapResolution });
+        for (const it of b.instances) instances.push({ asset: it.asset, matrix: Array.from(it.matrix) });
+      }
+      if (rt.scatter) {
+        rt.scatter.instances.forEach((it, i) => {
+          const r = rt.renderables[i];
+          if (r) instances.push({ asset: rt.scatter!.preset.species[it.species].asset, matrix: Array.from(this.ed.rt.renderer.instances.model(r.slot)) });
+        });
+      }
+    }
+    if (!meshes.length && !instances.length) return null;
+    const r = await fetch(`/__editor/bake-extra?map=${encodeURIComponent(this.ed.mapName)}`, { method: 'POST', body: JSON.stringify({ meshes, instances }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error ?? r.statusText);
+    this.ed.log('info', `Bake scene: ${j.meshes} generated meshes, ${j.instances} instances exported`);
+    return j.extra as string;
+  }
+
+  /** Bake lighting: saves the map first (the bake reads the saved document), exports generated geometry, then runs Cycles. */
   async bakeLighting(opts: { samples?: number; size?: number; denoise?: boolean } = {}) {
     if (this.job?.status === 'running') throw new Error('a job is already running');
     if (this.ed.history.dirty) {
       this.ed.log('info', 'Saving the map before baking…');
       if (!(await this.ed.save())) throw new Error('save failed');
     }
-    return this.run('bake_lightmaps', { map: this.ed.mapName, ...opts });
+    const extra = await this.exportBakeExtras();
+    return this.run('bake_lightmaps', { map: this.ed.mapName, ...opts, ...(extra ? { extra } : {}) });
   }
+}
+
+function toBase64(buf: ArrayBuffer): string {
+  const u8 = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+  return btoa(s);
 }

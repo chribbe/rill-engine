@@ -19,6 +19,8 @@ export interface PickHit {
   normal: V3;
   /** Material slot (asset material name) of the hit primitive. */
   slot?: string;
+  /** Sub-instance (scatter cell key) that was hit. */
+  sub?: string;
 }
 
 export interface Ray { o: V3; d: V3 }
@@ -64,13 +66,13 @@ export class Picker {
     if (ed.pick.meshes || opts.meshesOnly) {
       for (const [id, rt] of ed.rt.world.objects) {
         const e = rt.doc;
-        if ((e.type !== 'mesh' && e.type !== 'instances') || !ok(id)) continue;
+        if ((e.type !== 'mesh' && e.type !== 'instances' && e.type !== 'scatter' && e.type !== 'spline') || !ok(id)) continue;
         for (const r of rt.renderables) {
           const tb = rayAabb(ray.o, ray.d, r.worldMin, r.worldMax, best ? best.t : 1e9);
           if (tb < 0) continue;
           const model = e.type === 'mesh' ? transformMatrix(e.transform) : ed.rt.renderer.instances.model(r.slot);
           const hit = this.meshHit(ray, model, r.mesh.primitives, best ? best.t : 1e9);
-          if (hit) best = { id, t: hit.t, point: hit.point, normal: hit.normal, slot: r.mesh.primitives[hit.prim].material };
+          if (hit) best = { id, t: hit.t, point: hit.point, normal: hit.normal, slot: r.mesh.primitives[hit.prim].material, sub: r.id.includes('#') ? r.id.slice(r.id.indexOf('#') + 1) : undefined };
         }
       }
     }

@@ -177,7 +177,67 @@ export interface SignObject extends MapObjectBase {
   };
 }
 
-export type Entity = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject | SignObject | GroupObject;
+/**
+ * Procedural scatter (vegetation, rocks): a species preset distributed over an area
+ * by a deterministic, cell-local rule, so painting or erasing only changes the
+ * instances where the brush was. Shapes are in the entity's local XZ plane (the
+ * transform moves / turns the whole scatter); instances are dropped to the ground.
+ */
+export interface ScatterObject extends MapObjectBase {
+  type: 'scatter';
+  scatter: {
+    /** Preset name (public/scatter/<name>.json). */
+    preset: string;
+    /** Instances per 100 m² (default: the preset's). */
+    density?: number;
+    seed: number;
+    /** Closed polygon [x, z][] (local). */
+    area?: [number, number][];
+    /**
+     * Brush circles [x, z, radius, mode] (local; mode 1 = paint, 0 = erase), in the
+     * order painted: the last circle containing a point decides; outside every
+     * circle the area polygon does.
+     */
+    brush?: [number, number, number, 0 | 1][];
+    /** Removed instances (cell keys "ix,iz"). */
+    exclude?: string[];
+    /** Ground semantics instances may stand on (default: the preset's, else ['terrain']). */
+    surfaces?: string[];
+    /** Steepest ground (degrees). */
+    slopeMax?: number;
+  };
+}
+
+/**
+ * Spline-based geometry (paths, roads, kerbs, fences, rail tracks): control points
+ * in local space, a preset describing the cross-section / repeated parts, built
+ * into meshes at runtime (and exported for the lightmap bake).
+ */
+export interface SplineObject extends MapObjectBase {
+  type: 'spline';
+  spline: {
+    /**
+     * Control points (local). With `drape` the curve follows the ground found within a
+     * window just below the points' heights (so paths stay under bridges, off roofs).
+     */
+    points: [number, number, number][];
+    closed?: boolean;
+    /** Preset name (built-in, see render/splines.ts). */
+    preset: string;
+    /** Width override (m) for ribbon presets. */
+    width?: number;
+    /** Follow the ground under each point (default true). */
+    drape?: boolean;
+    /** Lightmap texel density override (texels / m). */
+    texelDensity?: number;
+  };
+  /** Lightmap chart of the generated mesh (written by the editor before a bake). */
+  lightmap?: { resolution: [number, number] };
+  castShadow?: boolean;
+  collision?: boolean;
+}
+
+export type Entity = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject | SignObject | GroupObject | ScatterObject | SplineObject;
 export type EntityType = Entity['type'];
 /** Entities with a transform (everything but groups). */
 export type SpatialEntity = Exclude<Entity, GroupObject>;

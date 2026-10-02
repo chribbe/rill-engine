@@ -1,0 +1,11 @@
+{
+  "format": "rill.spline",
+  "name": "Low concrete wall",
+  "description": "45 cm cast-concrete garden / planter wall, 25 cm thick.",
+  "semantic": "wall",
+  "sampleSpacing": 0.5,
+  "texelDensity": 10,
+  "parts": [
+    { "kind": "profile", "material": "concrete_cast", "y": -0.1, "profile": [[-0.125, 0.0], [-0.125, 0.55], [0.125, 0.55], [0.125, 0.0]] }
+  ]
+}

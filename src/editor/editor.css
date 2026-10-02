@@ -183,3 +183,5 @@ input[type='color'] { width: 30px; height: 22px; padding: 0 2px; }
 .menu { position: fixed; z-index: 20; min-width: 240px; max-height: 60vh; overflow: auto; background: var(--panel2); border: 1px solid #3a4048; border-radius: 4px; box-shadow: 0 6px 24px #0008; padding: 3px 0; }
 .menu-item { padding: 4px 12px; white-space: pre; cursor: pointer; font: 11.5px ui-monospace, Menlo, monospace; }
 .menu-item:hover { background: var(--sel); }
+.insp-sub { display: flex; gap: 6px; align-items: center; margin-top: 6px; padding: 5px 6px; background: #2b2f20; border: 1px solid #4a5130; border-radius: 3px; }
+.insp-sub span { flex: 1; font: 11px ui-monospace, Menlo, monospace; color: #d9e6a6; }

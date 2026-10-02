@@ -9,7 +9,7 @@ import { checkbox, clear, h } from './dom';
 /** Bottom tab panels: assets, materials, environment & rendering, debug, console. */
 
 const CAT_ICON: Record<string, string> = {
-  entities: '✦', buildings: '▥', structural: '▤', props: '◇', vegetation: '♣', roads: '═', lighting: '✸', vehicles: '▬', terrain: '◢', environment: '◠', reference: '⚲',
+  entities: '✦', scatter: '❦', splines: '〰', decals: '▧', buildings: '▥', structural: '▤', props: '◇', vegetation: '♣', roads: '═', lighting: '✸', vehicles: '▬', terrain: '◢', environment: '◠', reference: '⚲',
 };
 
 const TEMPLATE_NAMES: Record<string, string> = {
@@ -36,12 +36,13 @@ export class AssetsPanel {
         h('span', { class: 'as-hint' }, 'Click an asset, then click in the view to place it (Shift: place several) - or drag it into the view.')),
       this.grid));
     ed.on('tool', () => this.render());
+    ed.on('status', () => this.render());
     this.render();
   }
 
   private render() {
     const ed = this.ed;
-    const cats = ['all', 'entities', ...ed.assets.doc.categories.filter((c) => ed.assets.all.some((a) => a.category === c && (this.unique || !a.unique)))];
+    const cats = ['all', 'entities', 'scatter', 'splines', 'decals', ...ed.assets.doc.categories.filter((c) => ed.assets.all.some((a) => a.category === c && (this.unique || !a.unique)))];
     clear(this.cats);
     for (const c of cats) {
       this.cats.append(h('div', { class: `as-cat${c === this.cat ? ' on' : ''}`, onclick: () => { this.cat = c; this.render(); } }, `${CAT_ICON[c] ?? '•'} ${c}`));
@@ -58,7 +59,53 @@ export class AssetsPanel {
     if (this.cat === 'all' || this.cat === 'entities') {
       for (const id of Object.keys(ENTITY_TEMPLATES)) if (!q || TEMPLATE_NAMES[id].toLowerCase().includes(q)) tile(id, TEMPLATE_NAMES[id], 'entity', 'entities');
     }
-    if (this.cat !== 'entities') {
+    if (this.cat === 'all' || this.cat === 'scatter') {
+      for (const p of ed.scatterPresets) {
+        if (q && !`${p.name} ${p.title} ${p.description ?? ''}`.toLowerCase().includes(q)) continue;
+        const t = h('div', { class: `as-tile${ed.tool === 'paint' && ed.brush.preset === p.name ? ' on' : ''}`, title: `${p.title}\n${p.description ?? ''}\nClick, then paint on the ground (Shift erases, [ ] brush size)` },
+          h('div', { class: 'as-glyph' }, CAT_ICON.scatter), h('div', { class: 'as-name' }, p.title), h('div', { class: 'as-sub' }, `scatter · ${p.density}/100 m² · ${p.species} species`));
+        t.addEventListener('click', () => {
+          ed.brush.preset = p.name;
+          ed.tool = 'paint';
+          // A different preset starts a new scatter instead of painting into the selected one.
+          const sel = ed.primary;
+          if (sel?.type === 'scatter' && sel.scatter.preset !== p.name) ed.setSelection([]);
+          ed.emit('tool');
+        });
+        this.grid.append(t);
+      }
+    }
+    if (this.cat === 'all' || this.cat === 'splines') {
+      for (const p of ed.splinePresets) {
+        if (q && !`${p.name} ${p.title} ${p.description ?? ''}`.toLowerCase().includes(q)) continue;
+        const t = h('div', { class: `as-tile${ed.tool === 'spline' && ed.splineTool.preset === p.name ? ' on' : ''}`, title: `${p.title}\n${p.description ?? ''}\nClick, then click points on the ground (Enter / Esc finishes)` },
+          h('div', { class: 'as-glyph' }, CAT_ICON.splines), h('div', { class: 'as-name' }, p.title), h('div', { class: 'as-sub' }, `spline · ${p.name}`));
+        t.addEventListener('click', () => {
+          ed.splineTool.preset = p.name;
+          ed.splineTool.drawing = null;
+          ed.splineTool.pending = null;
+          ed.tool = 'spline';
+          if (ed.primary?.type === 'spline') ed.setSelection([]);
+          ed.emit('tool');
+        });
+        this.grid.append(t);
+      }
+    }
+    if (this.cat === 'all' || this.cat === 'decals') {
+      for (const m of ed.materials.filter((x) => x.decal)) {
+        if (q && !m.name.toLowerCase().includes(q)) continue;
+        const t = h('div', { class: `as-tile${ed.tool === 'decal' && ed.decalTool.material === m.name ? ' on' : ''}`, title: `${m.name}\n${m.notes ?? ''}\nClick, then click / drag on surfaces` },
+          h('div', { class: 'as-glyph' }, CAT_ICON.decals), h('div', { class: 'as-name' }, m.name.replace(/^decal_/, '').replace(/_/g, ' ')), h('div', { class: 'as-sub' }, `decal · ${m.name}`));
+        t.addEventListener('click', () => {
+          ed.decalTool.material = m.name;
+          ed.pick.decals = true;
+          ed.tool = 'decal';
+          ed.emit('tool');
+        });
+        this.grid.append(t);
+      }
+    }
+    if (this.cat !== 'entities' && this.cat !== 'scatter' && this.cat !== 'splines' && this.cat !== 'decals') {
       const list = ed.assets.search(this.query, { category: this.cat === 'all' ? undefined : this.cat, includeUnique: this.unique });
       for (const a of list.slice(0, 400)) {
         const b = a.bounds;

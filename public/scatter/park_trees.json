@@ -1,0 +1,17 @@
+{
+  "format": "rill.scatter",
+  "name": "Park and courtyard trees",
+  "description": "Widely spaced maples and birches on lawns (1960s courtyards, squares).",
+  "semantic": "vegetation",
+  "density": 0.9,
+  "clumping": 0.2,
+  "clumpScale": 20,
+  "slopeMax": 25,
+  "surfaces": ["terrain"],
+  "species": [
+    { "name": "maple", "asset": "assets/hasselby/tree_maple_a.model.json", "weight": 0.3, "scale": [0.8, 1.15], "sink": 0.1 },
+    { "name": "maple", "asset": "assets/hasselby/tree_maple_b.model.json", "weight": 0.3, "scale": [0.8, 1.15], "sink": 0.1 },
+    { "name": "birch", "asset": "assets/testmap/tree_birch_a.model.json", "weight": 0.2, "scale": [0.8, 1.05], "sink": 0.1 },
+    { "name": "birch", "asset": "assets/testmap/tree_birch_b.model.json", "weight": 0.2, "scale": [0.8, 1.05], "sink": 0.1 }
+  ]
+}

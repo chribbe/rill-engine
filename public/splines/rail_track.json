@@ -1,0 +1,14 @@
+{
+  "format": "rill.spline",
+  "name": "Rail track",
+  "description": "Standard-gauge track on a ballast bed: rails, sleepers every 0.6 m, ballast shoulder.",
+  "semantic": "track",
+  "sampleSpacing": 0.6,
+  "texelDensity": 5,
+  "parts": [
+    { "kind": "profile", "material": "ballast", "y": 0.0, "profile": [[-1.9, 0.0], [-1.35, 0.32], [1.35, 0.32], [1.9, 0.0]] },
+    { "kind": "repeat", "asset": "builtin:box?x=0.25&y=0.16&z=2.6&material=concrete_cast", "spacing": 0.6, "y": 0.32 },
+    { "kind": "profile", "material": "rail_steel", "offset": 0.7535, "sides": [-1, 1], "y": 0.48, "lightmap": false,
+      "profile": [[-0.036, 0.0], [-0.008, 0.02], [-0.008, 0.14], [-0.034, 0.15], [-0.034, 0.172], [0.034, 0.172], [0.034, 0.15], [0.008, 0.14], [0.008, 0.02], [0.036, 0.0]] }
+  ]
+}

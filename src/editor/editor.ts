@@ -14,7 +14,7 @@ import type { V3 } from './xform';
  * `exec`).
  */
 
-export type Tool = 'select' | 'translate' | 'rotate' | 'scale';
+export type Tool = 'select' | 'translate' | 'rotate' | 'scale' | 'paint' | 'spline' | 'decal';
 
 export interface MaterialInfo {
   name: string;
@@ -52,12 +52,22 @@ export class Editor {
   readonly logLines: LogLine[] = [];
   /** Asset chosen in the browser, placed on the next viewport click. */
   placing: string | null = null;
+  /** Scatter paint brush (tool 'paint'): preset for new scatters, radius (m), erase mode. */
+  brush = { preset: 'stockholm_mixed_forest', radius: 6, erase: false };
+  /** Instance of the selected scatter that was clicked (cell key), for remove / detach. */
+  subSelection: string | null = null;
+  scatterPresets: { name: string; title: string; description?: string; density: number; species: number }[] = [];
+  splinePresets: { name: string; title: string; description?: string }[] = [];
+  /** Decal tool: material, size (m), random roll / size jitter, spacing when dragging (m). */
+  decalTool = { material: 'decal_stain', size: 1.5, jitter: 0.3, randomRoll: true, spacing: 1.2 };
+  /** Spline tool: preset for new splines; the spline being drawn (clicks append points). */
+  splineTool: { preset: string; drawing: string | null; pending: V3 | null; key: string } = { preset: 'path_asphalt', drawing: null, pending: null, key: '' };
   private handlers = new Map<EventName, Set<() => void>>();
   private editorCamera: { position: V3; yaw: number; pitch: number } | null = null;
 
   constructor(readonly rt: Runtime, readonly assets: AssetRegistry) {
     this.scene = rt.world.scene;
-    this.ctx = { scene: this.scene, assets, pivot: (id) => this.pivotOf(id) };
+    this.ctx = { scene: this.scene, assets, pivot: (id) => this.pivotOf(id), runtime: { scatterInstances: (id) => rt.world.scatterInstances(id) } };
     this.history = new EditorHistory(this.ctx);
     this.history.onChange(() => this.emit('history'));
     this.scene.subscribe((c) => {
@@ -128,20 +138,23 @@ export class Editor {
     return id ? this.scene.get(id) : undefined;
   }
 
-  setSelection(ids: string[]) {
+  setSelection(ids: string[], sub: string | null = null) {
     const next = ids.filter((id, i) => this.scene.has(id) && ids.indexOf(id) === i);
-    if (next.length === this.selection.length && next.every((id, i) => id === this.selection[i])) return;
+    const same = next.length === this.selection.length && next.every((id, i) => id === this.selection[i]);
+    if (same && sub === this.subSelection) return;
+    this.subSelection = sub;
+    if (same) { this.emit('selection'); return; }
     this.selection = next;
     this.updateHighlight();
     this.emit('selection');
   }
 
-  select(id: string | null, how: 'set' | 'add' | 'toggle' = 'set') {
+  select(id: string | null, how: 'set' | 'add' | 'toggle' = 'set', sub: string | null = null) {
     if (!id) {
       if (how === 'set') this.setSelection([]);
       return;
     }
-    if (how === 'set') this.setSelection([id]);
+    if (how === 'set') this.setSelection([id], sub);
     else if (how === 'add') this.setSelection([...this.selection.filter((s) => s !== id), id]);
     else this.setSelection(this.selection.includes(id) ? this.selection.filter((s) => s !== id) : [...this.selection, id]);
   }
@@ -170,6 +183,14 @@ export class Editor {
       if (rt) out.push(...rt.renderables);
     };
     for (const id of this.selection) {
+      if (this.scene.get(id)?.type === 'scatter') {
+        // A forest outline would be millions of edges: outline only the clicked instance.
+        const k = this.subSelection;
+        const r = k ? this.renderablesOf(id).find((x) => x.id === `${id}#${k}`) : undefined;
+        if (r) out.push(r);
+        seen.add(id);
+        continue;
+      }
       add(id);
       // Groups outline their members; meshes only themselves (children are lights, decals...).
       if (this.scene.get(id)?.type === 'group') for (const d of this.scene.descendants(id)) add(d);
@@ -194,7 +215,7 @@ export class Editor {
       for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], a[k]); max[k] = Math.max(max[k], b[k]); }
     };
     const own = (x: Entity) => {
-      if (x.type === 'mesh' || x.type === 'instances') {
+      if (x.type === 'mesh' || x.type === 'instances' || x.type === 'scatter' || x.type === 'spline') {
         for (const r of this.renderablesOf(x.id)) grow(r.worldMin, r.worldMax);
         return;
       }
@@ -220,7 +241,7 @@ export class Editor {
   pivotOf(id: string): V3 | null {
     const e = this.scene.get(id);
     if (!e) return null;
-    if (e.type === 'group') {
+    if (e.type === 'group' || ((e.type === 'scatter' || e.type === 'spline') && this.renderablesOf(id).length)) {
       const b = this.boundsOf(id);
       return b ? [(b.min[0] + b.max[0]) / 2, b.min[1], (b.min[2] + b.max[2]) / 2] : null;
     }
@@ -246,11 +267,11 @@ export class Editor {
 
   async loadMaterials() {
     try {
-      const r = await fetch('/__editor/materials');
-      if (r.ok) {
-        this.materials = await r.json();
-        this.emit('status');
-      }
+      const [r, s, sp] = await Promise.all([fetch('/__editor/materials'), fetch('/__editor/scatter-presets'), fetch('/__editor/spline-presets')]);
+      if (r.ok) this.materials = await r.json();
+      if (s.ok) this.scatterPresets = await s.json();
+      if (sp.ok) this.splinePresets = await sp.json();
+      this.emit('status');
     } catch {
       /* production build: no dev server */
     }

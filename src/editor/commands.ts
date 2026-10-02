@@ -1,4 +1,4 @@
-import { mat4, type Mat4 } from 'wgpu-matrix';
+import { mat4, quat, vec3, type Mat4 } from 'wgpu-matrix';
 import { isSpatial, type Entity, type SpatialEntity, type Transform } from '../engine/scene/mapformat';
 import type { MaterialDef } from '../engine/render/materials';
 import type { DocKey, Patch, SceneStore } from '../engine/scene/scene';
@@ -23,6 +23,10 @@ export interface OpContext {
   assets: AssetRegistry | null;
   /** World-space pivot of an entity (bounds-based for world-anchored geometry); null = transform position. */
   pivot(id: string): V3 | null;
+  /** Runtime results some operations turn into document data (scatter instances to entities). */
+  runtime?: {
+    scatterInstances(id: string): { key: string; asset: string; position: [number, number, number]; yawDeg: number; scale: number }[];
+  };
 }
 
 type ParamType = 'string' | 'number' | 'boolean' | 'string[]' | 'vec3' | 'quat' | 'object' | 'any';
@@ -192,7 +196,7 @@ const count = (n: number) => `${n} entit${n === 1 ? 'y' : 'ies'}`;
 const IDS: ParamSpec = { type: 'string[]', description: 'Entity IDs (descendants follow).' };
 const PIVOT: ParamSpec = { type: 'any', optional: true, description: "'median' (default: centre of the selection), 'individual' (each about its own pivot) or a world point [x, y, z]." };
 
-const ENTITY_TYPES = ['mesh', 'instances', 'light', 'decal', 'marker', 'probeVolume', 'reflectionProbe', 'sign', 'group'];
+const ENTITY_TYPES = ['mesh', 'instances', 'light', 'decal', 'marker', 'probeVolume', 'reflectionProbe', 'sign', 'group', 'scatter', 'spline'];
 
 /** Minimal structural validation of a complete entity. */
 export function validateEntity(e: Entity): string | null {
@@ -209,6 +213,8 @@ export function validateEntity(e: Entity): string | null {
     case 'sign': if (typeof e.sign?.text !== 'string' || !Array.isArray(e.sign.size)) return 'sign.text and sign.size required'; break;
     case 'reflectionProbe': if (!e.probe?.boxMin || !e.probe?.boxMax) return 'probe.boxMin / boxMax required'; break;
     case 'probeVolume': if (!e.volume?.size || !e.volume?.spacing) return 'volume.size / spacing required'; break;
+    case 'scatter': if (typeof e.scatter?.preset !== 'string' || typeof e.scatter.seed !== 'number') return 'scatter.preset and scatter.seed required'; break;
+    case 'spline': if (!Array.isArray(e.spline?.points) || typeof e.spline.preset !== 'string') return 'spline.points and spline.preset required'; break;
   }
   return null;
 }
@@ -387,6 +393,8 @@ const PROPERTIES: Record<string, string[]> = {
   sign: ['sign.text', 'sign.size', 'sign.font', 'sign.weight', 'sign.italic', 'sign.color', 'sign.background', 'sign.border', 'sign.align', 'sign.textHeight', 'sign.letterSpacing', 'sign.padding', 'sign.uppercase', 'sign.backlit', 'sign.depth', 'sign.doubleSided'],
   reflectionProbe: ['probe.boxMin', 'probe.boxMax', 'probe.blend', 'probe.priority'],
   probeVolume: ['volume.size', 'volume.spacing'],
+  scatter: ['scatter.preset', 'scatter.density', 'scatter.seed', 'scatter.area', 'scatter.brush', 'scatter.exclude', 'scatter.surfaces', 'scatter.slopeMax'],
+  spline: ['spline.points', 'spline.closed', 'spline.preset', 'spline.width', 'spline.drape', 'spline.texelDensity', 'castShadow', 'collision', 'lightmap'],
 };
 
 export function editableProperties(type: Entity['type']): string[] {
@@ -558,6 +566,268 @@ op<{ preset?: string; overrides?: Record<string, unknown> | null }>({
     return { patches: ps.patches(), label: p.preset && p.preset !== cur.preset ? `Environment ${p.preset}` : 'Environment settings' };
   },
 });
+
+// ------------------------------------------------------------------ scatter
+
+/** World XZ -> scatter-local XZ (position + yaw of the entity transform). */
+function scatterLocal(e: Entity, x: number, z: number): [number, number] {
+  if (!isSpatial(e)) return [x, z];
+  const p = e.transform.position, q = e.transform.rotation ?? [0, 0, 0, 1];
+  const m = mat4.fromQuat(q);
+  const dx = x - p[0], dz = z - p[2];
+  // Inverse rotation = transpose (XZ part).
+  return [round3(m[0] * dx + m[2] * dz), round3(m[8] * dx + m[10] * dz)];
+}
+const round3 = (v: number) => Math.round(v * 1000) / 1000;
+
+op<{ preset: string; area?: [number, number][]; center?: number[]; radius?: number; density?: number; seed?: number; name?: string; parent?: string }, { id: string }>({
+  name: 'scatter_vegetation',
+  description: 'Creates a vegetation / rock scatter: a preset (public/scatter/*.json, e.g. stockholm_mixed_forest, pine_heath, spruce_forest, birch_grove, shrubs, park_trees, rock_outcrops) over a world polygon area [[x, z], ...] or a circle (center + radius). Deterministic per seed; density = instances per 100 m² (default: preset). Returns { id }.',
+  params: {
+    preset: { type: 'string', description: 'Scatter preset name.' },
+    area: { type: 'any', optional: true, description: 'World polygon [[x, z], ...] (3+ points).' },
+    center: { type: 'any', optional: true, description: 'Circle centre [x, z] or [x, y, z].' },
+    radius: { type: 'number', optional: true, description: 'Circle radius (m).' },
+    density: { type: 'number', optional: true, description: 'Instances per 100 m².' },
+    seed: { type: 'number', optional: true, description: 'Random seed.' },
+    name: { type: 'string', optional: true, description: 'Display name.' },
+    parent: { type: 'string', optional: true, description: 'Outliner parent.' },
+  },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    // Points may be [x, z] or [x, y, z].
+    const poly = Array.isArray(p.area) && p.area.length >= 3 ? (p.area as number[][]).map((v) => [v[0], v[v.length === 3 ? 2 : 1]] as [number, number]) : null;
+    let c: [number, number];
+    if (poly) c = [poly.reduce((a, v) => a + v[0], 0) / poly.length, poly.reduce((a, v) => a + v[1], 0) / poly.length];
+    else if (p.center && p.radius) c = [p.center[0], p.center[p.center.length === 3 ? 2 : 1]];
+    else throw new OpError('scatter_vegetation: area (polygon) or center + radius required');
+    c = [round3(c[0]), round3(c[1])];
+    const y = p.center && p.center.length === 3 ? p.center[1] : 0;
+    const id = ctx.scene.newId(p.preset);
+    const e: Entity = {
+      id, name: p.name ?? p.preset.replace(/_/g, ' '), type: 'scatter', semantic: 'vegetation', ...(p.parent ? { parent: p.parent } : {}),
+      transform: { position: [c[0], y, c[1]] },
+      scatter: {
+        preset: p.preset, seed: p.seed ?? (fnvHash(id) % 100000), ...(p.density ? { density: p.density } : {}),
+        ...(poly ? { area: poly.map(([x, z]) => [round3(x - c[0]), round3(z - c[1])] as [number, number]) } : { brush: [[0, 0, round3(p.radius!), 1]] }),
+      },
+    };
+    if (p.parent && !ctx.scene.has(p.parent)) throw new OpError(`no parent '${p.parent}'`);
+    ps.set(e);
+    return { patches: ps.patches(), result: { id }, label: `Scatter ${p.preset}` };
+  },
+});
+
+op<{ id: string; strokes: [number, number, number][]; erase?: boolean }>({
+  name: 'paint_scatter',
+  description: 'Paints (or erases) circles [[x, z, radius], ...] (world) into a scatter. Later circles override earlier ones, so painting over an erased patch restores it.',
+  params: { id: { type: 'string', description: 'Scatter entity.' }, strokes: { type: 'any', description: '[[x, z, radius], ...] world.' }, erase: { type: 'boolean', optional: true, description: 'Erase instead of paint.' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const e = need(ps, p.id);
+    if (e.type !== 'scatter') throw new OpError(`'${p.id}' is not a scatter`);
+    if (!Array.isArray(p.strokes) || !p.strokes.length) throw new OpError('paint_scatter: strokes required');
+    const add = p.strokes.map(([x, z, r]) => [...scatterLocal(e, x, z), round3(Math.max(0.1, r)), p.erase ? 0 : 1] as [number, number, number, 0 | 1]);
+    // Circles fully covered by a newer one no longer matter.
+    const old = (e.scatter.brush ?? []).filter(([x, z, r]) => !add.some(([ax, az, ar]) => Math.hypot(x - ax, z - az) + r <= ar));
+    ps.set({ ...e, scatter: { ...e.scatter, brush: [...old, ...add] } });
+    return { patches: ps.patches(), label: p.erase ? 'Erase scatter' : 'Paint scatter' };
+  },
+});
+
+op<{ id: string; keys: string[]; restore?: boolean }>({
+  name: 'scatter_remove',
+  description: 'Removes individual scatter instances by cell key (from get_entity / picking), or restores them.',
+  params: { id: { type: 'string', description: 'Scatter entity.' }, keys: { type: 'string[]', description: 'Instance keys "ix,iz".' }, restore: { type: 'boolean', optional: true, description: 'Bring them back.' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const e = need(ps, p.id);
+    if (e.type !== 'scatter') throw new OpError(`'${p.id}' is not a scatter`);
+    const ex = new Set(e.scatter.exclude ?? []);
+    for (const k of p.keys) if (p.restore) ex.delete(k); else ex.add(k);
+    const next = { ...e, scatter: { ...e.scatter } };
+    if (ex.size) next.scatter.exclude = [...ex].sort();
+    else delete next.scatter.exclude;
+    ps.set(next);
+    return { patches: ps.patches(), label: p.restore ? 'Restore scatter instances' : `Remove ${p.keys.length} scatter instance${p.keys.length === 1 ? '' : 's'}` };
+  },
+});
+
+op<{ id: string; keys?: string[]; group?: boolean }, { ids: string[]; group?: string }>({
+  name: 'scatter_detach',
+  description: 'Turns scatter instances (keys, or all) into ordinary mesh entities for hand placement; they are removed from the scatter. All instances: the scatter is replaced by a group of entities.',
+  params: { id: { type: 'string', description: 'Scatter entity.' }, keys: { type: 'string[]', optional: true, description: 'Instance keys (default: all).' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const e = need(ps, p.id);
+    if (e.type !== 'scatter') throw new OpError(`'${p.id}' is not a scatter`);
+    if (!ctx.runtime) throw new OpError('scatter_detach needs the runtime');
+    const all = ctx.runtime.scatterInstances(p.id);
+    const want = p.keys ? new Set(p.keys) : null;
+    const list = all.filter((i) => !want || want.has(i.key));
+    if (!list.length) throw new OpError('scatter_detach: no matching instances');
+    let parent = e.parent;
+    let group: string | undefined;
+    if (!want) {
+      group = ctx.scene.newId(`${e.id}_detached`);
+      ps.set({ id: group, name: `${e.name ?? e.id} (entities)`, type: 'group', ...(e.parent ? { parent: e.parent } : {}) });
+      parent = group;
+    }
+    const ids: string[] = [];
+    for (const i of list) {
+      const nid = ctx.scene.newId(i.asset.split('/').pop()!.replace(/\.(glb|model\.json)$/, ''));
+      const a = (-i.yawDeg * Math.PI) / 360;
+      ps.set({
+        id: nid, type: 'mesh', semantic: e.semantic ?? 'vegetation', ...(parent ? { parent } : {}), asset: i.asset,
+        transform: { position: i.position.map(round3) as V3, rotation: [0, +Math.sin(a).toFixed(7), 0, +Math.cos(a).toFixed(7)], ...(i.scale !== 1 ? { scale: [round3(i.scale), round3(i.scale), round3(i.scale)] as V3 } : {}) },
+        collision: false, receiveDecals: false,
+      });
+      ids.push(nid);
+    }
+    if (!want) ps.remove(e.id);
+    else ps.set({ ...e, scatter: { ...e.scatter, exclude: [...new Set([...(e.scatter.exclude ?? []), ...list.map((i) => i.key)])].sort() } });
+    return { patches: ps.patches(), result: { ids, group }, label: want ? `Detach ${ids.length} instance${ids.length === 1 ? '' : 's'}` : `Convert ${e.name ?? e.id} to entities` };
+  },
+});
+
+// ------------------------------------------------------------------ splines
+
+/** World point -> spline-local point (inverse of the entity's position + rotation). [x, z] points take the entity's height. */
+function splineLocal(e: Entity, w: number[], _drape: boolean): [number, number, number] {
+  if (!isSpatial(e)) return [w[0], w[1] ?? 0, w[2]];
+  const p = e.transform.position, q = e.transform.rotation ?? [0, 0, 0, 1];
+  const m = mat4.fromQuat(q);
+  const d = [w[0] - p[0], (w.length === 3 ? w[1] : p[1]) - p[1], w[w.length === 3 ? 2 : 1] - p[2]];
+  // Inverse rotation = transpose.
+  const x = m[0] * d[0] + m[1] * d[1] + m[2] * d[2], y = m[4] * d[0] + m[5] * d[1] + m[6] * d[2], z = m[8] * d[0] + m[9] * d[1] + m[10] * d[2];
+  return [round3(x), round3(y), round3(z)];
+}
+
+op<{ preset: string; points: number[][]; closed?: boolean; width?: number; drape?: boolean; name?: string; parent?: string }, { id: string }>({
+  name: 'create_spline',
+  description: 'Creates a spline (path_asphalt, path_gravel, road_kerbed, kerb_granite, fence_chainlink, low_wall, rail_track: public/splines/*.json) through world points [[x, z] or [x, y, z], ...]. Draped on the ground by default. Returns { id }.',
+  params: {
+    preset: { type: 'string', description: 'Spline preset.' },
+    points: { type: 'any', description: 'World control points, 2 or more.' },
+    closed: { type: 'boolean', optional: true, description: 'Closed loop.' },
+    width: { type: 'number', optional: true, description: 'Width override (m) for paths / roads.' },
+    drape: { type: 'boolean', optional: true, description: 'Follow the ground (default true).' },
+    name: { type: 'string', optional: true, description: 'Display name.' },
+    parent: { type: 'string', optional: true, description: 'Outliner parent.' },
+  },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    if (!Array.isArray(p.points) || p.points.length < 2) throw new OpError('create_spline: 2+ points required');
+    if (p.parent && !ctx.scene.has(p.parent)) throw new OpError(`no parent '${p.parent}'`);
+    const f = p.points[0];
+    const origin: V3 = [round3(f[0]), f.length === 3 ? round3(f[1]) : 0, round3(f[f.length === 3 ? 2 : 1])];
+    const drape = p.drape !== false;
+    const id = ctx.scene.newId(p.preset);
+    const shell = { id, type: 'group', transform: { position: origin } } as unknown as Entity;
+    const e: Entity = {
+      id, name: p.name ?? p.preset.replace(/_/g, ' '), type: 'spline', semantic: p.preset.split('_')[0], ...(p.parent ? { parent: p.parent } : {}),
+      transform: { position: origin },
+      spline: {
+        preset: p.preset, points: p.points.map((w) => splineLocal({ ...shell, type: 'marker' } as Entity, w, drape)),
+        ...(p.closed ? { closed: true } : {}), ...(p.width ? { width: p.width } : {}), ...(drape ? {} : { drape: false }),
+      },
+    };
+    ps.set(e);
+    return { patches: ps.patches(), result: { id }, label: `Spline ${p.preset}` };
+  },
+});
+
+op<{ id: string; points?: number[][]; insert?: { index: number; point: number[] }; remove?: number; move?: { index: number; point: number[] }; closed?: boolean; width?: number | null; preset?: string }>({
+  name: 'modify_spline',
+  description: 'Edits a spline: replace all points (world), insert a point before index, move one point, remove one point, set closed / width / preset.',
+  params: {
+    id: { type: 'string', description: 'Spline entity.' },
+    points: { type: 'any', optional: true, description: 'All control points (world).' },
+    insert: { type: 'object', optional: true, description: '{ index, point } (world point inserted before index; index = count appends).' },
+    move: { type: 'object', optional: true, description: '{ index, point } (world).' },
+    remove: { type: 'number', optional: true, description: 'Index of a point to remove (2 points minimum remain).' },
+    closed: { type: 'boolean', optional: true, description: 'Closed loop.' },
+    width: { type: 'number', optional: true, description: 'Width (m); null restores the preset width.' },
+    preset: { type: 'string', optional: true, description: 'Preset.' },
+  },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const e = need(ps, p.id);
+    if (e.type !== 'spline') throw new OpError(`'${p.id}' is not a spline`);
+    const drape = e.spline.drape !== false;
+    let pts = e.spline.points.map((q) => [...q] as [number, number, number]);
+    if (p.points) pts = p.points.map((w) => splineLocal(e, w, drape));
+    if (p.insert) pts.splice(Math.max(0, Math.min(pts.length, p.insert.index)), 0, splineLocal(e, p.insert.point, drape));
+    if (p.move) {
+      if (p.move.index < 0 || p.move.index >= pts.length) throw new OpError('modify_spline: bad point index');
+      pts[p.move.index] = splineLocal(e, p.move.point, drape);
+    }
+    if (p.remove !== undefined) {
+      if (pts.length <= 2) throw new OpError('modify_spline: a spline keeps at least 2 points');
+      pts.splice(p.remove, 1);
+    }
+    const sp = { ...e.spline, points: pts };
+    if (p.closed !== undefined) { if (p.closed) sp.closed = true; else delete sp.closed; }
+    if (p.width !== undefined) { if (p.width) sp.width = p.width; else delete sp.width; }
+    if (p.preset) sp.preset = p.preset;
+    ps.set({ ...e, spline: sp });
+    return { patches: ps.patches(), label: p.move ? 'Move spline point' : p.insert ? 'Add spline point' : p.remove !== undefined ? 'Remove spline point' : 'Edit spline' };
+  },
+});
+
+// ------------------------------------------------------------------ decals
+
+/**
+ * Orientation of a decal box projecting onto a surface: +Z = the surface normal; on
+ * walls +Y points up (streaks hang down), on floors +X follows world X; then `roll`
+ * degrees about the normal.
+ */
+export function decalRotation(normal: number[], rollDeg = 0): [number, number, number, number] {
+  const n = vec3.normalize(vec3.fromValues(normal[0], normal[1], normal[2]));
+  const up = Math.abs(n[1]) < 0.85 ? vec3.fromValues(0, 1, 0) : vec3.fromValues(0, 0, -1);
+  const x0 = vec3.normalize(vec3.cross(up, n));
+  const y0 = vec3.cross(n, x0);
+  const a = (rollDeg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+  const x = vec3.add(vec3.scale(x0, c), vec3.scale(y0, s)), y = vec3.cross(n, x);
+  const q = quat.fromMat(mat4.create(x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, n[0], n[1], n[2], 0, 0, 0, 0, 1));
+  if (q[3] < 0) quat.scale(q, -1, q);
+  return [round6(q[0]), round6(q[1]), round6(q[2]), round6(q[3])];
+}
+const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
+
+op<{ material: string; position: V3; normal?: V3; size?: number | number[]; depth?: number; roll?: number; opacity?: number; parent?: string; name?: string }, { id: string }>({
+  name: 'place_decal',
+  description: 'Places a projected decal (material: a decal_* material) on the surface at position with outward normal (default up). size: metres (number = square, or [w, h]); depth: projection depth; roll: degrees about the normal. Returns { id }.',
+  params: {
+    material: { type: 'string', description: 'Decal material (decal_stain, decal_waterstreak, decal_crack, decal_grime_base, decal_oil, decal_manhole, decal_paint_line...).' },
+    position: { type: 'vec3', description: 'Surface point (world).' },
+    normal: { type: 'vec3', optional: true, description: 'Outward surface normal (default [0, 1, 0]).' },
+    size: { type: 'any', optional: true, description: 'Metres: number or [w, h] (default 1.5).' },
+    depth: { type: 'number', optional: true, description: 'Projection depth (m, default 0.3).' },
+    roll: { type: 'number', optional: true, description: 'Rotation about the normal (degrees).' },
+    opacity: { type: 'number', optional: true, description: '0..1.' },
+    parent: { type: 'string', optional: true, description: 'Outliner parent (e.g. the building it is on).' },
+    name: { type: 'string', optional: true, description: 'Display name.' },
+  },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    if (p.parent && !ctx.scene.has(p.parent)) throw new OpError(`no parent '${p.parent}'`);
+    const sz = typeof p.size === 'number' ? [p.size, p.size] : Array.isArray(p.size) ? p.size : [1.5, 1.5];
+    const id = ctx.scene.newId(p.material);
+    ps.set({
+      id, name: p.name ?? p.material.replace(/^decal_/, '').replace(/_/g, ' '), type: 'decal', semantic: 'decal', ...(p.parent ? { parent: p.parent } : {}),
+      transform: { position: p.position.map(round3) as V3, rotation: decalRotation(p.normal ?? [0, 1, 0], p.roll ?? 0) },
+      decal: { material: p.material, size: [round3(sz[0]), round3(sz[1] ?? sz[0]), round3(p.depth ?? 0.3)], ...(p.opacity !== undefined && p.opacity !== 1 ? { opacity: p.opacity } : {}) },
+    });
+    return { patches: ps.patches(), result: { id }, label: `Decal ${p.material}` };
+  },
+});
+
+function fnvHash(s: string) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
 
 op<{ name?: string; description?: string; lightmaps?: string | null }>({
   name: 'set_map_settings',

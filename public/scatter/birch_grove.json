@@ -1,0 +1,18 @@
+{
+  "format": "rill.scatter",
+  "name": "Birch grove",
+  "description": "Light birch stand (forest edges, old fields, by housing).",
+  "semantic": "vegetation",
+  "density": 4,
+  "clumping": 0.35,
+  "clumpScale": 14,
+  "edgeFalloff": 2.5,
+  "slopeMax": 35,
+  "surfaces": ["terrain"],
+  "species": [
+    { "name": "birch", "asset": "assets/testmap/tree_birch_a.model.json", "weight": 0.42, "scale": [0.75, 1.1], "sink": 0.1 },
+    { "name": "birch", "asset": "assets/testmap/tree_birch_b.model.json", "weight": 0.42, "scale": [0.75, 1.1], "sink": 0.1 },
+    { "name": "shrub", "asset": "assets/testmap/shrub_a.model.json", "weight": 0.08, "scale": [0.7, 1.2], "sink": 0.05 },
+    { "name": "shrub", "asset": "assets/testmap/shrub_b.model.json", "weight": 0.08, "scale": [0.7, 1.2], "sink": 0.05 }
+  ]
+}

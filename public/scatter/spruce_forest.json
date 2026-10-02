@@ -1,0 +1,18 @@
+{
+  "format": "rill.scatter",
+  "name": "Dense spruce forest",
+  "description": "Dark spruce stand with young spruces underneath (north slopes, damp hollows).",
+  "semantic": "vegetation",
+  "density": 7,
+  "clumping": 0.25,
+  "clumpScale": 15,
+  "edgeFalloff": 2,
+  "slopeMax": 35,
+  "surfaces": ["terrain"],
+  "species": [
+    { "name": "spruce", "asset": "assets/testmap/tree_spruce_a.model.json", "weight": 0.38, "scale": [0.8, 1.25], "sink": 0.15 },
+    { "name": "spruce", "asset": "assets/testmap/tree_spruce_b.model.json", "weight": 0.38, "scale": [0.8, 1.25], "sink": 0.15 },
+    { "name": "young spruce", "asset": "assets/testmap/tree_spruce_b.model.json", "weight": 0.2, "scale": [0.1, 0.35], "sink": 0.03 },
+    { "name": "pine", "asset": "assets/testmap/tree_pine_a.model.json", "weight": 0.04, "scale": [0.85, 1.2], "sink": 0.15 }
+  ]
+}

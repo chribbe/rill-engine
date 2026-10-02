@@ -8,8 +8,10 @@ the plan towards AI tools. The renderer is documented in [ENGINE.md](ENGINE.md).
 (`public/maps/<name>/map.json`) are authored in the web editor. Blender creates
 and processes assets and bakes lighting; it no longer owns levels.
 
-**Current milestone:** editor foundation (milestone E1). It works end to end; see §11.
-**Next:** E2 world-building tools (scatter, splines, decals, terrain, lights, bake flow).
+**Current milestone:** E2 world-building tools. Done: vegetation / rock scatter with a paint brush,
+splines (paths, roads, kerbs, fences, walls, rail track), decal placement / painting, bake export of
+generated geometry, map backups. Next in E2: terrain editing, light / probe placement helpers, bake
+progress. E1 (editor foundation) is complete, see §11.
 
 ---
 
@@ -68,9 +70,9 @@ operations (src/editor/commands.ts) ◄── viewport gizmos, inspector, outlin
 }
 ```
 
-Entity types: `mesh`, `instances` (compact arrays, kept for future scatter
-output), `light`, `decal`, `sign`, `marker` (`viewpoint`, `spawn`),
-`reflectionProbe`, `probeVolume`, `group`. Types are in
+Entity types: `mesh`, `instances` (compact arrays), `light`, `decal`, `sign`,
+`marker` (`viewpoint`, `spawn`), `reflectionProbe`, `probeVolume`, `group`, and
+the procedural `scatter` and `spline` (§12). Types are in
 `src/engine/scene/mapformat.ts`.
 
 Common fields: `id` (stable, unique, never reused; lightmaps and tools key on
@@ -187,6 +189,7 @@ and remembered.
 | Input | Action |
 |---|---|
 | LMB | select (Shift add, Cmd/Ctrl toggle); locked geometry occludes but deselects |
+| B / N / T | paint scatter / draw spline / place decals (§12) |
 | RMB drag + WASD / Q E | fly (Shift fast, Alt slow, wheel while held = fly speed) |
 | MMB drag | pan · **wheel** dolly to the point under the cursor · **Alt+LMB** orbit |
 | Double-click / F | frame selection |
@@ -297,6 +300,11 @@ transforms. A transaction is the reviewable change set. A future per-call scope
 
 ## 10. Known issues / limitations
 
+* Scatter and spline instances (trees, fence segments, sleepers) are probe-lit and
+  have no collision; spline meshes are lightmapped only after a bake that
+  includes them (Bake lighting does this).
+* Editing the terrain under existing scatters re-drops them (500 ms after the
+  edit); splines re-drape when edited (not when the ground under them moves).
 * Gizmo: no view-axis rotation ring, no box (marquee) selection, no surface
   snapping while dragging (placement snaps to surfaces; dragging snaps to the
   grid).
@@ -335,25 +343,111 @@ transforms. A transaction is the reviewable change set. A future per-call scope
     and scatter systems slot in as new entity types with their own runtime
     builders).
 
-## 12. Next steps (E2)
+## 12. World-building tools (E2)
 
-1. **Vegetation scatter / paint**: a `scatter` entity (area polygon / brush
-   strokes, preset mix, density, seed) whose runtime builder produces instances
-   deterministically. Individual instances can be "baked out" to entities for
-   hand tweaks.
-2. **Splines**: a `spline` entity (points, width, profile / preset) for paths,
-   roads, kerbs, fences, rails, cables. The runtime builds meshes; the bake
-   treats them as static geometry (via an export step to GLB).
-3. **Decal placement / painting** with surface-aligned placement and a decal
-   material browser.
-4. **Terrain**: heightfield chunks owned by the map (sculpt / smooth / flatten /
-   paint), replacing the baked terrain GLBs over time.
-5. **Light / probe placement** helpers (range, cone and probe-box gizmos).
-6. **Bake flow**: progress, a preview-quality bake, per-map bake settings,
+### Vegetation / rock scatter
+
+A `scatter` entity holds a preset (`public/scatter/*.json`: species assets with
+weights, scale ranges and sink depths, density per 100 m², clumping, species
+patches, soft edges, allowed ground semantics, steepest slope), a seed and its
+shape in local XZ: an `area` polygon plus an ordered `brush` list of circles
+`[x, z, r, mode]` (paint / erase; the last circle containing a point decides,
+so painting over an erased patch restores it).
+
+`src/engine/scene/scatter.ts` evaluates it **deterministically and cell-locally**:
+local space is cut into cells of one candidate each (cell size from the
+density), and every cell hashes (seed, cell) into its jitter, acceptance,
+species, yaw and scale. Painting, erasing or removing one tree changes only
+those cells; the same document always gives the same forest; moving the entity
+moves the trees rigidly. Instances drop onto the topmost collision surface,
+which must have an allowed semantic (default `terrain`: trees keep off roads,
+paths, roofs) and a slope under the limit. Measured: 423 trees evaluated and
+instanced in 8.7 ms; a mixed forest over 12,000 m² reproduces the 40 / 30 / 15
+/ 15 % pine / birch / spruce / undergrowth mix within 2 %.
+
+Presets: `stockholm_mixed_forest`, `pine_heath`, `spruce_forest`, `birch_grove`,
+`shrubs`, `park_trees`, `rock_outcrops`.
+
+Editor: **Paint** tool (B, or click a preset in Assets › scatter): drag on the
+ground to paint into the selected scatter (or start a new one with the chosen
+preset), Shift erases, `[` `]` brush radius; one drag = one undo entry. Clicking
+a tree selects its scatter with that instance: Del removes just that tree,
+**Detach** turns it into an ordinary entity, **Convert to entities** replaces the
+whole scatter by mesh entities. Inspector: preset, density, seed (Reroll),
+slope, surfaces.
+
+Operations: `scatter_vegetation { preset, area | center + radius, density?,
+seed? }`, `paint_scatter { id, strokes: [[x, z, r]], erase? }`, `scatter_remove
+{ id, keys }`, `scatter_detach { id, keys? }`.
+
+### Splines
+
+A `spline` entity: control points (local; their heights are references the
+curve drapes under, so paths stay under bridges and off roofs), a preset
+(`public/splines/*.json`), optional width, closed, drape.
+`src/engine/scene/splines.ts` samples a centripetal Catmull-Rom curve by arc
+length and builds the preset's parts:
+
+* `ribbon`: a strip subdivided across so it hugs the ground (paths, roads);
+* `profile`: a swept cross-section (kerbs, rails, low walls, ballast beds),
+  flat-shaded, faces oriented outward automatically;
+* `wall`: a vertical strip;
+* `repeat`: an asset every N m, optionally chord-aligned and stretched so
+  segments join (fence segments, sleepers, posts).
+
+Output is world-space geometry with UV0 in metres and **one lightmap chart**
+(UV1 rows for every ribbon / profile part), so splines bake like any static
+mesh. Their geometry is in the collision (walkable, and scatters avoid it).
+Presets: `path_asphalt`, `path_gravel`, `road_kerbed` (asphalt + granite kerbs),
+`kerb_granite`, `fence_chainlink`, `low_wall`, `rail_track`. A 120 m rail track
+with 200 sleepers builds in about 40 ms; paths take about 5 ms.
+
+Editor: **Spline** tool (N, or a preset in Assets › splines): click points on
+the ground, Enter / Esc finishes, Backspace removes the last point (one undo
+entry for the whole drawing). A selected spline shows its centreline and
+control points: drag a point (one undo entry), click to select it (inspector
+X / Z, Remove, Del); with the Spline tool, clicks extend it from the nearest end.
+
+Operations: `create_spline { preset, points, closed?, width?, drape? }`,
+`modify_spline { id, points? | insert? | move? | remove?, closed?, width?, preset? }`.
+
+### Decals
+
+**Decal** tool (T, or a decal material in Assets › decals): click a surface to
+place a decal aligned to it (+Z = surface normal; on walls +Y stays up so
+streaks hang down), drag to paint a trail (spacing 1.2 m, random roll and ±30 %
+size), `[` `]` size. Decals on an unlocked object become its children (they
+move with the building); on locked world geometry they go to the Decals group.
+Operation: `place_decal { material, position, normal?, size?, depth?, roll?,
+opacity?, parent? }`.
+
+### Baking generated geometry
+
+**Bake lighting** first exports what map.json alone can't describe:
+`exportBakeExtras` writes each spline mesh as GLB (`src/engine/assets/glbwrite.ts`)
+with its lightmap chart, plus every scatter and spline-repeat instance (as an
+occluder), to `build/bake/<map>/` via `POST /__editor/bake-extra`. The bake
+(`bake_lightmaps.py --extra`) adds them to the Cycles scene; spline lightmaps are
+keyed by entity ID like any other object. Verified with a test bake: two splines
+lightmapped (34 → 36 objects) plus the scatter trees as occluders.
+
+### Map backups
+
+Every save copies the previous `map.json` to `backups/maps/<map>/` (local,
+gitignored, newest 50 kept). **Backups…** loads one into the editor (unsaved
+until you save); **Save as…** writes a new map that uses the source's lightmaps
+until it is baked itself. Pristine copies of the three maps as migrated:
+`backups/maps/*/original-2026-10-02.json` and git tag `maps-v2-original`.
+
+### Remaining E2 / next
+
+1. **Terrain**: heightfield chunks owned by the map (sculpt / smooth / flatten /
+   material paint), replacing the baked terrain GLBs over time.
+2. **Light / probe placement** helpers (range, cone and probe-box handles).
+3. **Bake flow**: progress bar, a preview-quality bake, per-map bake settings,
    stale-object highlighting.
-7. **Hot reload** of assets / materials / shaders from disk (vite watcher → the
-   runtime reloads what changed, without resetting the editor).
-8. Then the AI milestone: MCP server, scope / lock enforcement per call,
+4. **Hot reload** of assets / materials / shaders from disk.
+5. Then the AI milestone: MCP server, scope / lock enforcement per call,
    changeset review UI.
 
 ## 13. Files
@@ -371,3 +465,5 @@ transforms. A transaction is the reviewable change set. A future per-call scope
 | Assets | `src/editor/assets.ts`, `public/assets/registry.json`, `tools/scene/registry.ts` |
 | Dev server | `tools/dev/editor_server.ts` (+ `/__capture` in `vite.config.ts`) |
 | Migration / regression | `tools/scene/migrate.ts`, `tools/regress.mjs` |
+| Scatter / splines | `src/engine/scene/scatter.ts`, `splines.ts`, `public/scatter/*.json`, `public/splines/*.json` |
+| GLB export (bake extras) | `src/engine/assets/glbwrite.ts`, `src/editor/bridge.ts` |

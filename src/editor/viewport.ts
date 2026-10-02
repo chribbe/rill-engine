@@ -5,6 +5,7 @@ import type { Editor } from './editor';
 import { Gizmo, type Handle } from './gizmo';
 import { Picker, viewRay, type PickHit, type Ray } from './picking';
 import { applyDelta, type Q4, type V3 } from './xform';
+import { decalRotation } from './commands';
 
 /**
  * The editor viewport: the runtime's WebGPU canvas plus a 2D overlay canvas
@@ -29,6 +30,9 @@ export class Viewport {
   private down: { x: number; y: number; button: number; moved: boolean } | null = null;
   private gesture: { key: string; starts: Map<string, Transform>; label: string } | null = null;
   private dropHit: PickHit | null = null;
+  private painting: { id: string; key: string; last: [number, number] } | null = null;
+  private pointDrag: { id: string; index: number; key: string; moved: boolean } | null = null;
+  private stamping: { key: string; last: V3 } | null = null;
   mouse: [number, number] = [-1, -1];
   flySpeed = 12;
   info = '';
@@ -145,8 +149,176 @@ export class Viewport {
       return;
     }
     if (this.ed.placing) return;
+    if (this.ed.tool === 'paint') {
+      this.beginPaint(e);
+      return;
+    }
+    // Control points of the selected spline.
+    const sh = this.splineHandles();
+    if (sh) {
+      const i = this.handleAt(sh.pts, e.offsetX, e.offsetY);
+      if (i >= 0) {
+        this.pointDrag = { id: sh.id, index: i, key: `spline:${performance.now()}`, moved: false };
+        this.ed.setSelection([sh.id], `p${i}`);
+        return;
+      }
+    }
+    if (this.ed.tool === 'spline') {
+      this.splineClick(e);
+      return;
+    }
+    if (this.ed.tool === 'decal') {
+      const hit = this.surfaceAt(e.offsetX, e.offsetY);
+      if (!hit) return;
+      this.stamping = { key: `decal:${performance.now()}`, last: hit.point };
+      this.stampDecal(hit);
+      return;
+    }
     const h = this.gizmoVisible() ? this.gizmo.hit(e.offsetX, e.offsetY) : null;
     if (h) this.beginGizmo(h, e);
+  }
+
+  // ------------------------------------------------------------------ scatter painting
+
+  /** The scatter the brush paints into: the selected one (else a new one is created on the first stroke). */
+  private paintTarget(): string | null {
+    const p = this.ed.primary;
+    return p?.type === 'scatter' ? p.id : null;
+  }
+
+  private beginPaint(e: PointerEvent) {
+    const ed = this.ed;
+    const hit = this.surfaceAt(e.offsetX, e.offsetY);
+    if (!hit) return;
+    const erase = ed.brush.erase !== e.shiftKey;
+    const key = `paint:${performance.now()}`;
+    let id = this.paintTarget();
+    if (!id) {
+      if (erase) { this.showHint('Select a scatter to erase from'); return; }
+      const r = ed.tryExec<{ id: string }>('scatter_vegetation', { preset: ed.brush.preset, center: hit.point.map((v) => Math.round(v * 100) / 100), radius: ed.brush.radius });
+      if (!r) return;
+      ed.select(r.id);
+      this.painting = { id: r.id, key, last: [hit.point[0], hit.point[2]] };
+      return;
+    }
+    this.painting = { id, key, last: [hit.point[0], hit.point[2]] };
+    this.paintAt(hit.point, erase);
+  }
+
+  private paintAt(p: V3, erase: boolean) {
+    const pt = this.painting!;
+    const r = this.ed.brush.radius;
+    this.ed.tryExec('paint_scatter', { id: pt.id, strokes: [[Math.round(p[0] * 100) / 100, Math.round(p[2] * 100) / 100, r]], erase }, { merge: pt.key, label: erase ? 'Erase scatter' : 'Paint scatter' });
+    pt.last = [p[0], p[2]];
+  }
+
+  // ------------------------------------------------------------------ splines
+
+  /** World positions (on the ground) of the selected spline's control points. */
+  splineHandles(): { id: string; pts: V3[] } | null {
+    const p = this.ed.primary;
+    if (!p || p.type !== 'spline' || this.ed.mode !== 'edit' || this.ed.scene.effectiveLocked(p.id)) return null;
+    const m = transformMatrix(p.transform);
+    const coll = this.ed.rt.world.collision, drape = p.spline.drape !== false;
+    const pts = p.spline.points.map((q) => {
+      const w = vec3.transformMat4([q[0], q[1], q[2]], m);
+      if (drape) {
+        const g = coll.groundHit(w[0], w[1] + 2, w[2], 14, p.id) ?? coll.groundHit(w[0], 1e4, w[2], 2e4, p.id);
+        return [w[0], g?.height ?? w[1], w[2]] as V3;
+      }
+      return [w[0], w[1], w[2]] as V3;
+    });
+    return { id: p.id, pts };
+  }
+
+  /** World point to viewport CSS pixels (null behind the camera). */
+  project(p: ArrayLike<number>): [number, number] | null {
+    const vp = this.ed.rt.camera.viewProj;
+    const w = vp[3] * p[0] + vp[7] * p[1] + vp[11] * p[2] + vp[15];
+    if (w <= 0.05) return null;
+    const x = (vp[0] * p[0] + vp[4] * p[1] + vp[8] * p[2] + vp[12]) / w;
+    const y = (vp[1] * p[0] + vp[5] * p[1] + vp[9] * p[2] + vp[13]) / w;
+    return [(x * 0.5 + 0.5) * this.w, (0.5 - y * 0.5) * this.h];
+  }
+
+  private handleAt(pts: V3[], x: number, y: number): number {
+    let best = -1, bd = 9;
+    pts.forEach((p, i) => {
+      const q = this.project(p);
+      if (!q) return;
+      const d = Math.hypot(q[0] - x, q[1] - y);
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
+  }
+
+  /** Spline tool click: start / extend the spline being drawn, or extend / insert into the selected one. */
+  private splineClick(e: PointerEvent) {
+    const ed = this.ed, st = ed.splineTool;
+    const ignore = st.drawing ? new Set([st.drawing]) : undefined;
+    const hit = this.surfaceAt(e.offsetX, e.offsetY, ignore);
+    if (!hit) return;
+    let p = hit.point;
+    if (ed.snap.enabled !== (e.ctrlKey || e.metaKey)) { const g = ed.snap.grid; p = [Math.round(p[0] / g) * g, p[1], Math.round(p[2] / g) * g]; }
+    p = p.map((v) => Math.round(v * 1000) / 1000) as V3;
+    if (st.drawing && !ed.scene.has(st.drawing)) st.drawing = null;
+    // A selected spline (not being drawn): extend it from its nearest end.
+    const sel = ed.primary;
+    if (!st.drawing && !st.pending && sel?.type === 'spline') {
+      const sh = this.splineHandles()!;
+      const first = sh.pts[0], last = sh.pts[sh.pts.length - 1];
+      const atStart = Math.hypot(p[0] - first[0], p[2] - first[2]) < Math.hypot(p[0] - last[0], p[2] - last[2]);
+      ed.tryExec('modify_spline', { id: sel.id, insert: { index: atStart ? 0 : sh.pts.length, point: p } });
+      return;
+    }
+    if (!st.drawing) {
+      if (!st.pending) {
+        st.pending = p;
+        st.key = `draw:${performance.now()}`;
+        this.showHint('Click the next point · Enter / Esc finishes · Backspace removes the last point', 4000);
+        return;
+      }
+      const r = ed.tryExec<{ id: string }>('create_spline', { preset: st.preset, points: [st.pending, p] }, { merge: st.key, label: `Draw ${st.preset}` });
+      st.pending = null;
+      if (r) {
+        st.drawing = r.id;
+        ed.select(r.id);
+      }
+      return;
+    }
+    const cur = ed.scene.get(st.drawing);
+    if (cur?.type !== 'spline') return;
+    ed.tryExec('modify_spline', { id: st.drawing, insert: { index: cur.spline.points.length, point: p } }, { merge: st.key, label: `Draw ${st.preset}` });
+  }
+
+  /** One decal on the surface under the cursor (a child of the object it lands on, unless that is locked world geometry). */
+  private stampDecal(hit: PickHit) {
+    const ed = this.ed, dt = ed.decalTool;
+    const owner = ed.scene.get(hit.id);
+    const parent = owner && owner.type === 'mesh' && !ed.scene.effectiveLocked(hit.id) ? hit.id : ed.scene.has('grp_decals') ? 'grp_decals' : undefined;
+    const j = 1 + (Math.random() * 2 - 1) * dt.jitter;
+    const r = ed.tryExec<{ id: string }>('place_decal', {
+      material: dt.material, position: hit.point, normal: hit.normal, size: Math.round(dt.size * j * 100) / 100,
+      roll: dt.randomRoll ? Math.round(Math.random() * 360) : 0, ...(parent ? { parent } : {}),
+    }, { merge: this.stamping?.key, label: `Decals ${dt.material}` });
+    if (r) ed.setSelection([r.id]);
+  }
+
+  /** Ends the spline being drawn (Enter / Esc / tool change). */
+  finishSpline() {
+    const st = this.ed.splineTool;
+    if (st.drawing || st.pending) this.ed.history.seal();
+    st.drawing = null;
+    st.pending = null;
+  }
+
+  private movePaint(e: PointerEvent) {
+    const pt = this.painting!;
+    const hit = this.surfaceAt(e.offsetX, e.offsetY);
+    if (!hit) return;
+    // Dabs every third of a radius along the drag.
+    if (Math.hypot(hit.point[0] - pt.last[0], hit.point[2] - pt.last[1]) < this.ed.brush.radius * 0.35) return;
+    this.paintAt(hit.point, this.ed.brush.erase !== e.shiftKey);
   }
 
   /** Ends every mouse gesture (camera look / pan / orbit, gizmo drag). */
@@ -155,6 +327,9 @@ export class Viewport {
     this.panning = false;
     this.orbiting = null;
     this.down = null;
+    this.painting = null;
+    this.pointDrag = null;
+    this.stamping = null;
     if (this.gizmo.dragging) this.endGizmo();
   }
 
@@ -188,6 +363,32 @@ export class Viewport {
       for (let i = 0; i < 3; i++) cam.position[i] = o.pivot[i] - f[i] * o.dist;
       return;
     }
+    if (this.painting) {
+      if (!(e.buttons & 1)) this.painting = null;
+      else this.movePaint(e);
+      return;
+    }
+    if (this.stamping) {
+      if (!(e.buttons & 1)) { this.stamping = null; this.ed.history.seal(); return; }
+      const hit = this.surfaceAt(x, y);
+      if (hit && Math.hypot(hit.point[0] - this.stamping.last[0], hit.point[1] - this.stamping.last[1], hit.point[2] - this.stamping.last[2]) >= this.ed.decalTool.spacing) {
+        this.stamping.last = hit.point;
+        this.stampDecal(hit);
+      }
+      return;
+    }
+    if (this.pointDrag) {
+      if (!(e.buttons & 1)) { this.pointDrag = null; this.ed.history.seal(); return; }
+      const pd = this.pointDrag;
+      const hit = this.surfaceAt(x, y, new Set([pd.id]));
+      if (hit) {
+        let p = hit.point;
+        if (this.ed.snap.enabled !== (e.ctrlKey || e.metaKey)) { const g = this.ed.snap.grid; p = [Math.round(p[0] / g) * g, p[1], Math.round(p[2] / g) * g]; }
+        pd.moved = true;
+        this.ed.tryExec('modify_spline', { id: pd.id, move: { index: pd.index, point: p } }, { merge: pd.key, label: 'Move spline point' });
+      }
+      return;
+    }
     if (this.gizmo.dragging) {
       this.updateGizmo(e);
       return;
@@ -210,7 +411,23 @@ export class Viewport {
       this.endGizmo();
       return;
     }
+    if (this.painting) {
+      this.painting = null;
+      this.ed.history.seal();
+      return;
+    }
+    if (this.pointDrag) {
+      this.pointDrag = null;
+      this.ed.history.seal();
+      return;
+    }
+    if (this.stamping) {
+      this.stamping = null;
+      this.ed.history.seal();
+      return;
+    }
     if (e.button !== 0 || !d || d.moved || this.ed.mode !== 'edit') return;
+    if (this.ed.tool === 'paint' || this.ed.tool === 'spline' || this.ed.tool === 'decal') return;
     if (this.ed.placing) {
       this.placeAt(this.ed.placing, e.offsetX, e.offsetY);
       if (!e.shiftKey) {
@@ -221,7 +438,7 @@ export class Viewport {
     }
     const hit = this.pickAt(e.offsetX, e.offsetY);
     const how = e.shiftKey ? 'add' : e.ctrlKey || e.metaKey ? 'toggle' : 'set';
-    this.ed.select(hit?.id ?? null, how);
+    this.ed.select(hit?.id ?? null, how, hit?.sub ?? null);
   }
 
   private onWheel(e: WheelEvent) {
@@ -288,18 +505,59 @@ export class Viewport {
       case 'KeyW': ed.tool = 'translate'; ed.emit('tool'); break;
       case 'KeyE': ed.tool = 'rotate'; ed.emit('tool'); break;
       case 'KeyR': ed.tool = 'scale'; ed.emit('tool'); break;
+      case 'KeyT': ed.tool = 'decal'; ed.pick.decals = true; ed.emit('tool'); this.showHint(`Decal ${ed.decalTool.material}: click a surface · drag to paint · [ ] size`, 3000); break;
+      case 'KeyN': ed.tool = 'spline'; ed.emit('tool'); this.showHint(`Spline ${ed.splineTool.preset}: click points on the ground · Enter / Esc finishes`, 3000); break;
+      case 'Enter': if (ed.tool === 'spline') { this.finishSpline(); this.showHint('Spline finished'); } break;
+      case 'KeyB': ed.tool = 'paint'; ed.emit('tool'); this.showHint(`Paint ${ed.brush.preset}: drag on the ground · Shift erases · [ ] brush size`, 3000); break;
       case 'KeyX': ed.space = ed.space === 'world' ? 'local' : 'world'; ed.emit('tool'); this.showHint(`Gizmo axes: ${ed.space}`); break;
       case 'KeyF': this.focus(); break;
       case 'KeyH': if (ed.selection.length) ed.tryExec('set_visibility', { ids: ed.selection, visible: false }); break;
       case 'Delete': case 'Backspace':
-        if (ed.selection.length) { e.preventDefault(); ed.tryExec('delete_entity', { ids: ed.selectionRoots }); }
+        // Spline tool while drawing: Backspace removes the last point.
+        if (ed.tool === 'spline' && (ed.splineTool.drawing || ed.splineTool.pending)) {
+          e.preventDefault();
+          const st = ed.splineTool, cur = st.drawing ? ed.scene.get(st.drawing) : null;
+          if (st.pending) st.pending = null;
+          else if (cur?.type === 'spline' && cur.spline.points.length > 2) ed.tryExec('modify_spline', { id: cur.id, remove: cur.spline.points.length - 1 }, { merge: st.key, label: `Draw ${st.preset}` });
+          else if (cur) { ed.tryExec('delete_entity', { ids: [cur.id] }); st.drawing = null; }
+          break;
+        }
+        if (!ed.selection.length) break;
+        e.preventDefault();
+        // A selected spline control point: remove it.
+        if (ed.primary?.type === 'spline' && ed.subSelection?.startsWith('p')) {
+          const i = +ed.subSelection.slice(1);
+          if (ed.primary.spline.points.length > 2) { ed.tryExec('modify_spline', { id: ed.primary.id, remove: i }); ed.setSelection([ed.primary.id]); }
+          else this.showHint('A spline keeps at least 2 points (delete the spline from the scene list)');
+          break;
+        }
+        // A clicked scatter instance: remove that one tree, not the forest.
+        if (ed.primary?.type === 'scatter' && ed.subSelection) {
+          const key = ed.subSelection;
+          ed.tryExec('scatter_remove', { id: ed.primary.id, keys: [key] });
+          ed.setSelection([ed.primary.id]);
+        } else ed.tryExec('delete_entity', { ids: ed.selectionRoots });
         break;
       case 'Escape':
-        if (ed.placing) { ed.placing = null; ed.emit('tool'); }
+        if (ed.tool === 'spline' && (ed.splineTool.drawing || ed.splineTool.pending)) this.finishSpline();
+        else if (ed.placing) { ed.placing = null; ed.emit('tool'); }
         else ed.setSelection([]);
         break;
-      case 'BracketLeft': ed.snap.grid = Math.max(1 / 64, ed.snap.grid / 2); ed.emit('tool'); this.showHint(`Grid ${ed.snap.grid} m`); break;
-      case 'BracketRight': ed.snap.grid = Math.min(64, ed.snap.grid * 2); ed.emit('tool'); this.showHint(`Grid ${ed.snap.grid} m`); break;
+      case 'BracketLeft': case 'BracketRight': {
+        const up = e.code === 'BracketRight';
+        if (ed.tool === 'paint') {
+          ed.brush.radius = Math.round(Math.max(0.5, Math.min(80, ed.brush.radius * (up ? 1.25 : 0.8))) * 10) / 10;
+          this.showHint(`Brush radius ${ed.brush.radius} m`);
+        } else if (ed.tool === 'decal') {
+          ed.decalTool.size = Math.round(Math.max(0.1, Math.min(20, ed.decalTool.size * (up ? 1.25 : 0.8))) * 100) / 100;
+          this.showHint(`Decal size ${ed.decalTool.size} m`);
+        } else {
+          ed.snap.grid = up ? Math.min(64, ed.snap.grid * 2) : Math.max(1 / 64, ed.snap.grid / 2);
+          this.showHint(`Grid ${ed.snap.grid} m`);
+        }
+        ed.emit('tool');
+        break;
+      }
       case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown': case 'PageUp': case 'PageDown':
         e.preventDefault();
         this.nudge(e.code, e.shiftKey ? 10 : 1);
@@ -376,7 +634,7 @@ export class Viewport {
 
   gizmoVisible() {
     const ed = this.ed;
-    if (ed.mode !== 'edit' || ed.tool === 'select' || !ed.selection.length) return false;
+    if (ed.mode !== 'edit' || ed.tool === 'select' || ed.tool === 'paint' || ed.tool === 'spline' || ed.tool === 'decal' || !ed.selection.length) return false;
     return ed.selectionRoots.some((id) => !ed.scene.effectiveLocked(id));
   }
 
@@ -631,6 +889,88 @@ export class Viewport {
         g.stroke();
       }
     }
+    // Leaving the spline tool ends the drawing.
+    if (ed.tool !== 'spline' && (ed.splineTool.drawing || ed.splineTool.pending)) this.finishSpline();
+    // Selected spline: centreline and control points.
+    const sh = this.splineHandles();
+    if (sh) {
+      const b = ed.rt.world.objects.get(sh.id)?.spline?.build;
+      if (b) {
+        g.beginPath();
+        for (let i = 0; i < b.centreline.length - 1; i++) line(b.centreline[i], b.centreline[i + 1]);
+        g.strokeStyle = 'rgba(255,138,31,0.85)';
+        g.lineWidth = 1.5;
+        g.stroke();
+      }
+      sh.pts.forEach((p, i) => {
+        const q = proj(p);
+        if (!q) return;
+        const on = ed.subSelection === `p${i}`;
+        g.fillStyle = on ? '#ffd23f' : '#ff8a1f';
+        g.strokeStyle = '#000';
+        g.lineWidth = 1;
+        g.fillRect(q[0] - 5, q[1] - 5, 10, 10);
+        g.strokeRect(q[0] - 5, q[1] - 5, 10, 10);
+      });
+    }
+    // Spline tool: pending first point and the rubber band to the cursor.
+    if (ed.tool === 'spline' && this.mouse[0] >= 0) {
+      const st = ed.splineTool;
+      const hit = this.surfaceAt(this.mouse[0], this.mouse[1], st.drawing ? new Set([st.drawing]) : undefined);
+      let from: V3 | null = st.pending;
+      if (!from && st.drawing) { const hs = this.splineHandles(); if (hs?.id === st.drawing) from = hs.pts[hs.pts.length - 1]; }
+      if (hit) {
+        const c = proj(hit.point);
+        if (c) { g.fillStyle = '#5be37d'; g.fillRect(c[0] - 3, c[1] - 3, 6, 6); }
+        if (from) {
+          g.beginPath();
+          line(from, hit.point);
+          g.setLineDash([4, 4]);
+          g.strokeStyle = '#5be37d';
+          g.lineWidth = 1.5;
+          g.stroke();
+          g.setLineDash([]);
+        }
+      }
+      if (st.pending) { const q = proj(st.pending); if (q) { g.fillStyle = '#5be37d'; g.fillRect(q[0] - 5, q[1] - 5, 10, 10); } }
+    }
+    // Decal tool: footprint at the cursor, aligned to the surface.
+    if (ed.tool === 'decal' && this.mouse[0] >= 0) {
+      const hit = this.surfaceAt(this.mouse[0], this.mouse[1]);
+      if (hit) {
+        const q = decalRotation(hit.normal, 0), sz = ed.decalTool.size;
+        const m = transformMatrix({ position: hit.point, rotation: q });
+        mat4.scale(m, [sz, sz, 0.02], m);
+        g.beginPath();
+        box(m);
+        g.strokeStyle = '#7fd1c4';
+        g.lineWidth = 1.5;
+        g.stroke();
+      }
+    }
+    // Paint brush on the ground.
+    if (ed.tool === 'paint' && this.mouse[0] >= 0) {
+      const hit = this.surfaceAt(this.mouse[0], this.mouse[1]);
+      if (hit) {
+        const erase = ed.brush.erase !== (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'));
+        const r = ed.brush.radius, coll = ed.rt.world.collision;
+        g.beginPath();
+        for (let i = 0; i <= 48; i++) {
+          const a = (i / 48) * Math.PI * 2;
+          const x = hit.point[0] + Math.cos(a) * r, z = hit.point[2] + Math.sin(a) * r;
+          const gh = coll.groundHit(x, hit.point[1] + 30, z, 60);
+          const q = proj([x, (gh?.height ?? hit.point[1]) + 0.05, z]);
+          if (!q) continue;
+          if (i === 0) g.moveTo(q[0], q[1]);
+          else g.lineTo(q[0], q[1]);
+        }
+        g.strokeStyle = erase ? '#ff6b6b' : '#5be37d';
+        g.lineWidth = 2;
+        g.stroke();
+        const c = proj(hit.point);
+        if (c) { g.fillStyle = erase ? '#ff6b6b' : '#5be37d'; g.fillRect(c[0] - 2, c[1] - 2, 4, 4); }
+      }
+    }
     // Gizmo.
     if (this.gizmoVisible()) {
       const f = this.gizmoFrame();
@@ -653,6 +993,17 @@ export class Viewport {
       const c = ed.rt.camera.position;
       lines.push(`${ed.tool.toUpperCase()}  ${ed.space}  snap ${ed.snap.enabled ? `${ed.snap.grid} m / ${ed.snap.angle}°` : 'off'}   cam ${c[0].toFixed(1)} ${c[1].toFixed(1)} ${c[2].toFixed(1)}  ${this.flySpeed.toFixed(0)} m/s`);
       if (ed.placing) lines.push(`Placing ${ed.placing}: click to place (Shift: keep placing) · Esc to cancel`);
+      if (ed.tool === 'spline') {
+        const st = ed.splineTool, p = ed.primary;
+        lines.push(st.drawing || st.pending ? `SPLINE ${st.preset}: click to add points · Enter / Esc finishes · Backspace removes the last`
+          : p?.type === 'spline' ? `SPLINE: click to extend ${p.name ?? p.id} · drag its points · Del removes a selected point · Esc deselects to draw a new one`
+          : `SPLINE ${st.preset}: click on the ground to start`);
+      }
+      if (ed.tool === 'decal') lines.push(`DECAL ${ed.decalTool.material}: click a surface · drag to paint (every ${ed.decalTool.spacing} m) · size ${ed.decalTool.size} m ([ ])`);
+      if (ed.tool === 'paint') {
+        const t = this.paintTarget();
+        lines.push(`PAINT ${t ? `into ${ed.scene.get(t)?.name ?? t}` : `new ${ed.brush.preset} scatter`} · radius ${ed.brush.radius} m ([ ]) · ${ed.brush.erase ? 'erase (Shift paints)' : 'Shift erases'}`);
+      }
       if (this.info) lines.push(this.info);
     }
     if (performance.now() < this.hintUntil) lines.push(this.hint);

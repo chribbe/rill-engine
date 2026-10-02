@@ -1,0 +1,14 @@
+{
+  "format": "rill.spline",
+  "name": "Local street with granite kerbs",
+  "description": "6.5 m asphalt carriageway with 15 cm granite kerbs on both sides (1960s suburb street).",
+  "semantic": "road",
+  "width": 6.5,
+  "sampleSpacing": 1,
+  "texelDensity": 4,
+  "parts": [
+    { "kind": "ribbon", "material": "asphalt", "widthFromSpline": true, "y": 0.04 },
+    { "kind": "profile", "material": "granite_curb", "edge": true, "sides": [-1, 1], "offset": 0.075, "y": 0.0,
+      "profile": [[-0.075, 0.0], [-0.075, 0.16], [0.075, 0.16], [0.075, 0.04]] }
+  ]
+}

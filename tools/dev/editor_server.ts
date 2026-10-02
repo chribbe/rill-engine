@@ -4,10 +4,13 @@
 //   POST /__editor/save?map=<name>      writes public/maps/<name>/map.json (canonical formatting);
 //                                       the previous version goes to backups/maps/<name>/ first
 //   POST /__editor/save-as?map=<new>&from=<map>   new map from a document (lightmaps referenced from <map>)
+//   POST /__editor/bake-extra?map=<name>   generated geometry for the bake (spline GLBs, scatter instances)
 //   GET  /__editor/backups?map=<name>   saved versions, newest first
 //   GET  /__editor/backup?map=<name>&file=<f>     one saved version
 //   GET  /__editor/materials            material library summary (public/materials/*.json)
 //   GET  /__editor/asset-files          asset files on disk (for the registry / browser)
+//   GET  /__editor/scatter-presets      vegetation / rock scatter presets (public/scatter/*.json)
+//   GET  /__editor/spline-presets       path / road / kerb / fence / track presets (public/splines/*.json)
 //   POST /__editor/registry             writes public/assets/registry.json
 //   POST /__blender/jobs                { task, params } -> { id }   (Blender bridge)
 //   GET  /__blender/jobs/<id>?from=<n>  { status, log (lines from n), result }
@@ -19,7 +22,7 @@
 import type { Plugin } from 'vite';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { formatMapJson } from '../../src/engine/scene/mapjson.ts';
 
@@ -97,7 +100,9 @@ const TASKS: Record<string, TaskDef> = {
     implemented: true,
     command: (p) => ({
       cmd: process.execPath,
-      args: ['tools/blender/run.ts', 'bake', '--map', String(p.map), ...(p.samples ? ['--samples', String(p.samples)] : []), ...(p.size ? ['--size', String(p.size)] : []), ...(p.denoise === false ? ['--no-denoise'] : [])],
+      args: ['tools/blender/run.ts', 'bake', '--map', String(p.map), ...(p.samples ? ['--samples', String(p.samples)] : []), ...(p.size ? ['--size', String(p.size)] : []), ...(p.denoise === false ? ['--no-denoise'] : []),
+        // Only bake extras the editor exported (build/bake/<map>/extra.json).
+        ...(p.extra && String(p.extra) === join(ROOT, 'build', 'bake', String(p.map), 'extra.json') ? ['--extra', String(p.extra)] : [])],
     }),
     result: (p) => ({ reload: 'lightmaps', lightmaps: `maps/${p.map}/lightmaps/lightmapset.json` }),
   },
@@ -193,6 +198,23 @@ export function editorServer(): Plugin {
             writeAtomic(file, text);
             return json(res, 200, { file: relative(ROOT, file), bytes: text.length, entities: doc.entities.length, backup: backup && relative(ROOT, join(BACKUPS, map, backup)) });
           }
+          if (path === '/__editor/bake-extra' && req.method === 'POST') {
+            // Generated geometry the bake can't derive from map.json alone (splines, scatter instances).
+            const map = url.searchParams.get('map') ?? '';
+            if (!NAME.test(map)) return json(res, 400, { error: 'bad map name' });
+            const body = JSON.parse(await readBody(req)) as { meshes: { id: string; glb: string; resolution: [number, number] }[]; instances: { asset: string; matrix: number[] }[] };
+            const dir = join(ROOT, 'build', 'bake', map);
+            rmSync(dir, { recursive: true, force: true });
+            mkdirSync(dir, { recursive: true });
+            const meshes = body.meshes.filter((m) => /^[\w.-]+$/.test(m.id)).map((m) => {
+              const file = join(dir, `${m.id}.glb`);
+              writeFileSync(file, Buffer.from(m.glb, 'base64'));
+              return { id: m.id, file, resolution: m.resolution };
+            });
+            const extra = join(dir, 'extra.json');
+            writeFileSync(extra, JSON.stringify({ meshes, instances: body.instances }));
+            return json(res, 200, { extra, meshes: meshes.length, instances: body.instances.length });
+          }
           if (path === '/__editor/save-as' && req.method === 'POST') {
             const map = url.searchParams.get('map') ?? '', from = url.searchParams.get('from') ?? '';
             if (!NAME.test(map) || !NAME.test(from)) return json(res, 400, { error: 'bad map name' });
@@ -233,6 +255,22 @@ export function editorServer(): Plugin {
                 baseColor: d.baseColor, baseColorFactor: d.baseColorFactor, decal: typeof d.texture === 'string', notes: d.notes,
               };
             });
+            return json(res, 200, list);
+          }
+          if (path === '/__editor/scatter-presets' && req.method === 'GET') {
+            const dir = join(PUBLIC, 'scatter');
+            const list = existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith('.json')).sort().map((n) => {
+              const d = JSON.parse(readFileSync(join(dir, n), 'utf8'));
+              return { name: n.replace(/\.json$/, ''), title: d.name, description: d.description, density: d.density, species: d.species?.length ?? 0 };
+            }) : [];
+            return json(res, 200, list);
+          }
+          if (path === '/__editor/spline-presets' && req.method === 'GET') {
+            const dir = join(PUBLIC, 'splines');
+            const list = existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith('.json')).sort().map((n) => {
+              const d = JSON.parse(readFileSync(join(dir, n), 'utf8'));
+              return { name: n.replace(/\.json$/, ''), title: d.name, description: d.description };
+            }) : [];
             return json(res, 200, list);
           }
           if (path === '/__editor/asset-files' && req.method === 'GET') {

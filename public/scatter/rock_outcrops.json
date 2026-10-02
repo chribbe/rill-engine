@@ -1,0 +1,17 @@
+{
+  "format": "rill.scatter",
+  "name": "Bedrock outcrops",
+  "description": "Granite boulders and rock humps breaking through the forest floor.",
+  "semantic": "rock",
+  "density": 0.8,
+  "clumping": 0.5,
+  "clumpScale": 12,
+  "slopeMax": 50,
+  "surfaces": ["terrain"],
+  "castShadow": true,
+  "species": [
+    { "name": "rock", "asset": "assets/testmap/rock_a.glb", "weight": 0.34, "scale": [0.7, 1.4], "sink": 0.25 },
+    { "name": "rock", "asset": "assets/testmap/rock_b.glb", "weight": 0.33, "scale": [0.7, 1.4], "sink": 0.25 },
+    { "name": "rock", "asset": "assets/testmap/rock_c.glb", "weight": 0.33, "scale": [0.7, 1.4], "sink": 0.25 }
+  ]
+}

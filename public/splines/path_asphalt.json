@@ -1,0 +1,12 @@
+{
+  "format": "rill.spline",
+  "name": "Asphalt footpath",
+  "description": "Park / forest footpath and cycle path: 2.5 m asphalt, no kerbs (Stockholm GC-väg).",
+  "semantic": "path",
+  "width": 2.5,
+  "sampleSpacing": 0.75,
+  "texelDensity": 5,
+  "parts": [
+    { "kind": "ribbon", "material": "asphalt_path", "widthFromSpline": true, "y": 0.04 }
+  ]
+}

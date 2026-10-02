@@ -260,6 +260,36 @@ for o in doc['objects']:
             ob.matrix_world = Matrix.Translation((x, -z, y)) @ Matrix.Rotation(math.radians(-yaw), 4, 'Z') @ Matrix.Diagonal((s, s, s, 1))
             scene.collection.objects.link(ob)
             n_objects += 1
+# Generated geometry from the editor (--extra build/bake/<map>/extra.json): spline meshes in world
+# space (lightmapped, keyed by entity ID) and scatter instances (occluders).
+EXTRA = arg('--extra', '')
+if EXTRA:
+    extra = load_json(EXTRA)
+    C4 = Matrix(((1, 0, 0, 0), (0, 0, -1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))
+    for m in extra.get('meshes', []):
+        src = import_asset(m['file'])
+        ob = src.copy()
+        ob.data = src.data.copy()
+        ob.name = m['id']
+        ob.matrix_world = Matrix.Identity(4)
+        scene.collection.objects.link(ob)
+        n_objects += 1
+        if m.get('resolution'):
+            lightmapped.append((ob, m['id'], tuple(m['resolution'])))
+    n_inst = 0
+    for k, it in enumerate(extra.get('instances', [])):
+        if it['asset'].startswith('builtin:'):
+            continue
+        src = import_asset(it['asset'])
+        ob = src.copy()
+        ob.name = f'extra#{k}'
+        e = it['matrix']
+        Me = Matrix(((e[0], e[4], e[8], e[12]), (e[1], e[5], e[9], e[13]), (e[2], e[6], e[10], e[14]), (e[3], e[7], e[11], e[15])))
+        ob.matrix_world = C4 @ Me @ C4.inverted()
+        scene.collection.objects.link(ob)
+        n_objects += 1
+        n_inst += 1
+    print(f"[bake] extra: {len(extra.get('meshes', []))} generated meshes, {n_inst} scatter / spline instances")
 print(f'[bake] scene: {n_objects} objects, {len(lightmapped)} lightmapped, import {time.time() - t_start:.1f}s')
 
 # ------------------------------------------------------------------ atlas packing
