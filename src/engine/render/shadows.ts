@@ -158,7 +158,18 @@ export class ShadowSystem {
       prev = split;
     }
     const buf = new Float32Array(64 * CASCADES);
-    for (let i = 0; i < CASCADES; i++) buf.set(this.cascades[i].viewProj, i * 64);
+    for (let i = 0; i < CASCADES; i++) {
+      buf.set(this.cascades[i].viewProj, i * 64);
+      buf.set(this.wind, i * 64 + 16);
+    }
     this.device.queue.writeBuffer(this.uniforms, 0, buf);
+  }
+
+  private wind = new Float32Array(8);
+  /** Wind uniforms for the caster vertex stage (after `update`, every frame). */
+  writeWind(w1: number[], w2: number[]) {
+    this.wind.set(w1, 0);
+    this.wind.set(w2, 4);
+    for (let i = 0; i < CASCADES; i++) this.device.queue.writeBuffer(this.uniforms, i * 256 + 64, this.wind);
   }
 }

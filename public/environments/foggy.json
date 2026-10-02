@@ -70,5 +70,13 @@
     "contrast": 1.0,
     "saturation": 0.95,
     "temperature": -0.15
+  },
+  "wind": {
+    "direction": 90,
+    "strength": 0.06,
+    "gustiness": 0.3,
+    "gustScale": 0.02,
+    "gustSpeed": 2,
+    "flutter": 0.3
   }
 }

@@ -107,5 +107,13 @@
       ]
     }
   },
-  "notes": "Stockholm, wet November evening (~17:00): rain-soaked streets under sodium lamps, lit shops and windows, low cloud."
+  "notes": "Stockholm, wet November evening (~17:00): rain-soaked streets under sodium lamps, lit shops and windows, low cloud.",
+  "wind": {
+    "direction": 70,
+    "strength": 0.6,
+    "gustiness": 0.8,
+    "gustScale": 0.03,
+    "gustSpeed": 10,
+    "flutter": 0.8
+  }
 }

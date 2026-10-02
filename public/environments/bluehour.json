@@ -109,5 +109,13 @@
       ]
     }
   },
-  "notes": "Winter blue hour in fog (Insertion-style forest path): lamps on, lifted blue shadows."
+  "notes": "Winter blue hour in fog (Insertion-style forest path): lamps on, lifted blue shadows.",
+  "wind": {
+    "direction": 80,
+    "strength": 0.12,
+    "gustiness": 0.4,
+    "gustScale": 0.02,
+    "gustSpeed": 3,
+    "flutter": 0.3
+  }
 }

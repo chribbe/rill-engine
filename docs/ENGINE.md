@@ -376,6 +376,18 @@ World (runtime, derived) ───────────────┐       
     120° when the player crosses its lane (`InstanceBuffer.setModel`). The pattern for
     future interactive props (doors, gates) before a real gameplay/scripting layer exists.
 
+45. **Procedural vegetation wind, one function for every pass.** `windOffset` (common.wgsl)
+    displaces vertices of wind-flagged instances (instance flag 8, set for objects with
+    semantic `vegetation`) from their position relative to the tree base only: a two-octave
+    gust field rolling across the map with the wind, trunk bending with height² around a
+    slow per-tree sway (frequency and phase from the instance seed), branches flexing with
+    the distance from the trunk axis, fast twig/needle flutter. No per-vertex wind data, so
+    LOD0, LOD1, the impostors and the crossfade agree, and the lit pass, the masked prepass
+    and both shadow passes compute bit-identical positions (cascade and spot views carry the
+    same wind uniforms). Per mood in the environment (`wind`: direction, strength,
+    gustiness, gust size/speed, flutter); smoke and dust drift with it. Measured cost: none
+    above noise in the forest view (interleaved A/B, 1080p).
+
 ## 5. Content pipeline
 
 ```
@@ -587,8 +599,7 @@ cost-based tree LODs (decisions 18–38).
    draw) and a smoke texture atlas with lit normals.
 3. **Anti-tiling for large scanned surfaces** (stochastic/texture-bombing or a second scan blended
    by macro noise).
-4. **Vegetation polish:** wind (trunk sway + spray flutter, shared by prepass/shadow/lit vertex
-   stages), octahedral impostors.
+4. **Vegetation polish:** octahedral impostors; wind on ground clutter (tufts bending).
 5. **Exposure**: optional local exposure for sun-vs-shade scenes.
 6. **Hässelby slice polish** (see §13).
 

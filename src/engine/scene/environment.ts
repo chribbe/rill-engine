@@ -61,6 +61,12 @@ export interface EnvironmentState {
    * melt: wet dark edges around the snow; dry: dormant-season tint (winter grass).
    */
   weather: { wetness: number; puddles: number; snow?: number; melt?: number; dry?: number };
+  /**
+   * Wind for vegetation (vertex animation) and particles. direction: compass heading the
+   * wind blows towards (deg); strength 0 calm .. 1 storm; gustiness: how much the rolling
+   * gust field modulates it; gustScale: 1 / gust size (1/m); gustSpeed: m/s; flutter: twigs.
+   */
+  wind?: { direction: number; strength: number; gustiness: number; gustScale: number; gustSpeed: number; flutter: number };
   post: {
     tonemapper: string; contrast: number; saturation: number; temperature: number;
     /** Display-space grade after tone mapping (neutral when omitted). Tints are rgb + amount. */
@@ -103,6 +109,7 @@ export class Environment {
     s.weather.snow ??= 0;
     s.weather.melt ??= 0;
     s.weather.dry ??= 0;
+    s.wind = { direction: 70, strength: 0.3, gustiness: 0.6, gustScale: 0.025, gustSpeed: 6, flutter: 0.6, ...s.wind };
     return s;
   }
 
@@ -110,9 +117,20 @@ export class Environment {
     this.version++;
   }
 
+  /** Seconds of wind animation (wrapped to keep shader trig precise). */
+  windTime = 0;
+
   advance(dt: number) {
     const w = this.state.sky.wind;
     if (w[0] !== 0 || w[1] !== 0) this.cloudTime += dt;
+    this.windTime = (this.windTime + dt) % 1800;
+  }
+
+  /** Wind uniforms: [dirX, dirZ, strength, time], [gustiness, gustScale, gustSpeed, flutter]. */
+  windUniforms(): [number[], number[]] {
+    const w = this.state.wind!;
+    const a = (w.direction * Math.PI) / 180;
+    return [[Math.sin(a), -Math.cos(a), w.strength, this.windTime], [w.gustiness, w.gustScale, w.gustSpeed, w.flutter]];
   }
 
   derive(): DerivedEnvironment {

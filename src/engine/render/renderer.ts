@@ -135,6 +135,8 @@ export interface RenderSettings {
   directionalLightmaps: boolean;
   probeVolume: boolean;
   reflectionProbes: boolean;
+  /** Vegetation wind animation. */
+  wind: boolean;
   showProbes: boolean;
   /** LOD distance multiplier (>1 keeps detail further away). */
   lodBias: number;
@@ -193,6 +195,7 @@ export function defaultRenderSettings(): RenderSettings {
     directionalLightmaps: true,
     probeVolume: true,
     reflectionProbes: true,
+    wind: true,
     showProbes: false,
     lodBias: 1,
     lodFade: 0.1,
@@ -1345,7 +1348,7 @@ export class Renderer {
       this.spotBGs.push(d.createBindGroup({
         layout: this.shadowLayout,
         entries: [
-          { binding: 0, resource: { buffer: this.spotShadows.uniforms, offset: i * 256, size: 64 } },
+          { binding: 0, resource: { buffer: this.spotShadows.uniforms, offset: i * 256, size: 96 } },
           { binding: 1, resource: { buffer: this.instances.buffer } },
           { binding: 2, resource: { buffer: this.visibleBuffer } },
           { binding: 3, resource: this.sampAniso },
@@ -1358,7 +1361,7 @@ export class Renderer {
         d.createBindGroup({
           layout: this.shadowLayout,
           entries: [
-            { binding: 0, resource: { buffer: this.shadows.uniforms, offset: i * 256, size: 64 } },
+            { binding: 0, resource: { buffer: this.shadows.uniforms, offset: i * 256, size: 96 } },
             { binding: 1, resource: { buffer: this.instances.buffer } },
             { binding: 2, resource: { buffer: this.visibleBuffer } },
             { binding: 3, resource: this.sampAniso },
@@ -1519,6 +1522,9 @@ export class Renderer {
     const lg = this.lightGrid;
     F.vec4(FO.lightGrid, lg.originX, lg.originZ, lg.cell, 1 / lg.cell);
     F.uvec4(FO.lightGrid2, lg.nx, lg.nz, lg.maxPer, 0);
+    const [wu1, wu2] = env.windUniforms();
+    F.vec4(FO.wind, wu1[0], wu1[1], this.settings.wind ? wu1[2] : 0, wu1[3]);
+    F.vec4(FO.wind2, wu2[0], wu2[1], wu2[2], wu2[3]);
     const W = envState.weather;
     F.vec4(FO.season, W.snow ?? 0, W.melt ?? 0, W.dry ?? 0, 1 / 2.0);
     this.device.queue.writeBuffer(buffer, 0, F.data);
@@ -1880,6 +1886,13 @@ export class Renderer {
     this.currentPreExposure = preExposure;
     const { flags, shadowsOn } = this.viewFlags(envState, de, false, S.msaa);
     this.shadows.update(camera.position as Float32Array, camera.forward as Float32Array, camera.fovY, camera.aspect, camera.near, de.sunDir, S.shadows);
+    // Shadow casters sway with the same wind as the lit pass (written after the view matrices).
+    const [wind1, wind2] = env.windUniforms();
+    this.shadows.writeWind(wind1, wind2);
+    // Smoke drifts with the wind (strength 1 ~ 8 m/s near the ground).
+    const airK = (S.wind ? wind1[2] : 0) * 8;
+    this.particles.air = [wind1[0] * airK, wind1[1] * airK];
+    this.spotShadows.writeWind(wind1, wind2);
     this.writeFrameUniforms(this.frame, this.frameBuffer, camera, this.width, this.height, env, de, preExposure, ev, flags, S.debugView);
 
     // Post params

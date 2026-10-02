@@ -26,7 +26,7 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
   const proxy = { preset: E().name, view: 'lit' };
 
   const envF = gui.addFolder('Environment');
-  envF.add(proxy, 'preset', ['clear', 'overcast', 'foggy', 'dusk', 'winter', 'bluehour']).name('Weather preset').onChange(async (v: string) => {
+  envF.add(proxy, 'preset', ['clear', 'overcast', 'foggy', 'dusk', 'winter', 'bluehour', 'november', 'november_evening']).name('Weather preset').onChange(async (v: string) => {
     await hooks.setPreset(v);
     gui.controllersRecursive().forEach((c) => c.updateDisplay());
   });
@@ -83,6 +83,13 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
   envBind(wet, () => E().weather, 'snow', 0, 1, 0.01, 'Snow cover');
   envBind(wet, () => E().weather, 'melt', 0, 1, 0.01, 'Melt water');
   envBind(wet, () => E().weather, 'dry', 0, 1, 0.01, 'Dormant season');
+  const wind = envF.addFolder('Wind');
+  wind.add(S, 'wind').name('Animate vegetation');
+  envBind(wind, () => E().wind!, 'strength', 0, 1, 0.01, 'Strength');
+  envBind(wind, () => E().wind!, 'direction', 0, 360, 1, 'Direction (towards, °)');
+  envBind(wind, () => E().wind!, 'gustiness', 0, 1, 0.01, 'Gustiness');
+  envBind(wind, () => E().wind!, 'gustSpeed', 0, 20, 0.1, 'Gust speed (m/s)');
+  envBind(wind, () => E().wind!, 'flutter', 0, 1.5, 0.01, 'Twig flutter');
   const post = envF.addFolder('Grading (restrained)');
   envBind(post, () => E().post, 'contrast', 0.7, 1.4, 0.01, 'Contrast');
   envBind(post, () => E().post, 'saturation', 0, 1.5, 0.01, 'Saturation');

@@ -104,5 +104,13 @@
       ]
     }
   },
-  "notes": "Late-winter thaw (Stockholm, March): patchy old snow, melt water, dormant grass, low grey sky."
+  "notes": "Late-winter thaw (Stockholm, March): patchy old snow, melt water, dormant grass, low grey sky.",
+  "wind": {
+    "direction": 110,
+    "strength": 0.45,
+    "gustiness": 0.7,
+    "gustScale": 0.03,
+    "gustSpeed": 8,
+    "flutter": 0.5
+  }
 }

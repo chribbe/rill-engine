@@ -102,5 +102,13 @@
       ]
     }
   },
-  "notes": "Stockholm, November afternoon: low grey cloud, damp streets, dormant lawns, early dusk light."
+  "notes": "Stockholm, November afternoon: low grey cloud, damp streets, dormant lawns, early dusk light.",
+  "wind": {
+    "direction": 65,
+    "strength": 0.5,
+    "gustiness": 0.75,
+    "gustScale": 0.03,
+    "gustSpeed": 9,
+    "flutter": 0.7
+  }
 }

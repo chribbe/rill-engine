@@ -100,5 +100,13 @@
         1
       ]
     }
+  },
+  "wind": {
+    "direction": 70,
+    "strength": 0.35,
+    "gustiness": 0.6,
+    "gustScale": 0.025,
+    "gustSpeed": 6,
+    "flutter": 0.6
   }
 }

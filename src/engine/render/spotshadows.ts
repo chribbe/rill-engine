@@ -40,6 +40,12 @@ export class SpotShadows {
   }
 
   /** Builds the light-space projections for this frame's shadowed spots (outer cone + margin). */
+  /** Wind uniforms for the caster vertex stage (every frame). */
+  writeWind(w1: number[], w2: number[]) {
+    const w = new Float32Array([...w1, ...w2]);
+    for (let i = 0; i < SPOT_LAYERS; i++) this.device.queue.writeBuffer(this.uniforms, i * 256 + 64, w);
+  }
+
   update(spots: { position: ArrayLike<number>; direction: ArrayLike<number>; outerAngle: number; range: number }[]) {
     this.active = Math.min(SPOT_LAYERS, spots.length);
     this.views.length = 0;

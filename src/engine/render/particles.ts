@@ -82,11 +82,16 @@ export class ParticleSystem {
     }
   }
 
+  /** Air velocity (m/s, world x/z): drag relaxes smoke and dust towards it (set from the wind). */
+  air: [number, number] = [0, 0];
+
   update(dt: number) {
     for (const p of this.list) {
       p.age += dt;
       const k = Math.exp(-p.drag * dt);
-      p.vel[0] *= k; p.vel[1] = p.vel[1] * k - p.gravity * dt; p.vel[2] *= k;
+      const drifts = p.kind === 'smoke' || p.kind === 'dust';
+      const ax = drifts ? this.air[0] : 0, az = drifts ? this.air[1] : 0;
+      p.vel[0] = ax + (p.vel[0] - ax) * k; p.vel[1] = p.vel[1] * k - p.gravity * dt; p.vel[2] = az + (p.vel[2] - az) * k;
       p.pos[0] += p.vel[0] * dt; p.pos[1] += p.vel[1] * dt; p.pos[2] += p.vel[2] * dt;
       p.rot += p.spin * dt;
     }

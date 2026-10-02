@@ -170,7 +170,9 @@ fn vsDepth(@location(0) position: vec3f, @location(3) uv0: vec2f, @builtin(insta
   let e = visibleList[instance];
   let inst = instances[e & 0xFFFFFFu];
   var o: VSOutDepth;
-  o.pos = clipPosition(inst, inst.model * vec4f(position, 1.0));
+  var wp = inst.model * vec4f(position, 1.0);
+  if ((inst.info.y & I_WIND) != 0u) { wp = vec4f(wp.xyz + windOffset(wp.xyz, inst.model[3].xyz, inst.info.z, frame.wind, frame.wind2), 1.0); }
+  o.pos = clipPosition(inst, wp);
   o.uv0 = uv0;
   let mode = e >> 30u;
   let q = f32((e >> 24u) & 63u) / 63.0;
@@ -248,7 +250,8 @@ fn vertexCommon(v: VSIn) -> VSOut {
   let e = visibleList[v.instance];
   let slot = e & 0xFFFFFFu;
   let inst = instances[slot];
-  let wp = inst.model * vec4f(v.position, 1.0);
+  var wp = inst.model * vec4f(v.position, 1.0);
+  if ((inst.info.y & I_WIND) != 0u) { wp = vec4f(wp.xyz + windOffset(wp.xyz, inst.model[3].xyz, inst.info.z, frame.wind, frame.wind2), 1.0); }
   var o: VSOut;
   o.pos = clipPosition(inst, wp);
   o.worldPos = wp.xyz;

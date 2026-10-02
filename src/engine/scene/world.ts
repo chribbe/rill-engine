@@ -326,7 +326,8 @@ export class World {
         const mesh = lods[0].mesh;
         const mats = lods[0].materials;
         const model = transformMatrix(o.transform);
-        const flags = o.receiveDecals === false ? 2 : 0;
+        // Instance flags: 2 = no decals, 8 = wind (vegetation sways).
+        const flags = (o.receiveDecals === false ? 2 : 0) | (o.semantic === 'vegetation' ? 8 : 0);
         const r = this.makeRenderable(o.id, mesh, mats, model, o.castShadow ?? true, flags, fnv1a(o.id));
         const sc = o.transform.scale ?? [1, 1, 1];
         r.lods = World.lodChain(lods, Math.max(sc[0], sc[1], sc[2]));
@@ -352,7 +353,7 @@ export class World {
         const mats = lods[0].materials;
         o.instances.forEach((it, i) => {
           const model = yawMatrix(it[0], it[1], it[2], it[3], it[4]);
-          const r = this.makeRenderable(`${o.id}#${i}`, mesh, mats, model, o.castShadow ?? true, 2, fnv1a(`${o.id}#${i}`));
+          const r = this.makeRenderable(`${o.id}#${i}`, mesh, mats, model, o.castShadow ?? true, 2 | (o.semantic === 'vegetation' ? 8 : 0), fnv1a(`${o.id}#${i}`));
           r.lods = World.lodChain(lods, it[4]);
           rt.renderables.push(r);
         });

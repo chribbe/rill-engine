@@ -38,6 +38,8 @@ struct Frame {
   season: vec4f,         // x snow cover, y melt water, z dormant-season tint, w 1 / snow texture size (m)
   lightGrid: vec4f,      // local-light XZ grid: x origin x, y origin z, z cell size, w inv cell size
   lightGrid2: vec4u,     // x cells x, y cells z, z max lights per cell, w word offset of the cells in lightCells
+  wind: vec4f,           // xy direction (world xz, unit), z strength (0..1), w time (s)
+  wind2: vec4f,          // x gustiness, y gust scale (1/m), z gust speed (m/s), w twig flutter
 };
 
 // debug.y flags
@@ -70,6 +72,50 @@ struct Instance {
 const I_LIGHTMAPPED: u32 = 1u;
 const I_NO_DECALS: u32 = 2u;
 const I_VIEWMODEL: u32 = 4u;  // first-person weapon: depth squeezed in front of the world
+const I_WIND: u32 = 8u;       // vegetation: animated by the wind (all passes, identical positions)
+
+// ------------------------------------------------------------------ wind
+fn windHash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
+
+fn windNoise(p: vec2f) -> f32 {
+  let i = floor(p);
+  let f = fract(p);
+  let u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(windHash(i), windHash(i + vec2f(1.0, 0.0)), u.x), mix(windHash(i + vec2f(0.0, 1.0)), windHash(i + vec2f(1.0, 1.0)), u.x), u.y);
+}
+
+// Procedural tree wind from the vertex's position relative to the tree base (no
+// per-vertex data, so every LOD, the impostors and every pass move identically):
+// a gust field rolling across the map with the wind, trunk bending with height^2
+// around a slow per-tree sway, branches flexing with the distance from the trunk
+// axis, and a fast twig/needle flutter on top.
+fn windOffset(wp: vec3f, base: vec3f, seed: u32, wind: vec4f, wind2: vec4f) -> vec3f {
+  let s = wind.z;
+  if (s <= 0.0) { return vec3f(0.0); }
+  let d = vec3f(wind.x, 0.0, wind.y);
+  let side = vec3f(-wind.y, 0.0, wind.x);
+  let t = wind.w;
+  let rel = wp - base;
+  let h = max(rel.y, 0.0);
+  let r = length(rel.xz);
+  let ph = f32(seed & 1023u) * (6.2831853 / 1024.0);
+  let gp = (base.xz - wind.xy * (wind2.z * t)) * wind2.y;
+  let gust = windNoise(gp) * 0.65 + windNoise(gp * 2.7 + vec2f(13.0, 7.0)) * 0.35;
+  let g = mix(1.0, smoothstep(0.2, 0.85, gust) * 1.7, wind2.x);
+  let f1 = 0.42 + 0.22 * fract(ph * 1.7);
+  let sway = sin(t * f1 * 6.2831853 + ph) * 0.35 + sin(t * f1 * 3.9 + ph * 1.3) * 0.15;
+  let hh = h * h * 0.0016 * s;
+  var off = d * (hh * (g * 0.8 + sway * (0.45 + 0.55 * g))) + side * (hh * 0.3 * sin(t * f1 * 5.1 + ph * 2.0));
+  let flexW = smoothstep(0.25, 2.5, r) * smoothstep(0.4, 2.0, h);
+  let bp = dot(wp, vec3f(0.35, 0.21, 0.29));
+  let br = sin(t * 1.9 + bp + ph) * 0.6 + sin(t * 3.1 + bp * 1.7) * 0.4;
+  off += (d * (0.6 * g + 0.4 * br) + vec3f(0.0, br * 0.35, 0.0)) * (s * flexW * 0.16);
+  let fl = sin(t * 7.3 + dot(wp, vec3f(2.3, 1.7, 2.9))) * sin(t * 4.1 + dot(wp, vec3f(1.1, 2.6, 0.7)));
+  off += (side * 0.6 + vec3f(0.0, 0.8, 0.0)) * (fl * s * wind2.w * flexW * 0.045 * g);
+  // bend rather than shear: points sink a little as they swing away
+  off.y -= dot(off.xz, off.xz) / max(2.0 * (h + 1.0), 2.0);
+  return off;
+}
 
 fn luminance(c: vec3f) -> f32 { return dot(c, vec3f(0.2126, 0.7152, 0.0722)); }
 

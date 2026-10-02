@@ -3,7 +3,15 @@
 
 struct ShadowView {
   viewProj: mat4x4f,
+  wind: vec4f,     // same as Frame.wind / wind2 (casters move with the lit pass)
+  wind2: vec4f,
 };
+
+fn casterPos(inst: Instance, position: vec3f) -> vec4f {
+  var wp = inst.model * vec4f(position, 1.0);
+  if ((inst.info.y & I_WIND) != 0u) { wp = vec4f(wp.xyz + windOffset(wp.xyz, inst.model[3].xyz, inst.info.z, view.wind, view.wind2), 1.0); }
+  return wp;
+}
 
 struct MaterialParams {
   baseColor: vec4f,
@@ -33,14 +41,14 @@ struct VOut {
 @vertex
 fn vsMain(@location(0) position: vec3f, @builtin(instance_index) ii: u32) -> @builtin(position) vec4f {
   let inst = instances[visibleList[ii] & 0xFFFFFFu];
-  return view.viewProj * (inst.model * vec4f(position, 1.0));
+  return view.viewProj * casterPos(inst, position);
 }
 
 @vertex
 fn vsMasked(@location(0) position: vec3f, @location(3) uv0: vec2f, @builtin(instance_index) ii: u32) -> VOut {
   let inst = instances[visibleList[ii] & 0xFFFFFFu];
   var o: VOut;
-  o.pos = view.viewProj * (inst.model * vec4f(position, 1.0));
+  o.pos = view.viewProj * casterPos(inst, position);
   o.uv = uv0 * material.uvTransform.xy + material.uvTransform.zw;
   return o;
 }
