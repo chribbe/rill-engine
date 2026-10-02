@@ -9,9 +9,9 @@ the plan towards AI tools. The renderer is documented in [ENGINE.md](ENGINE.md).
 and processes assets and bakes lighting; it no longer owns levels.
 
 **Current milestone:** E2 world-building tools. Done: vegetation / rock scatter with a paint brush,
-splines (paths, roads, kerbs, fences, walls, rail track), decal placement / painting, bake export of
-generated geometry, map backups. Next in E2: terrain editing, light / probe placement helpers, bake
-progress. E1 (editor foundation) is complete, see §11.
+splines (paths, roads, kerbs, fences, walls, rail track), decal placement / painting, terrain
+sculpting and ground painting, surface-aware light placement, bake export of generated geometry with
+progress, map backups. E1 (editor foundation) is complete, see §11.
 
 ---
 
@@ -189,7 +189,7 @@ and remembered.
 | Input | Action |
 |---|---|
 | LMB | select (Shift add, Cmd/Ctrl toggle); locked geometry occludes but deselects |
-| B / N / T | paint scatter / draw spline / place decals (§12) |
+| B / N / T / G | paint scatter / draw spline / place decals / sculpt terrain (§12) |
 | RMB drag + WASD / Q E | fly (Shift fast, Alt slow, wheel while held = fly speed) |
 | MMB drag | pan · **wheel** dolly to the point under the cursor · **Alt+LMB** orbit |
 | Double-click / F | frame selection |
@@ -431,6 +431,41 @@ occluder), to `build/bake/<map>/` via `POST /__editor/bake-extra`. The bake
 keyed by entity ID like any other object. Verified with a test bake: two splines
 lightmapped (34 → 36 objects) plus the scatter trees as occluders.
 
+### Terrain sculpting and ground painting
+
+A map's `terrainLayer` entity (one per map, "Terrain edits" under Terrain) holds an
+ordered list of strokes `[op, x, z, radius, strength, value?]` in world XZ:
+`raise` / `lower` (metres per dab), `smooth` / `flatten` (0..1; flatten to a
+target height), `paint` / `unpaint` (the ground material's vertex-colour blend
+layer: lawn → forest floor on the testmap, lawn → worn earth in Hässelby).
+`src/engine/scene/terrainedit.ts` replays them into a height-offset field and a
+blend field (0.5 m cells) over the original terrain; terrain meshes (semantic
+`terrain`) move by the field at every vertex, normals tilt by its gradient
+(unchanged where it is flat), blend weights shift by the paint field. Because
+the fields are functions of world XZ, chunks sharing seam vertices stay
+watertight; the terrain assets and their lightmap UVs are untouched (hide the
+layer to compare with the original; undo restores it exactly). Appended strokes
+update incrementally (only chunks under the new dabs are re-deformed); splines
+re-drape and scatters re-drop on the new ground; lighting is marked stale and the
+bake receives the sculpted chunks in place of the originals.
+
+Editor: **Sculpt** tool (G): Raise / Lower / Smooth / Flatten / Paint ground /
+Unpaint in the tool panel (top right of the view), radius (`[` `]`), strength;
+Shift inverts raise / lower and paint / unpaint; flatten levels to the height
+where the drag starts; one drag = one undo entry. Operation: `modify_terrain {
+op, points | center, radius, strength?, value? }`.
+
+Limits: the deformation is sampled at the existing terrain vertices (the testmap
+terrain has ~2.5 m spacing, Hässelby ~1 m), so features smaller than that don't
+appear; a remeshed heightfield terrain is the next step for fine sculpting.
+
+### Lights and probes
+
+Light templates (Assets › entities) placed on a wall stand 0.4 m off it, on a
+ceiling hang just below it (spots point down), on the ground stand 2.5 m above
+it. A selected point light shows its range, a spot its cone, a reflection probe
+its box.
+
 ### Map backups
 
 Every save copies the previous `map.json` to `backups/maps/<map>/` (local,
@@ -439,13 +474,19 @@ until you save); **Save as…** writes a new map that uses the source's lightmap
 until it is baked itself. Pristine copies of the three maps as migrated:
 `backups/maps/*/original-2026-10-02.json` and git tag `maps-v2-original`.
 
+### Bake flow
+
+**Bake lighting**: saves, exports generated geometry (splines, scatters,
+sculpted terrain), runs Cycles in the background and shows passes done / total
+in the toolbar (7 passes per atlas page), then reloads the lightmaps in place.
+
 ### Remaining E2 / next
 
-1. **Terrain**: heightfield chunks owned by the map (sculpt / smooth / flatten /
-   material paint), replacing the baked terrain GLBs over time.
-2. **Light / probe placement** helpers (range, cone and probe-box handles).
-3. **Bake flow**: progress bar, a preview-quality bake, per-map bake settings,
-   stale-object highlighting.
+1. **Heightfield terrain** (remeshed, map-owned) for sculpting below the current
+   vertex spacing; terrain material layers beyond one blend.
+2. **Probe tools**: drag handles for reflection-probe boxes and the probe volume.
+3. **Bake**: a quick preview-quality preset, per-map bake settings, highlighting
+   objects whose bake is stale.
 4. **Hot reload** of assets / materials / shaders from disk.
 5. Then the AI milestone: MCP server, scope / lock enforcement per call,
    changeset review UI.
@@ -465,5 +506,6 @@ until it is baked itself. Pristine copies of the three maps as migrated:
 | Assets | `src/editor/assets.ts`, `public/assets/registry.json`, `tools/scene/registry.ts` |
 | Dev server | `tools/dev/editor_server.ts` (+ `/__capture` in `vite.config.ts`) |
 | Migration / regression | `tools/scene/migrate.ts`, `tools/regress.mjs` |
-| Scatter / splines | `src/engine/scene/scatter.ts`, `splines.ts`, `public/scatter/*.json`, `public/splines/*.json` |
+| Scatter / splines / terrain | `src/engine/scene/scatter.ts`, `splines.ts`, `terrainedit.ts`, `public/scatter/*.json`, `public/splines/*.json` |
+| Tool options panel | `src/editor/ui/tooloptions.ts` |
 | GLB export (bake extras) | `src/engine/assets/glbwrite.ts`, `src/editor/bridge.ts` |

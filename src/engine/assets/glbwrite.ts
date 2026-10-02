@@ -3,7 +3,7 @@ import type { MeshData } from '../render/geometry';
 /**
  * Minimal GLB writer for generated static geometry (splines): one mesh, one
  * primitive per material (named, so the bake maps them to its materials),
- * POSITION / NORMAL / TEXCOORD_0 / TEXCOORD_1, uint32 indices. Coordinates are
+ * POSITION / NORMAL / TEXCOORD_0 / TEXCOORD_1 / COLOR_0, uint32 indices. Coordinates are
  * engine space (Y up), as the glTF convention expects.
  */
 export function writeGlb(mesh: MeshData): ArrayBuffer {
@@ -19,9 +19,9 @@ export function writeGlb(mesh: MeshData): ArrayBuffer {
     offset += bytes.length + pad;
     return views.length - 1;
   };
-  const accessor = (data: Float32Array | Uint32Array, type: 'VEC2' | 'VEC3' | 'SCALAR', target: number, bounds = false) => {
+  const accessor = (data: Float32Array | Uint32Array, type: 'VEC2' | 'VEC3' | 'VEC4' | 'SCALAR', target: number, bounds = false) => {
     const view = push(data, target);
-    const comps = type === 'VEC3' ? 3 : type === 'VEC2' ? 2 : 1;
+    const comps = type === 'VEC4' ? 4 : type === 'VEC3' ? 3 : type === 'VEC2' ? 2 : 1;
     const acc: Record<string, unknown> = { bufferView: view, componentType: data instanceof Float32Array ? 5126 : 5125, count: data.length / comps, type };
     if (bounds) {
       const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
@@ -40,6 +40,7 @@ export function writeGlb(mesh: MeshData): ArrayBuffer {
     };
     if (p.uv0) attributes.TEXCOORD_0 = accessor(p.uv0, 'VEC2', 34962);
     if (p.uv1) attributes.TEXCOORD_1 = accessor(p.uv1, 'VEC2', 34962);
+    if (p.colors) attributes.COLOR_0 = accessor(p.colors, 'VEC4', 34962);
     materials.push({ name: p.material });
     return { attributes, indices: accessor(p.indices, 'SCALAR', 34963), material: materials.length - 1 };
   });

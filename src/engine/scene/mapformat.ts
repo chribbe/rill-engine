@@ -237,15 +237,38 @@ export interface SplineObject extends MapObjectBase {
   collision?: boolean;
 }
 
-export type Entity = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject | SignObject | GroupObject | ScatterObject | SplineObject;
+/**
+ * Terrain edits: sculpt and ground-material strokes replayed, in order, into a
+ * height-offset field and a blend-weight field that deform the terrain meshes
+ * (semantic 'terrain' by default) at load and while editing. The terrain assets
+ * stay untouched (as do their lightmap UVs); shared seam vertices move together
+ * because the fields are functions of world XZ. One per map; no transform.
+ */
+export interface TerrainLayerObject extends EntityCommon {
+  type: 'terrainLayer';
+  terrain: {
+    /** Semantics of the meshes deformed (default ['terrain']). */
+    targets?: string[];
+    /** Field cell size (m), default 0.5. */
+    cell?: number;
+    /**
+     * [op, x, z, radius, strength, value?] in world XZ. op: 'raise' / 'lower' (strength in m),
+     * 'smooth' / 'flatten' (strength 0..1; flatten value = target height), 'paint' / 'unpaint'
+     * (strength 0..1 towards the material's blend layer: forest floor, worn earth).
+     */
+    strokes: [string, number, number, number, number, number?][];
+  };
+}
+
+export type Entity = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject | SignObject | GroupObject | ScatterObject | SplineObject | TerrainLayerObject;
 export type EntityType = Entity['type'];
 /** Entities with a transform (everything but groups). */
-export type SpatialEntity = Exclude<Entity, GroupObject>;
+export type SpatialEntity = Exclude<Entity, GroupObject | TerrainLayerObject>;
 /** @deprecated name from format v1. */
 export type MapObject = Entity;
 
 export function isSpatial(e: Entity): e is SpatialEntity {
-  return e.type !== 'group';
+  return e.type !== 'group' && e.type !== 'terrainLayer';
 }
 
 export interface LightmapSetDocument {

@@ -1,4 +1,4 @@
-import { isSpatial, type Entity, type Transform } from '../../engine/scene/mapformat';
+import { isSpatial, type Entity, type SpatialEntity, type Transform } from '../../engine/scene/mapformat';
 import { transformMatrix } from '../../engine/scene/world';
 import type { Editor } from '../editor';
 import { editableProperties } from '../commands';
@@ -195,6 +195,18 @@ export class Inspector {
         );
         break;
       }
+      case 'terrainLayer': {
+        const st = e.terrain.strokes;
+        const by: Record<string, number> = {};
+        for (const x of st) by[x[0]] = (by[x[0]] ?? 0) + 1;
+        sec('Terrain edits',
+          row('Strokes', h('span', { class: 'insp-ro small' }, st.length ? Object.entries(by).map(([k, n]) => `${n} ${k}`).join(' · ') : 'none')),
+          row('Affects', textField((e.terrain.targets ?? ['terrain']).join(', '), (v) => set('terrain.targets', v.trim() ? v.split(',').map((x) => x.trim()).filter(Boolean) : null), { placeholder: 'mesh semantics (terrain)' })),
+          row('', h('button', { onclick: () => { ed.tool = 'sculpt'; ed.emit('tool'); } }, 'Sculpt (G)'), h('button', { disabled: !st.length, onclick: () => set('terrain.strokes', []) }, 'Clear all edits')),
+          h('div', { class: 'insp-note' }, 'Sculpt and ground-paint strokes replayed over the original terrain assets; hide this entity to compare with the original. Re-bake lighting after sculpting.'),
+        );
+        break;
+      }
       case 'group': {
         const n = ed.scene.descendants(e.id).length;
         sec('Group', row('Members', h('span', { class: 'insp-ro' }, `${ed.scene.children(e.id).length} children, ${n} descendants`)),
@@ -228,7 +240,7 @@ export class Inspector {
     this.ed.tryExec('set_property', { ids, key, value }, merge ? { merge, label: `Set ${key}` } : {});
   }
 
-  private transformSection(e: Exclude<Entity, { type: 'group' }>, sec: (t: string, ...r: (HTMLElement | null | false)[]) => void, row: (l: string, ...f: (HTMLElement | string)[]) => HTMLElement) {
+  private transformSection(e: SpatialEntity, sec: (t: string, ...r: (HTMLElement | null | false)[]) => void, row: (l: string, ...f: (HTMLElement | string)[]) => HTMLElement) {
     const ed = this.ed;
     const t = e.transform;
     const eul = quatToEuler(t.rotation);

@@ -20,6 +20,8 @@ export interface JobState {
 
 export class BlenderBridge {
   job: JobState | null = null;
+  /** Bake passes done / total (parsed from the bake log). */
+  progress: { done: number; total: number } | null = null;
   private seen = 0;
 
   constructor(readonly ed: Editor) {}
@@ -34,6 +36,7 @@ export class BlenderBridge {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error ?? r.statusText);
     this.seen = 0;
+    this.progress = null;
     this.job = { id: j.id, task, status: 'running', startedAt: Date.now(), log: [], logLength: 0 };
     this.ed.log('job', `[${task}] started (${j.id})`);
     this.ed.emit('status');
@@ -58,7 +61,14 @@ export class BlenderBridge {
       } catch {
         continue;
       }
-      for (const line of j.log) if (line.trim()) this.ed.log('job', line);
+      for (const line of j.log) {
+        if (!line.trim()) continue;
+        this.ed.log('job', line);
+        // Progress: 7 bake passes per atlas page ("[bake] atlas: 2 page(s)", "[bake] page 0 sky: 28.6s").
+        const pages = line.match(/\[bake\] atlas: (\d+) page/);
+        if (pages) this.progress = { done: 0, total: +pages[1] * 7 };
+        if (/\[bake\] page \d+ \w+: [\d.]+s/.test(line) && this.progress) this.progress.done++;
+      }
       this.seen = j.logLength;
       this.job = { ...j, log: [] };
       this.ed.emit('status');
@@ -112,6 +122,11 @@ export class BlenderBridge {
           if (r) instances.push({ asset: rt.scatter!.preset.species[it.species].asset, matrix: Array.from(this.ed.rt.renderer.instances.model(r.slot)) });
         });
       }
+    }
+    // Sculpted terrain chunks replace their original assets in the bake.
+    for (const t of w.deformedTerrain()) {
+      if (!this.ed.scene.effectiveVisible(t.id)) continue;
+      meshes.push({ id: t.id, glb: toBase64(writeGlb({ name: t.id, primitives: t.primitives })), resolution: t.resolution });
     }
     if (!meshes.length && !instances.length) return null;
     const r = await fetch(`/__editor/bake-extra?map=${encodeURIComponent(this.ed.mapName)}`, { method: 'POST', body: JSON.stringify({ meshes, instances }) });

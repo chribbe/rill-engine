@@ -185,3 +185,13 @@ input[type='color'] { width: 30px; height: 22px; padding: 0 2px; }
 .menu-item:hover { background: var(--sel); }
 .insp-sub { display: flex; gap: 6px; align-items: center; margin-top: 6px; padding: 5px 6px; background: #2b2f20; border: 1px solid #4a5130; border-radius: 3px; }
 .insp-sub span { flex: 1; font: 11px ui-monospace, Menlo, monospace; color: #d9e6a6; }
+
+/* Tool options (viewport, top right) */
+.toolopts { position: absolute; right: 8px; top: 8px; width: 230px; background: rgba(28, 31, 35, 0.92); border: 1px solid #3a4048; border-radius: 4px; padding: 6px 8px; z-index: 2; box-shadow: 0 4px 16px #0006; }
+.to-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); font-weight: 600; margin-bottom: 4px; }
+.to-row { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+.to-label { width: 58px; color: var(--dim); flex: none; }
+.to-row select { flex: 1; min-width: 0; }
+.to-modes { display: flex; flex-wrap: wrap; gap: 3px; margin: 2px 0 4px; }
+.to-modes .on, .mini.on { background: var(--sel); border-color: #55708f; }
+.to-note { color: var(--dim); font-size: 10.5px; margin-top: 3px; }

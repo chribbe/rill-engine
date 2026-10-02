@@ -119,6 +119,7 @@ export function buildToolbar(root: HTMLElement, ed: Editor, vp: Viewport, bridge
     scale: btn('Scale', 'Scale (R)', () => setTool('scale')),
     decal: btn('Decal', 'Place decals (T): click a surface, drag to paint a trail; [ ] size. Pick a decal material in Assets > decals', () => { ed.pick.decals = true; setTool('decal'); }),
     spline: btn('Spline', 'Draw paths, roads, kerbs, fences, rail track (N): click points on the ground, Enter / Esc to finish, Backspace removes the last point; drag the points of a selected spline', () => setTool('spline')),
+    sculpt: btn('Sculpt', 'Sculpt / paint the terrain (G): raise, lower, smooth, flatten, ground paint; Shift inverts; [ ] brush size', () => setTool('sculpt')),
     paint: btn('Paint', 'Paint vegetation / rocks (B): drag to paint the selected scatter (or start a new one), Shift erases, [ ] brush size', () => setTool('paint')),
   };
   const setTool = (t: Tool) => { ed.tool = t; ed.emit('tool'); };
@@ -163,7 +164,8 @@ export function buildToolbar(root: HTMLElement, ed: Editor, vp: Viewport, bridge
     const j = bridge.job;
     if (j?.status === 'running') {
       const s = Math.round((Date.now() - j.startedAt) / 1000);
-      bake.textContent = `Baking… ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      const pr = bridge.progress;
+      bake.textContent = `Baking${pr ? ` ${Math.min(pr.done, pr.total)}/${pr.total}` : '…'} ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
       bake.classList.add('busy');
     } else {
       bake.textContent = 'Bake lighting';

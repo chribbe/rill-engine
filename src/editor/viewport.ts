@@ -33,6 +33,7 @@ export class Viewport {
   private painting: { id: string; key: string; last: [number, number] } | null = null;
   private pointDrag: { id: string; index: number; key: string; moved: boolean } | null = null;
   private stamping: { key: string; last: V3 } | null = null;
+  private sculpting: { key: string; last: V3; flatten: number } | null = null;
   mouse: [number, number] = [-1, -1];
   flySpeed = 12;
   info = '';
@@ -167,6 +168,13 @@ export class Viewport {
       this.splineClick(e);
       return;
     }
+    if (this.ed.tool === 'sculpt') {
+      const hit = this.surfaceAt(e.offsetX, e.offsetY);
+      if (!hit) return;
+      this.sculpting = { key: `sculpt:${performance.now()}`, last: hit.point, flatten: hit.point[1] };
+      this.sculptAt(hit.point, e.shiftKey);
+      return;
+    }
     if (this.ed.tool === 'decal') {
       const hit = this.surfaceAt(e.offsetX, e.offsetY);
       if (!hit) return;
@@ -291,6 +299,15 @@ export class Viewport {
     ed.tryExec('modify_spline', { id: st.drawing, insert: { index: cur.spline.points.length, point: p } }, { merge: st.key, label: `Draw ${st.preset}` });
   }
 
+  /** One terrain brush dab (Shift inverts raise / lower and paint / unpaint). */
+  private sculptAt(p: V3, invert: boolean) {
+    const sc = this.ed.sculpt;
+    const inv: Record<string, string> = { raise: 'lower', lower: 'raise', paint: 'unpaint', unpaint: 'paint' };
+    const op = invert ? inv[sc.mode] ?? sc.mode : sc.mode;
+    this.ed.tryExec('modify_terrain', { op, center: [Math.round(p[0] * 100) / 100, Math.round(p[2] * 100) / 100], radius: sc.radius, strength: sc.strength, ...(op === 'flatten' ? { value: Math.round(this.sculpting!.flatten * 1000) / 1000 } : {}) },
+      { merge: this.sculpting!.key, label: `Terrain ${op}` });
+  }
+
   /** One decal on the surface under the cursor (a child of the object it lands on, unless that is locked world geometry). */
   private stampDecal(hit: PickHit) {
     const ed = this.ed, dt = ed.decalTool;
@@ -330,6 +347,7 @@ export class Viewport {
     this.painting = null;
     this.pointDrag = null;
     this.stamping = null;
+    this.sculpting = null;
     if (this.gizmo.dragging) this.endGizmo();
   }
 
@@ -366,6 +384,15 @@ export class Viewport {
     if (this.painting) {
       if (!(e.buttons & 1)) this.painting = null;
       else this.movePaint(e);
+      return;
+    }
+    if (this.sculpting) {
+      if (!(e.buttons & 1)) { this.sculpting = null; this.ed.history.seal(); return; }
+      const hit = this.surfaceAt(x, y);
+      if (hit && Math.hypot(hit.point[0] - this.sculpting.last[0], hit.point[2] - this.sculpting.last[2]) >= this.ed.sculpt.radius * 0.25) {
+        this.sculpting.last = hit.point;
+        this.sculptAt(hit.point, e.shiftKey);
+      }
       return;
     }
     if (this.stamping) {
@@ -426,8 +453,13 @@ export class Viewport {
       this.ed.history.seal();
       return;
     }
+    if (this.sculpting) {
+      this.sculpting = null;
+      this.ed.history.seal();
+      return;
+    }
     if (e.button !== 0 || !d || d.moved || this.ed.mode !== 'edit') return;
-    if (this.ed.tool === 'paint' || this.ed.tool === 'spline' || this.ed.tool === 'decal') return;
+    if (this.ed.tool === 'paint' || this.ed.tool === 'spline' || this.ed.tool === 'decal' || this.ed.tool === 'sculpt') return;
     if (this.ed.placing) {
       this.placeAt(this.ed.placing, e.offsetX, e.offsetY);
       if (!e.shiftKey) {
@@ -505,6 +537,7 @@ export class Viewport {
       case 'KeyW': ed.tool = 'translate'; ed.emit('tool'); break;
       case 'KeyE': ed.tool = 'rotate'; ed.emit('tool'); break;
       case 'KeyR': ed.tool = 'scale'; ed.emit('tool'); break;
+      case 'KeyG': ed.tool = 'sculpt'; ed.emit('tool'); this.showHint(`Sculpt ${ed.sculpt.mode}: drag on the terrain · Shift inverts · [ ] size`, 3000); break;
       case 'KeyT': ed.tool = 'decal'; ed.pick.decals = true; ed.emit('tool'); this.showHint(`Decal ${ed.decalTool.material}: click a surface · drag to paint · [ ] size`, 3000); break;
       case 'KeyN': ed.tool = 'spline'; ed.emit('tool'); this.showHint(`Spline ${ed.splineTool.preset}: click points on the ground · Enter / Esc finishes`, 3000); break;
       case 'Enter': if (ed.tool === 'spline') { this.finishSpline(); this.showHint('Spline finished'); } break;
@@ -548,6 +581,9 @@ export class Viewport {
         if (ed.tool === 'paint') {
           ed.brush.radius = Math.round(Math.max(0.5, Math.min(80, ed.brush.radius * (up ? 1.25 : 0.8))) * 10) / 10;
           this.showHint(`Brush radius ${ed.brush.radius} m`);
+        } else if (ed.tool === 'sculpt') {
+          ed.sculpt.radius = Math.round(Math.max(0.5, Math.min(60, ed.sculpt.radius * (up ? 1.25 : 0.8))) * 10) / 10;
+          this.showHint(`Sculpt radius ${ed.sculpt.radius} m`);
         } else if (ed.tool === 'decal') {
           ed.decalTool.size = Math.round(Math.max(0.1, Math.min(20, ed.decalTool.size * (up ? 1.25 : 0.8))) * 100) / 100;
           this.showHint(`Decal size ${ed.decalTool.size} m`);
@@ -622,6 +658,13 @@ export class Viewport {
     const tpl = ENTITY_TEMPLATES[asset];
     if (tpl) {
       const ent = tpl(pos, ed);
+      // Lights on walls stand off the wall; on ceilings hang just below (spots point down).
+      if (ent.type === 'light' && hit && 'transform' in ent && ent.transform) {
+        const n = hit.normal;
+        if (Math.abs(n[1]) < 0.7) ent.transform.position = [hit.point[0] + n[0] * 0.4, hit.point[1] + n[1] * 0.4, hit.point[2] + n[2] * 0.4];
+        else if (n[1] < -0.7) ent.transform.position = [hit.point[0], hit.point[1] - 0.15, hit.point[2]];
+        ent.transform.position = ent.transform.position.map((v) => Math.round(v * 1000) / 1000) as V3;
+      }
       const r = ed.tryExec<{ id: string }>('create_entity', { entity: ent });
       if (r) ed.select(r.id);
       return;
@@ -634,7 +677,7 @@ export class Viewport {
 
   gizmoVisible() {
     const ed = this.ed;
-    if (ed.mode !== 'edit' || ed.tool === 'select' || ed.tool === 'paint' || ed.tool === 'spline' || ed.tool === 'decal' || !ed.selection.length) return false;
+    if (ed.mode !== 'edit' || ed.tool === 'select' || ed.tool === 'paint' || ed.tool === 'spline' || ed.tool === 'decal' || ed.tool === 'sculpt' || !ed.selection.length) return false;
     return ed.selectionRoots.some((id) => !ed.scene.effectiveLocked(id));
   }
 
@@ -793,6 +836,21 @@ export class Viewport {
         g.lineWidth = s ? 2 : 1;
         g.strokeStyle = s ? '#ff8a1f' : 'rgba(0,0,0,0.7)';
         g.stroke();
+        if (e.light.kind === 'point' && sel.has(e.id)) {
+          // Range: three great circles.
+          const r = e.light.range;
+          g.beginPath();
+          for (let a = 0; a < 3; a++) {
+            for (let i = 0; i < 48; i++) {
+              const t0 = (i / 48) * Math.PI * 2, t1 = ((i + 1) / 48) * Math.PI * 2;
+              const pt = (t: number): V3 => a === 0 ? [p[0] + Math.cos(t) * r, p[1], p[2] + Math.sin(t) * r] : a === 1 ? [p[0] + Math.cos(t) * r, p[1] + Math.sin(t) * r, p[2]] : [p[0], p[1] + Math.cos(t) * r, p[2] + Math.sin(t) * r];
+              line(pt(t0), pt(t1));
+            }
+          }
+          g.strokeStyle = 'rgba(255,200,90,0.45)';
+          g.lineWidth = 1;
+          g.stroke();
+        }
         if (e.light.kind === 'spot' && s) {
           // Cone: axis -Y in light space.
           const m = transformMatrix({ position: p, rotation: e.transform.rotation });
@@ -949,16 +1007,19 @@ export class Viewport {
       }
     }
     // Paint brush on the ground.
-    if (ed.tool === 'paint' && this.mouse[0] >= 0) {
+    if ((ed.tool === 'paint' || ed.tool === 'sculpt') && this.mouse[0] >= 0) {
       const hit = this.surfaceAt(this.mouse[0], this.mouse[1]);
       if (hit) {
-        const erase = ed.brush.erase !== (this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'));
-        const r = ed.brush.radius, coll = ed.rt.world.collision;
+        const shift = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
+        const sm = ed.sculpt.mode;
+        const erase = ed.tool === 'paint' ? ed.brush.erase !== shift : (sm === 'lower' || sm === 'unpaint') !== shift && sm !== 'smooth' && sm !== 'flatten';
+        const r = ed.tool === 'paint' ? ed.brush.radius : ed.sculpt.radius, coll = ed.rt.world.collision;
         g.beginPath();
         for (let i = 0; i <= 48; i++) {
           const a = (i / 48) * Math.PI * 2;
           const x = hit.point[0] + Math.cos(a) * r, z = hit.point[2] + Math.sin(a) * r;
-          const gh = coll.groundHit(x, hit.point[1] + 30, z, 60);
+          // Ground near the cursor's height (not roofs above it).
+          const gh = coll.groundHit(x, hit.point[1] + 2, z, 8);
           const q = proj([x, (gh?.height ?? hit.point[1]) + 0.05, z]);
           if (!q) continue;
           if (i === 0) g.moveTo(q[0], q[1]);
@@ -999,6 +1060,7 @@ export class Viewport {
           : p?.type === 'spline' ? `SPLINE: click to extend ${p.name ?? p.id} · drag its points · Del removes a selected point · Esc deselects to draw a new one`
           : `SPLINE ${st.preset}: click on the ground to start`);
       }
+      if (ed.tool === 'sculpt') lines.push(`SCULPT ${ed.sculpt.mode} · radius ${ed.sculpt.radius} m ([ ]) · strength ${ed.sculpt.strength} · Shift inverts`);
       if (ed.tool === 'decal') lines.push(`DECAL ${ed.decalTool.material}: click a surface · drag to paint (every ${ed.decalTool.spacing} m) · size ${ed.decalTool.size} m ([ ])`);
       if (ed.tool === 'paint') {
         const t = this.paintTarget();

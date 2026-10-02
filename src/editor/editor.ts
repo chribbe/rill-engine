@@ -14,7 +14,7 @@ import type { V3 } from './xform';
  * `exec`).
  */
 
-export type Tool = 'select' | 'translate' | 'rotate' | 'scale' | 'paint' | 'spline' | 'decal';
+export type Tool = 'select' | 'translate' | 'rotate' | 'scale' | 'paint' | 'spline' | 'decal' | 'sculpt';
 
 export interface MaterialInfo {
   name: string;
@@ -58,6 +58,8 @@ export class Editor {
   subSelection: string | null = null;
   scatterPresets: { name: string; title: string; description?: string; density: number; species: number }[] = [];
   splinePresets: { name: string; title: string; description?: string }[] = [];
+  /** Sculpt tool: operation, brush radius (m), strength per dab. */
+  sculpt = { mode: 'raise' as 'raise' | 'lower' | 'smooth' | 'flatten' | 'paint' | 'unpaint', radius: 6, strength: 0.15 };
   /** Decal tool: material, size (m), random roll / size jitter, spacing when dragging (m). */
   decalTool = { material: 'decal_stain', size: 1.5, jitter: 0.3, randomRoll: true, spacing: 1.2 };
   /** Spline tool: preset for new splines; the spline being drawn (clicks append points). */

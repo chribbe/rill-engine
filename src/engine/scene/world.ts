@@ -12,7 +12,9 @@ import { CollisionWorld, Surface } from './collision';
 import type { DecalObject, Entity, LightObject, MapDocument, MarkerObject, MeshObject, ReflectionProbeObject, ScatterObject, SignObject, Transform } from './mapformat';
 import { evaluateScatter, type ScatterInstance, type ScatterPreset } from './scatter';
 import { buildSpline, type SplineBuild, type SplinePreset } from './splines';
-import type { SplineObject } from './mapformat';
+import type { SplineObject, TerrainLayerObject } from './mapformat';
+import { TerrainFields, deformPrimitive } from './terrainedit';
+import type { MeshData, PrimitiveData } from '../render/geometry';
 import { SceneStore, type SceneChange } from './scene';
 import { buildSigns } from '../render/signs';
 
@@ -38,6 +40,8 @@ export interface RuntimeObject {
   lods?: Lods;
   /** Scatter entities: preset, species models and the evaluated instances (renderables[i] = instances[i]). */
   scatter?: { preset: ScatterPreset; species: Lods[]; instances: ScatterInstance[]; ms: number; groundRev: number };
+  /** Terrain chunks under a terrain layer: original data, original mesh, current deformed primitives (null = original). */
+  terrain?: { base: MeshData; orig: GpuMesh; deformed: PrimitiveData[] | null };
   /** Spline entities: preset, repeated-part models, the last build and its uploaded mesh. */
   spline?: { preset: SplinePreset; assets: Map<string, Lods>; build: SplineBuild | null; mesh: GpuMesh | null; version: number; ms: number };
 }
@@ -206,6 +210,7 @@ export class World {
     await this.rebuildDecals();
     this.rebuildLights();
     this.rebuildReflectionProbes();
+    if (this.doc.entities.some((e) => e.type === 'terrainLayer')) await this.applyTerrain();
     this.ensureCollision();
     // Splines drape on the loaded ground; then the collision includes them for scatters.
     const splines = [...this.objects.values()].filter((r) => r.spline);
@@ -227,6 +232,8 @@ export class World {
   /** Replaces the document and rebuilds the world in place (editor load / revert). */
   async reload(doc: MapDocument) {
     for (const id of [...this.objects.keys()]) this.removeRuntime(id);
+    this.terrainFields = null;
+    this.terrainBase = null;
     this.compactRenderables();
     this.dirty.clear();
     this.dirtyKinds.clear();
@@ -290,6 +297,7 @@ export class World {
     this.compactRenderables();
     this.maybeReground();
     const k = this.dirtyKinds;
+    if (k.has('terrainLayer')) void this.applyTerrain();
     if (k.has('light')) this.rebuildLights();
     if (k.has('reflectionProbe')) this.rebuildReflectionProbes();
     if (k.has('decal')) void this.rebuildDecals();
@@ -347,6 +355,7 @@ export class World {
       this.removed.add(r);
       this.renderer.instances.free(r.slot);
     }
+    if (rt.terrain?.deformed && rt.renderables[0] && rt.renderables[0].mesh !== rt.terrain.orig) this.renderer.arena.free(rt.renderables[0].mesh);
     if (rt.spline?.mesh) {
       this.renderer.arena.free(rt.spline.mesh);
       rt.spline.mesh = null;
@@ -590,6 +599,121 @@ export class World {
     const rt = this.objects.get(id);
     if (!rt?.scatter) return [];
     return rt.scatter.instances.map((i) => ({ key: i.key, asset: rt.scatter!.preset.species[i.species].asset, position: i.position, yawDeg: i.yawDeg, scale: i.scale }));
+  }
+
+  // ------------------------------------------------------------------ terrain edits
+
+  private terrainFields: TerrainFields | null = null;
+  /** Collision of the original (undeformed) terrain: y0 for smooth / flatten. */
+  private terrainBase: CollisionWorld | null = null;
+  private terrainBusy: Promise<void> | null = null;
+  private terrainAgain = false;
+  /** Bumped whenever terrain geometry changed (editor caches, splines). */
+  terrainRev = 0;
+
+  /** Applies the map's terrain layer to the terrain meshes (incremental for appended strokes; coalesced). */
+  async applyTerrain(): Promise<void> {
+    if (this.terrainBusy) {
+      this.terrainAgain = true;
+      return this.terrainBusy;
+    }
+    this.terrainBusy = (async () => {
+      do {
+        this.terrainAgain = false;
+        await this.applyTerrainOnce();
+      } while (this.terrainAgain);
+    })();
+    try { await this.terrainBusy; } finally { this.terrainBusy = null; }
+  }
+
+  private async applyTerrainOnce() {
+    const layer = this.doc.entities.find((e): e is TerrainLayerObject => e.type === 'terrainLayer');
+    const active = layer && this.scene.effectiveVisible(layer.id) ? layer : undefined;
+    const targets = new Set(active?.terrain.targets ?? layer?.terrain.targets ?? ['terrain']);
+    const chunks = [...this.objects.values()].filter((rt) => rt.doc.type === 'mesh' && targets.has(rt.doc.semantic ?? '') && rt.renderables[0] && !rt.doc.transform.rotation);
+    if (!chunks.length) return;
+    const strokes = active?.terrain.strokes ?? [];
+    const cell = active?.terrain.cell ?? 0.5;
+    let f = this.terrainFields;
+    const prefix = !!f && f.cell === cell && f.applied.length <= strokes.length && f.applied.every((st, i) => st === strokes[i] || JSON.stringify(st) === JSON.stringify(strokes[i]));
+    let region: { x0: number; z0: number; x1: number; z1: number } | null;
+    if (!f || !prefix) {
+      // Recompute from scratch (undo, edits in the middle, first application); restore what the old fields touched.
+      const prev = f?.touched ?? null;
+      for (const rt of chunks) if (!rt.terrain) rt.terrain = { base: await this.terrainData(rt), orig: rt.renderables[0].mesh, deformed: null };
+      if (!this.terrainBase) {
+        this.terrainBase = new CollisionWorld();
+        for (const rt of chunks) {
+          const m = transformMatrix((rt.doc as MeshObject).transform);
+          for (const p of rt.terrain!.orig.primitives) this.terrainBase.addMesh(p.positions, p.indices, m);
+        }
+      }
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (const rt of chunks) {
+        const r = rt.renderables[0];
+        x0 = Math.min(x0, r.worldMin[0]); z0 = Math.min(z0, r.worldMin[2]); x1 = Math.max(x1, r.worldMax[0]); z1 = Math.max(z1, r.worldMax[2]);
+      }
+      const base = this.terrainBase;
+      f = new TerrainFields(x0 - 2, z0 - 2, x1 + 2, z1 + 2, cell, (x, z) => base.groundHit(x, 1e4, z, 2e4)?.height ?? 0);
+      region = f.apply(strokes);
+      if (prev) region = region ? { x0: Math.min(region.x0, prev.x0), z0: Math.min(region.z0, prev.z0), x1: Math.max(region.x1, prev.x1), z1: Math.max(region.z1, prev.z1) } : prev;
+      this.terrainFields = f;
+    } else {
+      region = f!.apply(strokes.slice(f!.applied.length));
+    }
+    if (!region) return;
+    let changed = false;
+    for (const rt of chunks) {
+      const r = rt.renderables[0];
+      if (r.worldMax[0] < region.x0 - 1 || r.worldMin[0] > region.x1 + 1 || r.worldMax[2] < region.z0 - 1 || r.worldMin[2] > region.z1 + 1) continue;
+      if (!rt.terrain) rt.terrain = { base: await this.terrainData(rt), orig: r.mesh, deformed: null };
+      const T = rt.terrain;
+      const t = (rt.doc as MeshObject).transform.position;
+      const prims = T.base.primitives.map((p) => deformPrimitive(p, f!, t[0], t[2]));
+      if (this.objects.get(rt.doc.id) !== rt) continue;
+      if (r.mesh !== T.orig) this.renderer.arena.free(r.mesh);
+      if (prims.every((p) => !p)) {
+        r.mesh = T.orig;
+        T.deformed = null;
+      } else {
+        const data: MeshData = { name: rt.doc.id, primitives: prims.map((p, i) => p ?? T.base.primitives[i]) };
+        r.mesh = this.renderer.arena.upload(data);
+        T.deformed = data.primitives;
+      }
+      transformAabb(transformMatrix((rt.doc as MeshObject).transform), r.mesh.aabb.min, r.mesh.aabb.max, r.worldMin, r.worldMax);
+      changed = true;
+      if ((rt.doc as MeshObject).lightmap) this.lightingStale = true;
+    }
+    if (!changed) return;
+    this.terrainRev++;
+    this.collisionDirty = true;
+    // Splines drape on the new ground (scatters re-drop when the collision is rebuilt).
+    this.ensureCollision(true);
+    for (const rt of this.objects.values()) if (rt.spline) void this.populateSpline(rt);
+  }
+
+  /** CPU copy of a terrain chunk's mesh data (all attributes, for re-deforming). */
+  private async terrainData(rt: RuntimeObject): Promise<MeshData> {
+    const ref = (rt.doc as MeshObject).asset;
+    const data = (await loadGlb('/' + ref.replace(/^\//, ''))).mesh;
+    for (const p of data.primitives) p.material = slotName(p.material);
+    return data;
+  }
+
+  /** Deformed terrain chunks (world-space primitives) for the bake export. */
+  deformedTerrain(): { id: string; primitives: PrimitiveData[]; resolution: [number, number] | null }[] {
+    const out: { id: string; primitives: PrimitiveData[]; resolution: [number, number] | null }[] = [];
+    for (const [id, rt] of this.objects) {
+      if (!rt.terrain?.deformed || rt.doc.type !== 'mesh') continue;
+      const t = rt.doc.transform.position;
+      const prims = rt.terrain.deformed.map((p) => {
+        const pos = new Float32Array(p.positions);
+        for (let i = 0; i < pos.length; i += 3) { pos[i] += t[0]; pos[i + 1] += t[1]; pos[i + 2] += t[2]; }
+        return { ...p, positions: pos };
+      });
+      out.push({ id, primitives: prims, resolution: rt.doc.lightmap?.resolution ?? null });
+    }
+    return out;
   }
 
   // ------------------------------------------------------------------ splines
@@ -864,6 +988,11 @@ export class World {
           this.applyLightmapTo(d.id, r);
           this.renderer.instances.setProbes(r.slot, this.renderer.probeBits(r.worldMin, r.worldMax));
           if (d.collision ?? d.static ?? true) this.collisionDirty = true;
+          // A (re-)created terrain chunk under a terrain layer: re-apply the edits.
+          if (!this.building && this.terrainFields && d.semantic === 'terrain') {
+            this.terrainFields = null;
+            void this.applyTerrain();
+          }
         } else if (d.type === 'instances') {
           d.instances.forEach((it, i) => {
             const model = yawMatrix(it[0], it[1], it[2], it[3], it[4]);

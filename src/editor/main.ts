@@ -10,6 +10,7 @@ import { Outliner } from './ui/outliner';
 import { Inspector } from './ui/inspector';
 import { AssetsPanel, ConsolePanel, DebugPanel, EnvironmentPanel, MaterialsPanel } from './ui/panels';
 import { h } from './ui/dom';
+import { ToolOptions } from './ui/tooloptions';
 
 /**
  * Editor entry (index.html): the game runtime with the editor on top. The
@@ -27,6 +28,7 @@ async function main() {
   const assets = await AssetRegistry.load();
   const ed = new Editor(rt, assets);
   const vp = new Viewport(ed, slots.view, canvas);
+  slots.view.append(new ToolOptions(ed).el);
   const bridge = new BlenderBridge(ed);
   const tools = new EditorTools(ed, bridge);
 

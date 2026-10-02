@@ -196,7 +196,7 @@ const count = (n: number) => `${n} entit${n === 1 ? 'y' : 'ies'}`;
 const IDS: ParamSpec = { type: 'string[]', description: 'Entity IDs (descendants follow).' };
 const PIVOT: ParamSpec = { type: 'any', optional: true, description: "'median' (default: centre of the selection), 'individual' (each about its own pivot) or a world point [x, y, z]." };
 
-const ENTITY_TYPES = ['mesh', 'instances', 'light', 'decal', 'marker', 'probeVolume', 'reflectionProbe', 'sign', 'group', 'scatter', 'spline'];
+const ENTITY_TYPES = ['mesh', 'instances', 'light', 'decal', 'marker', 'probeVolume', 'reflectionProbe', 'sign', 'group', 'scatter', 'spline', 'terrainLayer'];
 
 /** Minimal structural validation of a complete entity. */
 export function validateEntity(e: Entity): string | null {
@@ -215,6 +215,7 @@ export function validateEntity(e: Entity): string | null {
     case 'probeVolume': if (!e.volume?.size || !e.volume?.spacing) return 'volume.size / spacing required'; break;
     case 'scatter': if (typeof e.scatter?.preset !== 'string' || typeof e.scatter.seed !== 'number') return 'scatter.preset and scatter.seed required'; break;
     case 'spline': if (!Array.isArray(e.spline?.points) || typeof e.spline.preset !== 'string') return 'spline.points and spline.preset required'; break;
+    case 'terrainLayer': if (!Array.isArray(e.terrain?.strokes)) return 'terrain.strokes required'; break;
   }
   return null;
 }
@@ -394,6 +395,7 @@ const PROPERTIES: Record<string, string[]> = {
   reflectionProbe: ['probe.boxMin', 'probe.boxMax', 'probe.blend', 'probe.priority'],
   probeVolume: ['volume.size', 'volume.spacing'],
   scatter: ['scatter.preset', 'scatter.density', 'scatter.seed', 'scatter.area', 'scatter.brush', 'scatter.exclude', 'scatter.surfaces', 'scatter.slopeMax'],
+  terrainLayer: ['terrain.strokes', 'terrain.targets', 'terrain.cell'],
   spline: ['spline.points', 'spline.closed', 'spline.preset', 'spline.width', 'spline.drape', 'spline.texelDensity', 'castShadow', 'collision', 'lightmap'],
 };
 
@@ -772,6 +774,42 @@ op<{ id: string; points?: number[][]; insert?: { index: number; point: number[] 
     if (p.preset) sp.preset = p.preset;
     ps.set({ ...e, spline: sp });
     return { patches: ps.patches(), label: p.move ? 'Move spline point' : p.insert ? 'Add spline point' : p.remove !== undefined ? 'Remove spline point' : 'Edit spline' };
+  },
+});
+
+// ------------------------------------------------------------------ terrain
+
+const TERRAIN_OPS = ['raise', 'lower', 'smooth', 'flatten', 'paint', 'unpaint'];
+
+op<{ op: string; points?: number[][]; center?: number[]; radius: number; strength?: number; value?: number }, { id: string; strokes: number }>({
+  name: 'modify_terrain',
+  description: "Sculpts / paints the terrain with brush dabs at world points [[x, z], ...] (or one center): op raise / lower (strength = metres per dab, default 0.3), smooth / flatten (strength 0..1; flatten needs value = target height), paint / unpaint (ground blend layer: forest floor / worn earth; strength 0..1). Edits live in the map's terrain layer (created on first use); the terrain assets are untouched.",
+  params: {
+    op: { type: 'string', enum: TERRAIN_OPS, description: 'Brush operation.' },
+    points: { type: 'any', optional: true, description: 'Dab positions [[x, z] | [x, y, z], ...].' },
+    center: { type: 'any', optional: true, description: 'One dab position.' },
+    radius: { type: 'number', description: 'Brush radius (m).' },
+    strength: { type: 'number', optional: true, description: 'Per dab (see op).' },
+    value: { type: 'number', optional: true, description: 'Flatten target height (m).' },
+  },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const pts = (p.points ?? (p.center ? [p.center] : [])).map((v) => [v[0], v[v.length === 3 ? 2 : 1]]);
+    if (!pts.length) throw new OpError('modify_terrain: points or center required');
+    if (p.op === 'flatten' && typeof p.value !== 'number') throw new OpError('modify_terrain: flatten needs value (target height)');
+    const s = p.strength ?? (p.op === 'raise' || p.op === 'lower' ? 0.3 : 0.5);
+    let layer = ctx.scene.entities.find((e) => e.type === 'terrainLayer');
+    if (!layer) {
+      layer = { id: ctx.scene.has('terrain_edits') ? ctx.scene.newId('terrain_edits') : 'terrain_edits', name: 'Terrain edits', type: 'terrainLayer', ...(ctx.scene.has('grp_terrain') ? { parent: 'grp_terrain' } : {}), terrain: { strokes: [] } };
+    }
+    if (layer.type !== 'terrainLayer') throw new OpError('modify_terrain: no terrain layer');
+    const add = pts.map(([x, z]) => {
+      const st: [string, number, number, number, number, number?] = [p.op, round3(x), round3(z), round3(Math.max(0.25, p.radius)), round3(s)];
+      if (p.op === 'flatten') st.push(round3(p.value!));
+      return st;
+    });
+    ps.set({ ...layer, terrain: { ...layer.terrain, strokes: [...layer.terrain.strokes, ...add] } });
+    return { patches: ps.patches(), result: { id: layer.id, strokes: layer.terrain.strokes.length + add.length }, label: `Terrain ${p.op}` };
   },
 });
 

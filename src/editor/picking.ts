@@ -1,5 +1,5 @@
 import { mat4, vec3 } from 'wgpu-matrix';
-import { isSpatial, type Entity } from '../engine/scene/mapformat';
+import { isSpatial, type Entity, type SpatialEntity } from '../engine/scene/mapformat';
 import { transformMatrix } from '../engine/scene/world';
 import type { Camera } from '../engine/scene/camera';
 import type { Editor } from './editor';
@@ -101,7 +101,7 @@ export class Picker {
     }
   }
 
-  private helperHit(ray: Ray, e: Exclude<Entity, { type: 'group' }>): number {
+  private helperHit(ray: Ray, e: SpatialEntity): number {
     const p = e.transform.position;
     if (e.type === 'decal' || e.type === 'sign') {
       const size: V3 = e.type === 'decal' ? e.decal.size : [e.sign.size[0], e.sign.size[1], Math.max(0.05, e.sign.depth ?? 0.05)];
