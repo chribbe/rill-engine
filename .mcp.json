@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "rill-editor": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["tools/mcp/rill-mcp.ts"],
+      "env": {}
+    }
+  }
+}

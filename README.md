@@ -31,6 +31,15 @@ or materials from the bottom tabs into the view. **F5** plays the edited world i
 person (click to capture the mouse, Esc to release, F5 to return). **Bake lighting**
 runs Blender/Cycles in the background and reloads the lightmaps. Full table: EDITOR.md §5.
 
+## Working with Claude in the editor
+
+With `npm run dev` running and the editor open, start Claude Code in this repository and
+approve the `rill-editor` MCP server (`.mcp.json`). Claude then works through the editor's
+own operations: it can inspect the map, place assets, scatter vegetation, draw paths,
+sculpt, look at the result (`capture_view`) and iterate. Its edits arrive as a changeset in
+the **AI** tab for you to Accept or Revert. The AI tab also sets what it may touch (whole
+map or the selection; protect buildings, streets, terrain, weather). Details: EDITOR.md §9.
+
 ## Game view controls (play.html / play mode)
 
 | Key | Action |

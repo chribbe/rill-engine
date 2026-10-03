@@ -11,7 +11,7 @@ import { quatToEuler, type V3 } from './xform';
  * uses the same operations. `window.rill.editor.tools` in the running editor.
  */
 
-interface ToolDef {
+export interface ToolDef {
   name: string;
   description: string;
   params: Record<string, ParamSpec>;
@@ -19,8 +19,14 @@ interface ToolDef {
 }
 
 export interface CaptureOptions {
-  /** 'editor' (current view, default), 'spawn', a viewpoint marker ID, or an explicit camera. */
-  camera?: string | { position: V3; yaw?: number; pitch?: number; fov?: number };
+  /**
+   * 'editor' (current view, default), 'spawn', a viewpoint marker ID, an explicit camera
+   * { position, yaw, pitch, fov }, or a framing { target: [x, y, z] | ids: [...], yaw?, pitch?,
+   * distance? } that looks at a point / entities from a direction (default yaw 30, pitch -30).
+   */
+  camera?: string | { position?: V3; yaw?: number; pitch?: number; fov?: number; target?: V3; ids?: string[]; distance?: number };
+  /** 'png' (default) or 'jpeg' (much smaller, for agents). */
+  format?: 'png' | 'jpeg';
   width?: number;
   height?: number;
   /** Also write screenshots/<save>.png (dev server). */
@@ -53,7 +59,7 @@ export class EditorTools {
     });
     T({ name: 'search_assets', description: 'Searches the asset registry (all words must match id / name / category / tags).', params: { query: S('Search words.', 'string', false), category: S('Category.'), includeUnique: S('Include map-specific pieces.', 'boolean'), limit: S('Max results.', 'number') }, run: (p) => ed.assets.search(p.query, { category: p.category, includeUnique: p.includeUnique, limit: p.limit ?? 50 }).map((a) => ({ id: a.id, name: a.name, category: a.category, semantic: a.semantic, tags: a.tags, bounds: a.bounds, prefabChildren: a.children?.length ?? 0 })) });
     T({ name: 'list_materials', description: 'Material library (optionally filtered by a substring).', params: { query: S('Substring.') }, run: (p) => ed.materials.filter((m) => !p.query || m.name.includes(p.query)).map((m) => ({ name: m.name, inherits: m.inherits, shader: m.shader, alphaMode: m.alphaMode, decal: m.decal })) });
-    T({ name: 'capture_view', description: "Renders the scene and returns a PNG (data URL) with the camera used. camera: 'editor' | 'spawn' | viewpoint id | { position, yaw, pitch, fov }.", params: { camera: S('Camera.', 'any'), width: S('Pixels (default 1600).', 'number'), height: S('Pixels (default 900).', 'number'), save: S('Also save screenshots/<save>.png.'), overlays: S('Keep selection outline.', 'boolean'), image: S('Return the data URL (default true).', 'boolean') }, run: (p) => this.captureView(p) });
+    T({ name: 'capture_view', description: "Renders the scene (no editor overlays) and returns the image with the camera used. camera: 'editor' | 'spawn' | viewpoint id | { position, yaw, pitch, fov } | { target: [x, y, z] or ids: [...], yaw?, pitch?, distance? } (frames them; yaw 0 = looking north / -Z, positive turns right; pitch negative looks down).", params: { camera: S('Camera.', 'any'), width: S('Pixels (default 1600).', 'number'), height: S('Pixels (default 900).', 'number'), save: S('Also save screenshots/<save>.png.'), overlays: S('Keep selection outline.', 'boolean'), image: S('Return the data URL (default true).', 'boolean'), format: S("'png' (default) or 'jpeg'.") }, run: (p) => this.captureView(p) });
     T({ name: 'get_camera', description: 'Editor camera: position, yaw / pitch (degrees, yaw 0 = north / -Z, positive = clockwise), fov.', params: {}, run: () => this.camera() });
     T({ name: 'set_camera', description: 'Moves the editor camera.', params: { position: S('[x, y, z].', 'vec3', false), yaw: S('Degrees.', 'number'), pitch: S('Degrees.', 'number') }, run: (p) => { const c = ed.rt.camera; c.position[0] = p.position[0]; c.position[1] = p.position[1]; c.position[2] = p.position[2]; if (p.yaw !== undefined) c.yaw = (p.yaw * Math.PI) / 180; if (p.pitch !== undefined) c.pitch = (p.pitch * Math.PI) / 180; return this.camera(); } });
     T({ name: 'begin_transaction', description: 'Groups the following operations into one undo entry (an AI changeset).', params: { label: S('Changeset label.', 'string', false) }, run: (p) => { ed.history.begin(p.label); return { open: p.label }; } });
@@ -68,6 +74,24 @@ export class EditorTools {
     T({ name: 'play', description: "Enters play mode (from: 'camera' or 'spawn').", params: { from: S("'camera' | 'spawn'.") }, run: (p) => { ed.play(p.from === 'spawn' ? 'spawn' : 'camera'); return { mode: ed.mode }; } });
     T({ name: 'stop', description: 'Leaves play mode.', params: {}, run: () => { ed.stop(); return { mode: ed.mode }; } });
     T({ name: 'list_operations', description: 'Editor operations and their parameters.', params: {}, run: () => listOps() });
+    T({
+      name: 'ground_height', description: 'Topmost surface under world points [[x, z], ...]: height and what it is (entity id + semantic: terrain, road, path, building...). Use before placing things.',
+      params: { points: S('[[x, z], ...] (max 500).', 'any', false) },
+      run: (p) => (p.points as number[][]).slice(0, 500).map((v) => {
+        const g = ed.ctx.runtime!.ground(v[0], v[v.length === 3 ? 2 : 1]);
+        return g ? { x: v[0], z: v[v.length === 3 ? 2 : 1], height: Math.round(g.height * 1000) / 1000, id: g.id, semantic: g.semantic } : { x: v[0], z: v[v.length === 3 ? 2 : 1], height: null };
+      }),
+    });
+    T({
+      name: 'describe_area', description: 'What is around a point: entities within radius grouped by semantic (nearest first), the ground cover (share of terrain / road / path / building...), height range. Good first look before editing a place.',
+      params: { center: S('[x, z] or [x, y, z].', 'any', false), radius: S('Metres (default 25).', 'number') },
+      run: (p) => this.describeArea(p.center, p.radius ?? 25),
+    });
+  }
+
+  /** Adds a tool (the AI layer registers its changeset / context tools this way). */
+  register(t: ToolDef) {
+    this.tools.set(t.name, t);
   }
 
   list() {
@@ -162,7 +186,45 @@ export class EditorTools {
     return { total, entities: out };
   }
 
-  private camera() {
+  describeArea(center: number[], radius: number) {
+    const ed = this.ed;
+    const cx = center[0], cz = center[center.length === 3 ? 2 : 1];
+    const near: { e: Entity; d: number }[] = [];
+    for (const e of ed.scene.entities) {
+      if (!isSpatial(e) || e.type === 'marker') continue;
+      const p = ed.pivotOf(e.id) ?? e.transform.position;
+      const d = Math.hypot(p[0] - cx, p[2] - cz);
+      if (d <= radius) near.push({ e, d });
+    }
+    near.sort((a, b) => a.d - b.d);
+    const groups: Record<string, { count: number; nearest: string[] }> = {};
+    for (const { e } of near) {
+      const k = e.semantic ?? e.type;
+      const g = (groups[k] ??= { count: 0, nearest: [] });
+      g.count++;
+      if (g.nearest.length < 6) g.nearest.push(e.id);
+    }
+    // Ground cover from a sample grid inside the circle.
+    const cover: Record<string, number> = {};
+    let n = 0, hmin = Infinity, hmax = -Infinity;
+    const steps = 12;
+    for (let i = 0; i <= steps; i++) for (let k = 0; k <= steps; k++) {
+      const x = cx - radius + (2 * radius * i) / steps, z = cz - radius + (2 * radius * k) / steps;
+      if (Math.hypot(x - cx, z - cz) > radius) continue;
+      const g = ed.ctx.runtime!.ground(x, z);
+      n++;
+      const s = g ? g.semantic ?? 'unknown' : 'nothing';
+      cover[s] = (cover[s] ?? 0) + 1;
+      if (g) { hmin = Math.min(hmin, g.height); hmax = Math.max(hmax, g.height); }
+    }
+    const share = Object.fromEntries(Object.entries(cover).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, `${Math.round((100 * v) / n)}%`]));
+    return {
+      center: [cx, cz], radius, entities: near.length, bySemantic: groups, groundCover: share,
+      height: Number.isFinite(hmin) ? { min: Math.round(hmin * 100) / 100, max: Math.round(hmax * 100) / 100 } : null,
+    };
+  }
+
+  camera() {
     const c = this.ed.rt.camera;
     return { position: Array.from(c.position).map((v) => Math.round(v * 1000) / 1000), yaw: Math.round(((c.yaw * 180) / Math.PI) * 100) / 100, pitch: Math.round(((c.pitch * 180) / Math.PI) * 100) / 100, fov: Math.round(((c.fovY * 180) / Math.PI) * 10) / 10 };
   }
@@ -184,10 +246,33 @@ export class EditorTools {
         cam.position[0] = p[0]; cam.position[1] = p[1] + 1.65; cam.position[2] = p[2];
         cam.yaw = ((m.yaw ?? 0) * Math.PI) / 180; cam.pitch = ((m.pitch ?? 0) * Math.PI) / 180;
       } else if (c && typeof c === 'object') {
-        cam.position[0] = c.position[0]; cam.position[1] = c.position[1]; cam.position[2] = c.position[2];
-        if (c.yaw !== undefined) cam.yaw = (c.yaw * Math.PI) / 180;
-        if (c.pitch !== undefined) cam.pitch = (c.pitch * Math.PI) / 180;
         if (c.fov !== undefined) cam.fovY = (c.fov * Math.PI) / 180;
+        if (c.target || c.ids) {
+          // Frame a point or entities from yaw / pitch at a distance that fits them.
+          let center: V3, radius = 4;
+          if (c.ids?.length) {
+            const min: V3 = [Infinity, Infinity, Infinity], max: V3 = [-Infinity, -Infinity, -Infinity];
+            for (const id of c.ids) {
+              const b = ed.boundsOf(id);
+              if (!b) continue;
+              for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], b.min[k]); max[k] = Math.max(max[k], b.max[k]); }
+            }
+            if (!Number.isFinite(min[0])) throw new Error('capture_view: none of the ids has bounds');
+            center = [0, 1, 2].map((k) => (min[k] + max[k]) / 2) as V3;
+            radius = Math.max(1, Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2]) / 2);
+          } else center = c.target!;
+          const yaw = ((c.yaw ?? 30) * Math.PI) / 180, pitch = ((c.pitch ?? -30) * Math.PI) / 180;
+          const dist = c.distance ?? Math.min(800, (radius / Math.tan(cam.fovY / 2)) * 1.15 + 1);
+          const f = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
+          cam.position[0] = center[0] - f[0] * dist; cam.position[1] = center[1] - f[1] * dist; cam.position[2] = center[2] - f[2] * dist;
+          cam.yaw = yaw;
+          cam.pitch = pitch;
+        } else {
+          if (!c.position) throw new Error('capture_view: camera needs position, target or ids');
+          cam.position[0] = c.position[0]; cam.position[1] = c.position[1]; cam.position[2] = c.position[2];
+          if (c.yaw !== undefined) cam.yaw = (c.yaw * Math.PI) / 180;
+          if (c.pitch !== undefined) cam.pitch = (c.pitch * Math.PI) / 180;
+        }
       }
       if (!o.overlays) {
         ed.suppressHighlight = true;
@@ -200,7 +285,7 @@ export class EditorTools {
       if (o.image !== false) {
         const cv = new OffscreenCanvas(img.width, img.height);
         cv.getContext('2d')!.putImageData(img, 0, 0);
-        const blob = await cv.convertToBlob({ type: 'image/png' });
+        const blob = await cv.convertToBlob(o.format === 'jpeg' ? { type: 'image/jpeg', quality: 0.85 } : { type: 'image/png' });
         image = await new Promise<string>((res) => { const fr = new FileReader(); fr.onload = () => res(fr.result as string); fr.readAsDataURL(blob); });
       }
       return { width: img.width, height: img.height, camera, file, image };

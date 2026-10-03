@@ -26,7 +26,22 @@ export interface OpContext {
   /** Runtime results some operations turn into document data (scatter instances to entities). */
   runtime?: {
     scatterInstances(id: string): { key: string; asset: string; position: [number, number, number]; yawDeg: number; scale: number }[];
+    /** Topmost surface under (x, z): height and the semantic of the entity it belongs to. */
+    ground(x: number, z: number): { height: number; semantic?: string; id?: string } | null;
   };
+}
+
+/** [x, z] or [x, y, z]; 2D points (or onGround) take the ground height under them. */
+function resolvePoint(ctx: OpContext, v: unknown, onGround: boolean | undefined, what: string): V3 {
+  if (!Array.isArray(v) || (v.length !== 2 && v.length !== 3) || !v.every((x) => typeof x === 'number' && Number.isFinite(x))) throw new OpError(`${what}: position must be [x, z] or [x, y, z]`);
+  const x = v[0], z = v[v.length === 3 ? 2 : 1];
+  if (v.length === 3 && !onGround) return [x, v[1], z];
+  const g = ctx.runtime?.ground(x, z);
+  if (!g) {
+    if (v.length === 3) return [x, v[1], z];
+    throw new OpError(`${what}: no ground under [${x}, ${z}]`);
+  }
+  return [x, Math.round(g.height * 1000) / 1000, z];
 }
 
 type ParamType = 'string' | 'number' | 'boolean' | 'string[]' | 'vec3' | 'quat' | 'object' | 'any';
@@ -833,12 +848,12 @@ export function decalRotation(normal: number[], rollDeg = 0): [number, number, n
 }
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
-op<{ material: string; position: V3; normal?: V3; size?: number | number[]; depth?: number; roll?: number; opacity?: number; parent?: string; name?: string }, { id: string }>({
+op<{ material: string; position: number[]; normal?: V3; size?: number | number[]; depth?: number; roll?: number; opacity?: number; parent?: string; name?: string }, { id: string }>({
   name: 'place_decal',
-  description: 'Places a projected decal (material: a decal_* material) on the surface at position with outward normal (default up). size: metres (number = square, or [w, h]); depth: projection depth; roll: degrees about the normal. Returns { id }.',
+  description: 'Places a projected decal (material: a decal_* material) on the surface at position with outward normal (default up). position [x, z] lands on the ground there. size: metres (number = square, or [w, h]); depth: projection depth; roll: degrees about the normal. Returns { id }.',
   params: {
     material: { type: 'string', description: 'Decal material (decal_stain, decal_waterstreak, decal_crack, decal_grime_base, decal_oil, decal_manhole, decal_paint_line...).' },
-    position: { type: 'vec3', description: 'Surface point (world).' },
+    position: { type: 'any', description: 'Surface point (world) [x, y, z], or [x, z] on the ground.' },
     normal: { type: 'vec3', optional: true, description: 'Outward surface normal (default [0, 1, 0]).' },
     size: { type: 'any', optional: true, description: 'Metres: number or [w, h] (default 1.5).' },
     depth: { type: 'number', optional: true, description: 'Projection depth (m, default 0.3).' },
@@ -854,7 +869,7 @@ op<{ material: string; position: V3; normal?: V3; size?: number | number[]; dept
     const id = ctx.scene.newId(p.material);
     ps.set({
       id, name: p.name ?? p.material.replace(/^decal_/, '').replace(/_/g, ' '), type: 'decal', semantic: 'decal', ...(p.parent ? { parent: p.parent } : {}),
-      transform: { position: p.position.map(round3) as V3, rotation: decalRotation(p.normal ?? [0, 1, 0], p.roll ?? 0) },
+      transform: { position: resolvePoint(ctx, p.position, false, 'place_decal').map(round3) as V3, rotation: decalRotation(p.normal ?? [0, 1, 0], p.roll ?? 0) },
       decal: { material: p.material, size: [round3(sz[0]), round3(sz[1] ?? sz[0]), round3(p.depth ?? 0.3)], ...(p.opacity !== undefined && p.opacity !== 1 ? { opacity: p.opacity } : {}) },
     });
     return { patches: ps.patches(), result: { id }, label: `Decal ${p.material}` };
@@ -881,12 +896,13 @@ op<{ name?: string; description?: string; lightmaps?: string | null }>({
   },
 });
 
-op<{ asset: string; position: V3; rotation?: [number, number, number, number]; yaw?: number; scale?: number | V3; parent?: string; name?: string }, { id: string; children: string[] }>({
+op<{ asset: string; position: number[]; onGround?: boolean; rotation?: [number, number, number, number]; yaw?: number; scale?: number | V3; parent?: string; name?: string }, { id: string; children: string[] }>({
   name: 'place_asset',
-  description: 'Places an asset from the registry (id or path) at a world position, with its prefab children (e.g. a streetlight\'s lamp). yaw: degrees about +Y. Returns { id, children }.',
+  description: 'Places an asset from the registry (id or path) at a world position, with its prefab children (e.g. a streetlight\'s lamp). position [x, z] (or onGround) stands it on the ground there. yaw: degrees about +Y (counter-clockwise from above). Returns { id, children }.',
   params: {
     asset: { type: 'string', description: 'Asset ID (registry) or asset path (.glb / .model.json).' },
-    position: { type: 'vec3', description: 'World position of the asset origin.' },
+    position: { type: 'any', description: 'World position of the asset origin: [x, y, z], or [x, z] to stand on the ground.' },
+    onGround: { type: 'boolean', optional: true, description: 'Use the ground height under [x, z] even if y is given.' },
     rotation: { type: 'quat', optional: true, description: 'Quaternion.' },
     yaw: { type: 'number', optional: true, description: 'Degrees about +Y (when no rotation is given).' },
     scale: { type: 'any', optional: true, description: 'Uniform or [x, y, z].' },
@@ -901,7 +917,7 @@ op<{ asset: string; position: V3; rotation?: [number, number, number, number]; y
     if (p.parent && !ctx.scene.has(p.parent)) throw new OpError(`no parent '${p.parent}'`);
     const base = (a?.id ?? path).split('/').pop()!.replace(/\.(glb|model\.json)$/, '').replace(/^builtin:(\w+).*/, '$1');
     const id = ctx.scene.newId(base);
-    const t: Transform = { position: [...p.position] as V3 };
+    const t: Transform = { position: resolvePoint(ctx, p.position, p.onGround, 'place_asset') };
     const rot = p.rotation ?? (p.yaw ? axisAngleQuat([0, 1, 0], p.yaw) : undefined);
     if (rot) t.rotation = rot;
     if (p.scale !== undefined) t.scale = typeof p.scale === 'number' ? [p.scale, p.scale, p.scale] : p.scale;
@@ -927,8 +943,21 @@ op<{ asset: string; position: V3; rotation?: [number, number, number, number]; y
 
 // ------------------------------------------------------------------ history
 
+/** An AI changeset: a transaction made by an agent, reviewed in the editor (Accept / Revert). */
+export interface ChangesetMeta {
+  title: string;
+  prompt?: string;
+  /** Agent's own summary at commit. */
+  summary?: string;
+  status: 'open' | 'pending' | 'accepted' | 'reverted';
+  author: string;
+  started: number;
+}
+
 export interface HistoryEntry {
   label: string;
+  /** Set for AI changesets. */
+  changeset?: ChangesetMeta;
   /** The operations (name + params) that produced the patches, in order. */
   ops: { op: string; params: unknown }[];
   patches: Patch[];
@@ -962,6 +991,12 @@ export class EditorHistory {
   readonly log: { op: string; params: unknown; label: string; time: number; error?: string }[] = [];
   limit = 400;
 
+  /**
+   * Checked before an operation's patches are applied: return an error to refuse
+   * (agent scope rules). Null = allowed. Set by the AI layer for agent calls.
+   */
+  guard: ((op: string, patches: Patch[]) => string | null) | null = null;
+
   constructor(readonly ctx: OpContext) {}
 
   onChange(fn: () => void): () => void {
@@ -980,6 +1015,8 @@ export class EditorHistory {
     try {
       validate(def, params as Record<string, unknown>);
       const r = def.run(this.ctx, params);
+      const refused = this.guard?.(name, r.patches);
+      if (refused) throw new OpError(refused);
       log.label = opts.label ?? r.label ?? name;
       this.log.push(log);
       if (this.log.length > 2000) this.log.splice(0, this.log.length - 2000);
@@ -1052,11 +1089,27 @@ export class EditorHistory {
     return e;
   }
 
-  /** Starts grouping operations into one undo entry. */
-  begin(label: string) {
+  /** Starts grouping operations into one undo entry (optionally an AI changeset). */
+  begin(label: string, changeset?: ChangesetMeta) {
     if (this.tx) throw new OpError(`transaction '${this.tx.label}' already open`);
     this.seal();
-    this.tx = { label, ops: [], patches: [], time: Date.now() };
+    this.tx = { label, ops: [], patches: [], time: Date.now(), ...(changeset ? { changeset } : {}) };
+    this.changed();
+  }
+
+  /** Applies an entry's inverse as a new entry (reverting something that is not on top of the stack). */
+  revertEntry(e: HistoryEntry, label: string) {
+    if (this.tx) throw new OpError('cannot revert inside a transaction');
+    const inverse: Patch[] = [...e.patches].reverse().map((p) => {
+      if (p.kind === 'doc') return { ...p, before: p.after, after: p.before };
+      // Revert to the entry's before state from whatever is there now.
+      return { kind: 'entity', id: p.id, before: this.ctx.scene.get(p.id) ?? null, after: p.before, index: p.index };
+    });
+    const live = inverse.filter((p) => p.kind === 'doc' || p.before !== p.after);
+    if (!live.length) return;
+    this.ctx.scene.apply(live, 'do');
+    this.undoStack.push({ label, ops: [{ op: 'revert', params: { entry: e.label } }], patches: live, time: Date.now() });
+    this.redoStack.length = 0;
     this.changed();
   }
 

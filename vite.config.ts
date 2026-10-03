@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { editorServer } from './tools/dev/editor_server.ts';
+import { aiRelay } from './tools/dev/ai_relay.ts';
 
 /**
  * Dev-only capture endpoint: the page POSTs PNGs to /__capture?name=... and
@@ -44,7 +45,7 @@ function captureEndpoint(): Plugin {
 export default defineConfig({
   // No SPA fallback: missing assets must 404 instead of returning index.html.
   appType: 'mpa',
-  plugins: [captureEndpoint(), editorServer()],
+  plugins: [captureEndpoint(), editorServer(), aiRelay()],
   server: { port: 5173, strictPort: true, host: '127.0.0.1' },
   build: {
     target: 'es2023',

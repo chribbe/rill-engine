@@ -69,7 +69,17 @@ export class Editor {
 
   constructor(readonly rt: Runtime, readonly assets: AssetRegistry) {
     this.scene = rt.world.scene;
-    this.ctx = { scene: this.scene, assets, pivot: (id) => this.pivotOf(id), runtime: { scatterInstances: (id) => rt.world.scatterInstances(id) } };
+    this.ctx = {
+      scene: this.scene, assets, pivot: (id) => this.pivotOf(id),
+      runtime: {
+        scatterInstances: (id) => rt.world.scatterInstances(id),
+        ground: (x, z) => {
+          rt.world.ensureCollision(true);
+          const g = rt.world.collision.groundHit(x, 1e4, z, 2e4);
+          return g ? { height: g.height, id: g.owner, semantic: this.scene.get(g.owner)?.semantic } : null;
+        },
+      },
+    };
     this.history = new EditorHistory(this.ctx);
     this.history.onChange(() => this.emit('history'));
     this.scene.subscribe((c) => {
@@ -101,14 +111,22 @@ export class Editor {
 
   // ------------------------------------------------------------------ operations
 
+  /** Who is editing (log prefix): '' = the human, 'Claude' during agent calls. */
+  actor = '';
+  /** Returns a reason when edits must wait (e.g. an agent changeset is open). */
+  editLock: (() => string | null) | null = null;
+
   /** Runs an editor operation (the single entry point for scene edits). Errors are logged and rethrown. */
   exec<R = unknown>(op: string, params: unknown, opts: { merge?: string; label?: string; quiet?: boolean } = {}): R {
+    const who = this.actor ? `${this.actor}: ` : '';
     try {
+      const lock = this.editLock?.();
+      if (lock) throw new OpError(lock);
       const r = this.history.exec<R>(op, params, opts);
-      if (!opts.quiet && !opts.merge) this.log('op', `${op} ${JSON.stringify(params)}`);
+      if (!opts.quiet && !opts.merge) this.log('op', `${who}${op} ${JSON.stringify(params)}`);
       return r;
     } catch (e) {
-      this.log('error', `${op}: ${(e as Error).message}`);
+      this.log('error', `${who}${op}: ${(e as Error).message}`);
       throw e;
     }
   }
@@ -124,13 +142,21 @@ export class Editor {
   }
 
   undo() {
-    const e = this.history.undo();
-    if (e) this.log('info', `Undo: ${e.label}`);
+    try {
+      const e = this.history.undo();
+      if (e) this.log('info', `Undo: ${e.label}`);
+    } catch (err) {
+      this.log('warn', (err as Error).message);
+    }
   }
 
   redo() {
-    const e = this.history.redo();
-    if (e) this.log('info', `Redo: ${e.label}`);
+    try {
+      const e = this.history.redo();
+      if (e) this.log('info', `Redo: ${e.label}`);
+    } catch (err) {
+      this.log('warn', (err as Error).message);
+    }
   }
 
   // ------------------------------------------------------------------ selection

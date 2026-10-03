@@ -11,6 +11,8 @@ import { Inspector } from './ui/inspector';
 import { AssetsPanel, ConsolePanel, DebugPanel, EnvironmentPanel, MaterialsPanel } from './ui/panels';
 import { h } from './ui/dom';
 import { ToolOptions } from './ui/tooloptions';
+import { AiLayer } from './ai';
+import { AiPanel } from './ui/aipanel';
 
 /**
  * Editor entry (index.html): the game runtime with the editor on top. The
@@ -31,6 +33,7 @@ async function main() {
   slots.view.append(new ToolOptions(ed).el);
   const bridge = new BlenderBridge(ed);
   const tools = new EditorTools(ed, bridge);
+  const ai = new AiLayer(ed, tools);
 
   buildToolbar(document.getElementById('ed-toolbar')!, ed, vp, bridge, tools);
   const outliner = new Outliner(ed);
@@ -42,6 +45,7 @@ async function main() {
   slots.addTab('Environment', new EnvironmentPanel(ed, vp).el);
   slots.addTab('Debug', new DebugPanel(ed).el);
   slots.addTab('Console', new ConsolePanel(ed, tools).el);
+  slots.addTab('AI', new AiPanel(ai).el);
   buildStatusBar(document.getElementById('ed-status')!, ed);
 
   // Datalists for inspector fields.
@@ -97,7 +101,7 @@ async function main() {
 
   (window as unknown as { rill: unknown }).rill = {
     ...rt.api,
-    editor: { ed, vp, tools, bridge, call: tools.call.bind(tools), exec: ed.exec.bind(ed), list: tools.list.bind(tools) },
+    editor: { ed, vp, tools, bridge, ai, call: tools.call.bind(tools), exec: ed.exec.bind(ed), list: tools.list.bind(tools) },
   };
   await rt.prewarm();
   loading.remove();

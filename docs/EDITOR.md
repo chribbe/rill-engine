@@ -272,7 +272,58 @@ Blender is a companion tool for assets and bakes:
   output to `build/<map>.generated.json` (to re-import with migrate.ts) but
   overwrites their assets.
 
-## 9. Tools API (towards AI)
+## 9. AI layer (E3): Claude in the editor
+
+```
+Claude Code ──stdio──► tools/mcp/rill-mcp.ts (MCP server, no dependencies)
+                          │ HTTP POST /__ai/call
+                          ▼
+                  vite dev server: tools/dev/ai_relay.ts
+                          │ HMR websocket (rill:ai-call / rill:ai-result)
+                          ▼
+                  editor tab: src/editor/ai.ts → EditorTools.call → operations → scene
+```
+
+* **Connect:** run `npm run dev`, open the editor (`/?map=…`), start Claude Code in
+  this repository (`.mcp.json` registers the `rill-editor` server; approve it once)
+  and ask it to work in the open editor. The server lists the editor's tools
+  (cached in `build/ai/tools.json`, refreshed when an editor connects) and its
+  instructions carry the conventions (units, axes, rotations, workflow).
+* **Same operations as the UI:** an agent can only call EditorTools: queries,
+  every editor operation, `capture_view`, changesets, save / bake. Nothing else
+  in the engine is reachable.
+* **Seeing:** `capture_view` returns a JPEG the model sees. It frames a point or
+  entities with `camera: { target | ids, yaw, pitch, distance }`.
+* **Agent extras:** `get_ai_context` (scope rules, selection, camera,
+  conventions, open / pending changesets), `describe_area` (entities by
+  semantic, ground cover, height range), `ground_height`; `place_asset` and
+  `place_decal` take `[x, z]` and stand things on the ground.
+* **Changesets:** `begin_changeset { title, prompt }` → operations →
+  `commit_changeset { summary }`. A changeset is one history entry, applied but
+  "waiting for review": the **AI tab** lists it ("+ 5 streetlight, + 3
+  vegetation scatter, ~ 1 terrainLayer…") with **Show** (selects what it
+  touched), **Accept**, **Revert** (undo if it's the latest entry, otherwise an
+  inverse entry). While a changeset is open, human edits wait (Stop & review /
+  Discard in the AI tab).
+* **Scope:** set by the human in the AI tab: **Whole map** or **Selection**
+  (only the selected entities and their children may change; new things only
+  within the selection's bounds + 4 m), plus protection of **building
+  transforms** (materials may still change), **street layout** (roads, paths,
+  kerbs, parking, squares: no moving, deleting or reshaping), **terrain** and
+  **weather / time of day**. Every agent operation is checked before it applies
+  (`EditorHistory.guard`); refusals explain the rule, so the agent can adapt.
+  Locks apply as always.
+* **Tested:** an agent session through the MCP server (stdio JSON-RPC) built
+  a 1960s-style square in the sandbox in one changeset (23 operations: kerbed
+  street, paths, lamps with lights, benches, bins, sculpture, birch groves,
+  shrubs, ground paint, decals); revert restored the scene exactly; scope
+  refusals and the edit lock behaved as above.
+
+Later: an in-editor prompt box (an agent loop via the Claude Agent SDK, so you
+don't need a terminal), changeset diffs in the viewport (added / changed /
+removed colours), per-changeset partial accept.
+
+## 9b. Tools API
 
 `window.rill.editor.tools` (`src/editor/api.ts`): `call(name, params)`,
 `list()`. These are structured operations, not mouse simulation, and they act
