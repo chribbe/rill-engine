@@ -709,6 +709,14 @@ fn shade(in: VSOut, front: bool, vl: VertexLight) -> ShadeOut {
   }
   bc *= material.baseColor;
   s.albedo = bc.rgb;
+  // Per-instance recolour (one model, a crowd of individuals): where the albedo is red-dominant,
+  // the seed's green / blue are added in proportion to the red (towards orange / crimson) and its
+  // alpha scales the brightness (x2). The texture's own variation stays.
+  if ((inst.info.y & I_TINT) != 0u) {
+    let t = unpack4x8unorm(inst.info.z);
+    let re = (s.albedo + vec3f(0.0, t.g, t.b) * s.albedo.r) * (t.a * 2.0);
+    s.albedo = mix(s.albedo, re, saturate((s.albedo.r - max(s.albedo.g, s.albedo.b)) * 6.0));
+  }
   s.alpha = bc.a;
   s.roughness = mix(material.extra.x, material.extra.y, orm.g) * material.pbr.x;
   s.metallic = orm.b * material.pbr.y;

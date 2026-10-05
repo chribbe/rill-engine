@@ -43,6 +43,9 @@ export class Rig {
   readonly parts: RigPart[] = [];
   private byName = new Map<string, number>();
   visible = true;
+  /** Per-instance recolour of red-dominant albedo (renderer I_TINT), 0 / 1 = none. */
+  private tintSeed = 1;
+  private tintFlag = 0;
 
   constructor(private renderer: Renderer, readonly id: string, private opts: { viewmodel?: boolean; castShadow?: boolean } = {}) {}
 
@@ -80,6 +83,17 @@ export class Rig {
     return i === undefined ? undefined : this.parts[i];
   }
 
+  /**
+   * Recolours the rig's red-dominant albedo (fruit skin): `shift` = green and blue added per unit of
+   * red (0..1; towards orange, crimson), `bright` scales it (0..2). Null clears it.
+   */
+  setTint(shift: ArrayLike<number> | null, bright = 1) {
+    if (!shift) { this.tintFlag = 0; this.tintSeed = 1; return; }
+    const b = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255)));
+    this.tintFlag = 16;
+    this.tintSeed = (b(shift[0]) << 8 | b(shift[1]) << 16 | b(bright * 0.5) << 24) >>> 0;
+  }
+
   /** Resets every pose offset. */
   resetPose() {
     for (const p of this.parts) {
@@ -115,7 +129,7 @@ export class Rig {
       r.visible = this.visible && p.visible;
       if (!r.visible) continue;
       transformAabb(p.world, r.mesh.aabb.min, r.mesh.aabb.max, r.worldMin, r.worldMax);
-      R.instances.set(r.slot, p.world, null, -1, instanceFlags | R.probeBits(r.worldMin, r.worldMax), 1, 0x5eed);
+      R.instances.set(r.slot, p.world, null, -1, instanceFlags | this.tintFlag | R.probeBits(r.worldMin, r.worldMax), this.tintSeed, 0x5eed);
     }
   }
 

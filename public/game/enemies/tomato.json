@@ -23,6 +23,27 @@
     "lean": 1.2,
     "roll": 8
   },
+  "variety": {
+    "size": [
+      0.72,
+      1.22
+    ],
+    "bigChance": 0.08,
+    "bigSize": [
+      1.45,
+      1.8
+    ],
+    "width": [
+      0.9,
+      1.14
+    ],
+    "height": [
+      0.82,
+      1.12
+    ],
+    "spread": 1,
+    "colour": 1
+  },
   "crowd": {
     "spacing": 0.9,
     "climbAfter": 0.25,

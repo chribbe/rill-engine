@@ -33,6 +33,19 @@ export interface TomatoDef {
     lean: number;
     roll: number;
   };
+  variety: {
+    /** Size × per tomato, and the odd big one (chance, size ×). Health goes with size², speed against it. */
+    size: [number, number];
+    bigChance: number;
+    bigSize: [number, number];
+    /** Body proportions (width ×, height ×): squat beefsteaks to tall plums. */
+    width: [number, number];
+    height: [number, number];
+    /** How much posture, gait and crown vary (0 = clones, 1 = the full spread). */
+    spread: number;
+    /** Ripeness colours (0 = all the same red, 1 = deep reds, crimson, orange and the odd yellow or dark heirloom). */
+    colour: number;
+  };
   crowd: {
     /** Bodies keep this share of their diameter apart (lower packs them tighter). */
     spacing: number;
@@ -147,6 +160,7 @@ export const TOMATO_DEFAULTS: TomatoDef = {
   health: 70,
   move: { speed: 3.0, sprint: 4.6, sprintDistance: 18, accel: 10, turnRate: 240, speedJitter: 0.2 },
   gait: { stride: 0.62, lift: 0.12, duty: 0.56, bob: 0.018, sway: 2.5, lean: 1.2, roll: 8 },
+  variety: { size: [0.72, 1.22], bigChance: 0.08, bigSize: [1.45, 1.8], width: [0.9, 1.14], height: [0.82, 1.12], spread: 1, colour: 1 },
   crowd: { spacing: 0.9, climbAfter: 0.25, climbSpeed: 3.2, ledgeSpeed: 3.5, direct: 3.5 },
   attack: {
     range: 1.25, windup: 0.18, bite: 0.08, recover: 0.35, cooldown: 0.5, damage: 12,

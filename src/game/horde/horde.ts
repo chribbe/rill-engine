@@ -105,7 +105,9 @@ export class Horde implements Hittable {
   spawn(at: ArrayLike<number>, yawRad: number): Tomato | null {
     const t = this.list.find((x) => !x.active);
     if (!t || !this.nav) return null;
-    const node = this.nav.nearestNode(at[0], at[1] + 0.3, at[2], 4);
+    // On the flow field if anywhere near (not in a pocket under the stairs); else wherever it can stand.
+    let node = this.nav.target >= 0 ? this.nav.nearestNode(at[0], at[1] + 0.3, at[2], 6, true) : -1;
+    if (node < 0) node = this.nav.nearestNode(at[0], at[1] + 0.3, at[2], 4);
     if (node < 0) return null;
     // Stand it on the nav floor (in the node's column if `at` was off the walkable area).
     const p: [number, number, number] = [at[0], this.nav.layerH[node], at[2]];
@@ -180,12 +182,14 @@ export class Horde implements Hittable {
    * Then nobody stands inside the prey, and the moves go back through the nav so none end in a wall.
    */
   private crowd(prey: Prey) {
-    const nav = this.nav!, d = this.def, S = d.scale, r = d.radius * S, R = 2 * r * d.crowd.spacing, R2 = R * R, VK = 1.3;
-    const ride0 = d.rideHeight * S;
+    const nav = this.nav!, d = this.def, sp = d.crowd.spacing, VK = 1.3;
     const live = this.live;
     live.length = 0;
     for (const t of this.list) if (t.alive) live.push(t);
-    const n = live.length, head = this.head, next = this.next, cs = 1.25;
+    const n = live.length, head = this.head, next = this.next;
+    let rmax = 0;
+    for (const t of live) rmax = Math.max(rmax, t.radius);
+    const cs = Math.max(1.25, 2 * rmax * sp);
     head.fill(-1);
     const key = (ix: number, iz: number) => ((ix * 73856093) ^ (iz * 19349663)) & (HASH - 1);
     for (let i = 0; i < n; i++) {
@@ -205,7 +209,7 @@ export class Horde implements Hittable {
             if (j <= i) continue;
             const b = live[j], pb = b.pos;
             const dx = pb[0] - pa[0], dz = pb[2] - pa[2], dy = (pb[1] - pa[1]) * VK;
-            const d2 = dx * dx + dz * dz + dy * dy;
+            const d2 = dx * dx + dz * dz + dy * dy, R = (a.radius + b.radius) * sp, R2 = R * R;
             if (d2 >= R2) continue;
             const dist = Math.sqrt(d2) || 1e-4, pen = R - dist;
             const nx = dx / dist, nz = dz / dist, ny = dy / dist;
@@ -217,7 +221,7 @@ export class Horde implements Hittable {
             else { pa[1] += up; a.pileT = 0.12; if (a.vel[1] < 0) a.vel[1] = 0; }
             // In the way ahead (roughly level)?
             const hd = Math.hypot(dx, dz) || 1e-4;
-            if (Math.abs(dy) < r * VK) {
+            if (Math.abs(dy) < Math.min(a.radius, b.radius) * VK) {
               if ((a.dir[0] * dx + a.dir[1] * dz) / hd > 0.6) a.blockedAhead = true;
               if (-(b.dir[0] * dx + b.dir[1] * dz) / hd > 0.6) b.blockedAhead = true;
             }
@@ -226,9 +230,9 @@ export class Horde implements Hittable {
       }
     }
     // Out of the prey's column (its body, and nobody piles onto its head), and back through the nav.
-    const f = prey.feet, pr = r + 0.35;
+    const f = prey.feet;
     for (let i = 0; i < n; i++) {
-      const t = live[i], p = t.pos;
+      const t = live[i], p = t.pos, pr = t.radius + 0.35, ride0 = t.ride;
       if (p[1] > f[1] - 0.3) {
         const dx = p[0] - f[0], dz = p[2] - f[2], dd = Math.hypot(dx, dz);
         if (dd < pr) {
@@ -238,7 +242,7 @@ export class Horde implements Hittable {
       }
       if (p[0] !== this.px[i] || p[2] !== this.pz[i]) {
         t.node = nav.move(t.node, this.px[i], this.pz[i], p[0], p[2], p[1] - ride0, true, this.out);
-        nav.keepOff(t.node, r * 0.4, this.out);
+        nav.keepOff(t.node, t.radius * 0.4, this.out);
         p[0] = this.out[0]; p[2] = this.out[1];
       }
     }
@@ -262,9 +266,9 @@ export class Horde implements Hittable {
 
   raycast(o: ArrayLike<number>, d: ArrayLike<number>, maxT: number, out: ShotHit): boolean {
     let best = maxT, found = false;
-    const reach = (this.def.radius + 0.9) * this.def.scale;
     for (const t of this.list) {
       if (!t.alive) continue;
+      const reach = (this.def.radius + 0.9) * t.size;
       // Bounding sphere around body and legs first.
       const tb = raySphere(o, d, t.shown, reach);
       if (tb < 0 && Math.hypot(o[0] - t.shown[0], o[1] - t.shown[1], o[2] - t.shown[2]) > reach) continue;

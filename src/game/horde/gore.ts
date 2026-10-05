@@ -113,7 +113,7 @@ export class TomatoGore {
   /** The death burst. `point`/`dir`/`impulse`: the killing shot (or null). */
   burst(t: Tomato, point: ArrayLike<number> | null, dir: ArrayLike<number> | null, impulse: number) {
     const G = this.def.gore, P = this.particles, C = this.world.collision;
-    const S = this.def.scale, c = t.shown, r = this.def.radius * S;
+    const S = t.size, c = t.shown, r = t.radius;
     // Far away a burst is small on screen: fewer particles (a horde dies many at a time).
     const dv = Math.hypot(c[0] - this.viewer[0], c[1] - this.viewer[1], c[2] - this.viewer[2]);
     const q = Math.max(0.3, Math.min(1, 1.35 - dv / 30));
@@ -209,12 +209,12 @@ export class TomatoGore {
       const wall = hit.normal[1] < 0.5;
       this.queue.push({ t: this.time + 0.05 + hit.t * 0.08, mat: wall ? 'decal_tomato_drip' : this.pick(), p: [...hit.point] as V3, n: [...hit.normal] as V3, size: this.rnd(G.splatSize[0], G.splatSize[1]) * 1.2, angle: wall ? 0 : undefined });
     }
-    this.audio.play('tomato_burst', { pos: c });
+    this.audio.play('tomato_burst', { pos: c, pitch: Math.sqrt(t.voice), gain: 6 * Math.log2(t.sizeK) });
   }
 
   /** A bullet into a live tomato: a red spurt out of the entry and a spray out of the exit, painting what is behind. */
   hitSpurt(t: Tomato, point: ArrayLike<number>, normal: ArrayLike<number>, dir: ArrayLike<number>, region: string) {
-    const G = this.def.gore, P = this.particles, C = this.world.collision, S = this.def.scale;
+    const G = this.def.gore, P = this.particles, C = this.world.collision, S = t.size;
     const n = region === 'maw' ? 1.8 : 1;
     const leg = region === 'leg';
     const out: V3 = [normal[0] * 0.8, normal[1] * 0.8 + 0.25, normal[2] * 0.8];
@@ -222,7 +222,7 @@ export class TomatoGore {
     this.jet(point, vec3.normalize(out), Math.round(10 * n), [1.2, 3.5], [0.014 * S, 0.03 * S], G.red, t.vel);
     if (!leg) {
       // Exit: the bullet blows a stream out of the far side.
-      const rr = this.def.radius * S;
+      const rr = t.radius;
       const ex: V3 = [t.shown[0] + dir[0] * rr, t.shown[1] + dir[1] * rr, t.shown[2] + dir[2] * rr];
       const d: V3 = vec3.normalize([dir[0], dir[1] + 0.08, dir[2]]) as V3;
       this.jet(ex, d, Math.round(G.hitSpray * 1.4 * n), [3, 9], [0.016 * S, 0.04 * S], G.red, t.vel);
@@ -237,7 +237,7 @@ export class TomatoGore {
       }
     }
     P.emit('debris', { count: 2 + Math.floor(Math.random() * 3), pos: point, dir: normal, spread: 0.7, speed: [1, 3.5], life: [1, 2], size: [0.01, 0.025], color: leg ? [0.05, 0.1, 0.02] : G.flesh, alpha: 1, drag: 0.5, gravity: 9.8 });
-    this.audio.play('tomato_hit', { pos: point });
+    this.audio.play('tomato_hit', { pos: point, pitch: t.voice });
   }
 
   /** A leg shot off: both segments fly, the stump gushes. */
@@ -248,9 +248,9 @@ export class TomatoGore {
     const push: V3 = [dir[0] * 2.5, 1.5, dir[2] * 2.5];
     this.partPose(t, legs.upper, L.upper.world, pos, this.q);
     const hip: V3 = [L.upper.world[12], L.upper.world[13], L.upper.world[14]];
-    this.throwPiece(this.model.legUpper, pos, this.q, hip, this.rnd(1.5, 3), 1.5, t.vel, push, this.def.scale);
+    this.throwPiece(this.model.legUpper, pos, this.q, hip, this.rnd(1.5, 3), 1.5, t.vel, push, t.size);
     this.partPose(t, legs.lower, L.lower.world, pos, this.q);
-    this.throwPiece(this.model.legLower, pos, this.q, hip, this.rnd(1, 2.5), 1, t.vel, push, this.def.scale);
+    this.throwPiece(this.model.legLower, pos, this.q, hip, this.rnd(1, 2.5), 1, t.vel, push, t.size);
     P.emit('drop', { count: 30, pos: hip, dir: [legs.out[0], 0.6, legs.out[2]], spread: 0.45, speed: [1.5, 5], life: [0.4, 0.9], size: [0.014, 0.04], color: G.red, alpha: 1, drag: 0.8, gravity: 9.8, stretch: true, addVel: t.vel });
     P.emit('splash', { count: 1, pos: hip, dir: [0, 1, 0], spread: 0.3, speed: [0.2, 0.6], life: [0.15, 0.25], size: [0.08, 0.35], color: G.red, alpha: 0.95, drag: 3 });
     this.audio.play('tomato_leg', { pos: point });

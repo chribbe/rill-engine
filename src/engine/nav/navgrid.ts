@@ -299,10 +299,10 @@ export class NavGrid {
     return out;
   }
 
-  /** The walkable node nearest to (x, y, z) within `r` cells (for a target standing just off the grid). */
-  nearestNode(x: number, y: number, z: number, r = 3): number {
+  /** The walkable node nearest to (x, y, z) within `r` cells (for a target standing just off the grid). `onFlow`: only nodes the flow field reaches. */
+  nearestNode(x: number, y: number, z: number, r = 3, onFlow = false): number {
     const n = this.nodeAt(x, y, z);
-    if (n >= 0) return n;
+    if (n >= 0 && (!onFlow || this.dist[n] !== UNREACHED)) return n;
     const ix = Math.floor((x - this.x0) / this.cell), iz = Math.floor((z - this.z0) / this.cell);
     let best = -1, bd = Infinity;
     for (let dz = -r; dz <= r; dz++) {
@@ -313,6 +313,7 @@ export class NavGrid {
         for (let l = 0; l < this.layerN[c]; l++) {
           const h = this.layerH[c * MAXL + l];
           const d = dx * dx + dz * dz + ((h - y) / this.cell) ** 2;
+          if (onFlow && this.dist[c * MAXL + l] === UNREACHED) continue;
           if (d < bd && h <= y + this.step * 2) { bd = d; best = c * MAXL + l; }
         }
       }

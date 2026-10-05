@@ -302,14 +302,14 @@ export class Game {
       if (!t.alive) { t.planted = 0; continue; }
       const d = Math.hypot(t.shown[0] - cam[0], t.shown[1] - cam[1], t.shown[2] - cam[2]);
       if (t.planted > 0) {
-        if (d < 14 && steps < 3 && (d < 5 || Math.random() < 3 / (1 + this.horde.alive * 0.25))) { this.audio.play('tomato_step', { pos: t.shown }); steps++; }
+        if (d < 14 && steps < 3 && (d < 5 || Math.random() < 3 / (1 + this.horde.alive * 0.25))) { this.audio.play('tomato_step', { pos: t.shown, pitch: t.voice }); steps++; }
         t.planted = 0;
       }
       const i = t.index % this.hissT.length;
       this.hissT[i] -= dt;
       if (d < 12 && this.hissT[i] <= 0 && t.state === 'chase') {
         this.hissT[i] = 2.5 + Math.random() * 4 + this.horde.alive * 0.15;
-        if (Math.random() < 0.6 && hisses < 1) { this.audio.play('tomato_hiss', { pos: t.shown }); hisses++; }
+        if (Math.random() < 0.6 && hisses < 1) { this.audio.play('tomato_hiss', { pos: t.shown, pitch: t.voice }); hisses++; }
       }
     }
   }
@@ -344,7 +344,7 @@ export class Game {
     player.velocity[0] += (dx / l) * 3;
     player.velocity[2] += (dz / l) * 3;
     this.damage?.hit(this.hordeConfig.data.attack.damage, dx / l, dz / l, camera.yaw);
-    this.audio.play('tomato_bite', { pos: t.shown, gain: 3 });
+    this.audio.play('tomato_bite', { pos: t.shown, gain: 3, pitch: t.voice });
     if (this.vitals.damage(this.hordeConfig.data.attack.damage)) this.die();
   }
 

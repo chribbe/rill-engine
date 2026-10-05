@@ -8,6 +8,18 @@ import type { ShotHit } from '../combat/hitscan';
 import type { TomatoDef } from './def';
 import { LEG_GROUP, type TomatoModel } from './model';
 
+/**
+ * Ripeness palette: green and blue added per unit of red (the texture's own red is [0, 0]),
+ * brightness, weight. Deep red, crimson, orange-red, the odd yellow-orange and dark heirloom.
+ */
+const RIPENESS: [[number, number], number, number][] = [
+  [[0.0, 0.0], 1, 0.42],
+  [[0.0, 0.025], 0.75, 0.2],
+  [[0.13, 0.0], 1.05, 0.22],
+  [[0.32, 0.0], 1.12, 0.06],
+  [[0.012, 0.09], 0.55, 0.1],
+];
+
 /** Phase offsets per leg (fl ml rl fr mr rr): alternating tripods, front legs leading a little. */
 const GAIT_OFFSET = [0, 0.54, 0.08, 0.5, 0.04, 0.58];
 
@@ -68,6 +80,24 @@ export class Tomato {
   pileT = 0;
   ledgeT = 0;
   speedMul = 1;
+  /**
+   * Individuality (rolled on reset): size (def scale × variety), body width / height, stance height,
+   * nose pitch, stride / lift / sway ×, jaw rhythm, crown turn and size, voice pitch.
+   */
+  size = 1;
+  sizeK = 1;
+  bodyW = 1;
+  bodyH = 1;
+  rideK = 1;
+  pitch0 = 0;
+  strideK = 1;
+  liftK = 1;
+  swayK = 1;
+  jawRate = 1;
+  jawPhase = 0;
+  crownYaw = 0;
+  crownK = 1;
+  voice = 1;
   cooldown = 0;
   stagger = 0;
   flinchT = 0;
@@ -136,10 +166,11 @@ export class Tomato {
     this.active = true;
     this.state = 'chase';
     this.stateT = 0;
-    this.health = d.health;
     this.seed = seed | 1;
-    this.speedMul = 1 + (this.rand() * 2 - 1) * d.move.speedJitter;
-    this.pos[0] = at[0]; this.pos[1] = at[1] + d.rideHeight * d.scale; this.pos[2] = at[2];
+    this.individual();
+    this.health = d.health * this.sizeK * this.sizeK;
+    this.speedMul = (1 + (this.rand() * 2 - 1) * d.move.speedJitter) * Math.pow(this.sizeK, -0.6);
+    this.pos[0] = at[0]; this.pos[1] = at[1] + this.ride; this.pos[2] = at[2];
     this.prev[0] = this.pos[0]; this.prev[1] = this.pos[1]; this.prev[2] = this.pos[2];
     this.vel[0] = this.vel[1] = this.vel[2] = 0;
     this.yaw = this.prevYaw = yawRad;
@@ -158,11 +189,49 @@ export class Tomato {
     this.rig.visible = true;
   }
 
+  /** Rolls this one's size, build, posture, gait, crown, voice and colour from its seed. */
+  private individual() {
+    const V = this.def.variety, k = V.spread, r = () => this.rand(), lerp = (a: [number, number]) => a[0] + (a[1] - a[0]) * r();
+    const vary = (amount: number) => 1 + (r() * 2 - 1) * amount * k;
+    this.sizeK = r() < V.bigChance ? lerp(V.bigSize) : lerp(V.size);
+    this.size = this.def.scale * this.sizeK;
+    this.bodyW = lerp(V.width);
+    this.bodyH = lerp(V.height);
+    this.rideK = vary(0.09);
+    this.pitch0 = (r() * 2 - 1) * 7 * k * RAD;
+    this.strideK = vary(0.14);
+    this.liftK = vary(0.35);
+    this.swayK = vary(0.5);
+    this.jawRate = vary(0.35);
+    this.jawPhase = r() * Math.PI * 2;
+    this.crownYaw = r() * Math.PI * 2;
+    this.crownK = vary(0.22);
+    this.voice = Math.pow(this.sizeK, -0.8) * vary(0.08);
+    // Ripeness: a weighted pick with a little jitter; `colour` 0 keeps the texture's own red.
+    if (V.colour > 0) {
+      let w = r() * RIPENESS.reduce((a, e) => a + e[2], 0), i = 0;
+      while (i < RIPENESS.length - 1 && (w -= RIPENESS[i][2]) > 0) i++;
+      const [shift, bright] = RIPENESS[i], c = V.colour;
+      const g = Math.max(0, shift[0] * (0.85 + r() * 0.3) + (r() - 0.3) * 0.02), b = shift[1] * (0.85 + r() * 0.3);
+      this.rig.setTint([g * c, b * c], 1 + (bright * (0.92 + r() * 0.16) - 1) * c);
+    } else {
+      this.rig.setTint(null);
+    }
+  }
+
+  /** Body sphere radius and the body centre's height over the feet. */
+  get radius() {
+    return this.def.radius * this.size * this.bodyW;
+  }
+  get ride() {
+    return this.def.rideHeight * this.size * this.rideK;
+  }
+
   // ------------------------------------------------------------------ simulation (fixed rate)
 
   tick(h: number, prey: Prey, nav: NavGrid, onBite: (t: Tomato) => void) {
     if (!this.alive) return;
-    const d = this.def, M = d.move, A = d.attack, Cr = d.crowd, S = d.scale, range = A.range * S, radius = d.radius * S, ride0 = d.rideHeight * S;
+    const d = this.def, M = d.move, A = d.attack, Cr = d.crowd, S = this.size, range = A.range * S, radius = this.radius, ride0 = this.ride;
     this.prev[0] = this.pos[0]; this.prev[1] = this.pos[1]; this.prev[2] = this.pos[2];
     this.prevYaw = this.yaw;
     this.stateT += h;
@@ -379,7 +448,7 @@ export class Tomato {
     const speed = Math.hypot(this.vel[0], this.vel[2]);
     if (this.state === 'windup' || this.state === 'lunge') jawT = A.jawOpen;
     else if (this.state === 'bite') jawT = -4;
-    else if (this.state === 'chase') jawT = A.jawChase * (0.5 + 0.5 * Math.sin(performance.now() * 0.022 + this.index * 1.7)) * Math.min(1, speed / 2);
+    else if (this.state === 'chase') jawT = A.jawChase * (0.5 + 0.5 * Math.sin(performance.now() * 0.022 * this.jawRate + this.jawPhase)) * Math.min(1, speed / 2);
     else if (this.state === 'dead') jawT = A.jawOpen;
     stepSpring(this.jaw, jawT * RAD, this.state === 'bite' ? 18 : 7, 0.45, dt);
 
@@ -387,21 +456,22 @@ export class Tomato {
     this.yawRate += (dy * inv - this.yawRate) * Math.min(1, dt * 12);
     const gaitK = Math.min(1, speed / 1.5);
     const ph = this.gaitPhase * Math.PI * 2;
-    const bob = -Math.cos(ph * 2) * G.bob * d.scale * gaitK;
-    const sway = Math.sin(ph) * G.sway * RAD * gaitK;
+    const bob = -Math.cos(ph * 2) * G.bob * this.size * gaitK;
+    const sway = Math.sin(ph) * G.sway * this.swayK * RAD * gaitK;
 
     const M = this.root;
     mat4.translation([p[0], p[1] + bob, p[2]], M);
     mat4.rotateY(M, -yaw, M);
-    mat4.rotateX(M, this.lean.x + this.tiltX.x, M);
+    mat4.rotateX(M, this.lean.x + this.tiltX.x + this.pitch0, M);
     mat4.rotateZ(M, this.roll.x + this.tiltZ.x + sway, M);
-    mat4.uniformScale(M, d.scale, M);
+    mat4.uniformScale(M, this.size, M);
     mat4.inverse(M, this.inv);
     const sq = this.squash.x;
-    this.body.scale[0] = this.body.scale[2] = 1 - sq * 0.5;
-    this.body.scale[1] = 1 + sq;
+    this.body.scale[0] = this.body.scale[2] = this.bodyW * (1 - sq * 0.5);
+    this.body.scale[1] = this.bodyH * (1 + sq);
     quat.fromEuler(Math.max(-0.1, this.jaw.x), 0, 0, 'xyz', this.lid.rot);
-    quat.fromEuler(this.wobX.x * 0.6, 0, this.wobZ.x * 0.6, 'xyz', this.crown.rot);
+    quat.fromEuler(this.wobX.x * 0.6, this.crownYaw, this.wobZ.x * 0.6, 'xyz', this.crown.rot);
+    this.crown.scale[0] = this.crown.scale[1] = this.crown.scale[2] = this.crownK;
 
     this.stepLegs(dt, M);
     this.rig.update(this.root);
@@ -414,9 +484,9 @@ export class Tomato {
    * lead their tripod slightly (a ripple, not a stamp). Standing still, feet only take corrective steps.
    */
   private stepLegs(dt: number, M: Mat4) {
-    const d = this.def, G = d.gait, S = d.scale, legs = this.model.legs;
+    const d = this.def, G = d.gait, S = this.size, legs = this.model.legs;
     const vx = this.vel[0], vz = this.vel[2], speed = Math.hypot(vx, vz);
-    const stride = G.stride * S, D = G.duty;
+    const stride = G.stride * S * this.strideK, D = G.duty;
     const travel = speed + Math.abs(this.yawRate) * 0.8 * S;
     const moving = this.grounded && travel > 0.3;
     const freq = travel / stride;
@@ -431,7 +501,7 @@ export class Tomato {
         home[1] = this.ground;
       } else {
         // In the air the legs reach forward and down, splayed.
-        home[1] = this.shown[1] - d.rideHeight * S * 0.55;
+        home[1] = this.shown[1] - this.ride * 0.55;
       }
       if (this.fresh) { L.foot[0] = home[0]; L.foot[1] = home[1]; L.foot[2] = home[2]; L.t = -1; L.swinging = false; continue; }
       if (!this.grounded) {
@@ -449,7 +519,7 @@ export class Tomato {
           const e = u * u * (3 - 2 * u);
           L.foot[0] = L.from[0] + (L.to[0] - L.from[0]) * e;
           L.foot[2] = L.from[2] + (L.to[2] - L.from[2]) * e;
-          L.foot[1] = L.from[1] + (L.to[1] - L.from[1]) * e + Math.sin(Math.PI * Math.pow(u, 0.7)) * G.lift * S;
+          L.foot[1] = L.from[1] + (L.to[1] - L.from[1]) * e + Math.sin(Math.PI * Math.pow(u, 0.7)) * G.lift * this.liftK * S;
         } else if (L.swinging) {
           L.swinging = false;
           L.foot[0] = L.to[0]; L.foot[1] = L.to[1]; L.foot[2] = L.to[2];
@@ -463,7 +533,7 @@ export class Tomato {
           L.t += dt / L.dur;
           const u = Math.min(1, L.t), e = u * u * (3 - 2 * u);
           L.foot[0] = L.from[0] + (L.to[0] - L.from[0]) * e;
-          L.foot[1] = L.from[1] + (L.to[1] - L.from[1]) * e + Math.sin(Math.PI * u) * G.lift * S * 0.6;
+          L.foot[1] = L.from[1] + (L.to[1] - L.from[1]) * e + Math.sin(Math.PI * u) * G.lift * this.liftK * S * 0.6;
           L.foot[2] = L.from[2] + (L.to[2] - L.from[2]) * e;
           if (L.t >= 1) L.t = -1;
         } else if (Math.hypot(L.foot[0] - home[0], L.foot[2] - home[2]) > stride * 0.3 && !this.legs.some((o, j) => o.t >= 0 && LEG_GROUP[j] !== LEG_GROUP[i])) {
@@ -518,7 +588,7 @@ export class Tomato {
   raycast(o: ArrayLike<number>, dir: ArrayLike<number>, maxT: number, out: ShotHit): boolean {
     if (!this.alive) return false;
     let best = maxT, part = '', region = '';
-    const S = this.def.scale, r = this.def.radius * S * 0.95;
+    const S = this.size, r = this.radius * Math.max(1, this.bodyH) * 0.95;
     const tb = raySphere(o, dir, this.shown, r);
     if (tb >= 0 && tb < best) { best = tb; part = 'body'; region = 'body'; }
     for (let i = 0; i < 6; i++) {

@@ -76,6 +76,7 @@ const I_LIGHTMAPPED: u32 = 1u;
 const I_NO_DECALS: u32 = 2u;
 const I_VIEWMODEL: u32 = 4u;  // first-person weapon: depth squeezed in front of the world
 const I_WIND: u32 = 8u;       // vegetation: animated by the wind (all passes, identical positions)
+const I_TINT: u32 = 16u;      // the seed recolours red-dominant albedo (fruit skins): g / b added per red, alpha brightness (128 = x1)
 
 // ------------------------------------------------------------------ wind
 fn windHash(p: vec2f) -> f32 { return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453); }
