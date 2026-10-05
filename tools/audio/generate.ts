@@ -390,6 +390,50 @@ function tomatoLeg(seed: number) {
   return finish(x, -1);
 }
 
+// ------------------------------------------------------------------ bug hole (G2)
+
+/** The ground giving way: a sub rumble swelling over ~3.4 s, stone cracking faster and closer. */
+function holeRumble(seed: number) {
+  const r = rng(seed), sec = 3.6, x = buf(sec);
+  const rum = biquad(biquad(noise(x.length, r), 'lp', 140), 'lp', 90);
+  for (let i = 0; i < rum.length; i++) {
+    const t = i / SR;
+    rum[i] *= Math.pow(Math.min(1, t / 3.2), 1.6) * (0.8 + 0.2 * Math.sin(t * 23 + Math.sin(t * 7) * 2));
+  }
+  mix(x, rum, 2.2);
+  mix(x, tone(sec, (t) => 38 + 6 * Math.sin(t * 3), (t) => 0.5 * Math.pow(Math.min(1, t / 3.3), 2)), 0.9);
+  // Cracks: sparse at first, a crackle by the end.
+  for (let k = 0; k < 70; k++) {
+    const t0 = 3.4 * Math.pow(r(), 0.45);
+    const near = t0 / 3.4;
+    const c = env(biquad(noise(Math.ceil(0.06 * SR), r), 'bp', v(r, 900 + near * 1400, 0.4), 1.5), 0.0005, v(r, 0.008 + near * 0.012));
+    mix(x, c, (0.15 + near * 0.7) * (0.5 + r() * 0.5), t0);
+  }
+  mix(x, grains(sec, 140, 3.3, 1200, 4200, r, 0.4), 0.25, 0.2);
+  saturate(x, 1.4);
+  return finish(x, -2);
+}
+
+/** It bursts: a sub boom, a blast of earth, slabs crashing down, gravel and clods raining after. */
+function holeBurst(seed: number) {
+  const r = rng(seed), x = buf(3.2);
+  mix(x, tone(1.2, (t) => 62 - 40 * t, (t) => (t < 0.004 ? t / 0.004 : Math.exp(-t / 0.35))), 1.6);
+  const blastN = sweepLp(noise(x.length, r), (t) => 3000 * Math.exp(-t / 0.12) + 260);
+  mix(x, env(blastN, 0.002, 0.28), 1.5);
+  mix(x, env(biquad(noise(x.length, r), 'lp', 220), 0.01, 0.9), 1.3);
+  // Slabs and chunks landing.
+  for (let k = 0; k < 14; k++) {
+    const t0 = 0.35 + Math.pow(r(), 1.2) * 1.8;
+    const thud = buf(0.4);
+    mix(thud, tone(0.3, (t) => v(r, 120, 0.3) - 120 * t, (t) => (t < 0.002 ? t / 0.002 : Math.exp(-t / 0.05))), 1);
+    mix(thud, env(biquad(noise(thud.length, r), 'bp', v(r, 1300, 0.4), 1.1), 0.0005, v(r, 0.03)), 0.9);
+    mix(x, thud, 0.35 + r() * 0.5, t0);
+  }
+  mix(x, grains(3.2, 260, 2.6, 900, 4800, r, 0.45), 0.7, 0.25);
+  saturate(x, 1.8);
+  return finish(x, -0.5);
+}
+
 function step(seed: number, kind: 'hard' | 'soft' | 'gravel' | 'metal', land = false) {
   const r = rng(seed), x = buf(land ? 0.35 : 0.22), L = land ? 1.6 : 1;
   if (kind === 'hard') {
@@ -471,6 +515,8 @@ for (let i = 1; i <= 3; i++) out(`tomato/hiss_${i}`, tomatoHiss(2300 + i));
 for (let i = 1; i <= 4; i++) out(`tomato/splat_${i}`, tomatoSplat(2400 + i));
 for (let i = 1; i <= 4; i++) out(`tomato/step_${i}`, tomatoStep(2500 + i));
 for (let i = 1; i <= 2; i++) out(`tomato/leg_${i}`, tomatoLeg(2600 + i));
+out('hole/rumble_1', holeRumble(2701));
+for (let i = 1; i <= 2; i++) out(`hole/burst_${i}`, holeBurst(2710 + i));
 for (const k of ['hard', 'soft', 'gravel', 'metal'] as const) {
   for (let i = 1; i <= 4; i++) out(`step/${k}_${i}`, step(1300 + i * 7 + k.length, k));
   out(`step/${k}_land`, step(1400 + k.length, k, true));

@@ -19,6 +19,7 @@ import { TOMATO_DEFAULTS, type TomatoDef } from './horde/def';
 import { Horde } from './horde/horde';
 import { TomatoGore, GORE_DECALS } from './horde/gore';
 import { Vitals } from './player/vitals';
+import { HoleField, type BugHole } from './horde/hole';
 import { HealthIndicator } from './ui/health';
 import type { Tomato } from './horde/tomato';
 import { DamageFlash } from './ui/damage';
@@ -62,6 +63,14 @@ export class Game {
   readonly horde: Horde;
   debris!: Debris;
   gore!: TomatoGore;
+  holes!: HoleField;
+  /** Tomatoes a hole lets out when it bursts (and again every `holeRefill` s while you are near). */
+  holePack = 28;
+  holeRefill: [number, number] = [25, 12];
+  /** A `bug_hole` marker bursts when you come within this distance (m), after this long into the run (s). */
+  holeTrigger = 45;
+  holeDelay = 6;
+  private holeMarkers: { pos: [number, number, number]; opened: boolean }[] = [];
   /** Draw tomato hit shapes. */
   showHitboxes = false;
   /** Seconds until the next respawn while below `horde.maxAlive`. */
@@ -118,9 +127,17 @@ export class Game {
     await this.horde.load();
     this.debris = new Debris(rt.renderer, rt.world.renderables, () => rt.world.collision, this.horde.model.any, 360);
     this.gore = new TomatoGore(rt.world, rt.renderer.particles, this.debris, this.audio, this.horde.model, this.hordeConfig.data);
+    this.holes = new HoleField(rt.renderer, rt.world, rt.renderer.particles, this.debris, this.audio);
+    await this.holes.load();
+    this.holes.onBurst.push((h) => this.holeBurst(h));
+    // A rebaked nav grid has no craters in it yet.
+    this.horde.onNavBuilt = () => {
+      const nav = this.horde.nav!, D = this.holes.def;
+      for (const h of this.holes.holes) if (h.active && h.burst) h.navUndo = nav.blockDisc(h.centre[0], h.centre[1], h.centre[2], D.crest + 0.9);
+    };
     this.impactTable = await impacts;
     this.impacts = new ImpactFx(this.impactTable, rt.world, rt.renderer.particles, this.pulses);
-    const decalMats = [...Object.values(this.impactTable.surfaces).map((e) => e.decal), ...GORE_DECALS].filter((d): d is string => !!d);
+    const decalMats = [...Object.values(this.impactTable.surfaces).map((e) => e.decal), ...GORE_DECALS, 'decal_crack', 'decal_stain'].filter((d): d is string => !!d);
     await rt.world.addRuntimeDecalMaterials(decalMats);
     rt.player.tuning = this.playerConfig.data;
     rt.sandbox.ownsParticles = false;
@@ -194,7 +211,9 @@ export class Game {
     // Gun smoke and impact dust drift with only part of the map's wind (restored in end()).
     rt.renderer.particles.airScale = this.impactTable.wind ?? 1;
     this.horde.clear();
-    this.horde.begin(rt.player.feet);
+    this.holes?.clear();
+    this.collectHoleMarkers();
+    this.horde.begin(rt.player.feet, this.navKeep());
     this.respawnT = 1;
     this.group.left = 0;
     this.vitals.reset();
@@ -251,6 +270,87 @@ export class Game {
     }
     const g = this.rt.world.collision.groundHeight(pos![0], pos![1] + 1, pos![2], 4);
     return this.horde.spawn([pos![0], g > -Infinity ? g : pos![1], pos![2]], yaw);
+  }
+
+  /** `bug_hole` markers in the map: places a hole bursts open when you come near. */
+  private collectHoleMarkers() {
+    const W = this.rt.world;
+    this.holeMarkers = W.doc.entities
+      .filter((e): e is MarkerObject => e.type === 'marker' && e.semantic === 'bug_hole')
+      .map((e) => ({ pos: [...e.transform.position] as [number, number, number], opened: false }));
+  }
+
+  /** Places the nav grid must cover: hole and spawn markers. */
+  private navKeep(): ArrayLike<number>[] {
+    const spawns = this.rt.world.doc.entities.filter((e): e is MarkerObject => e.type === 'marker' && e.semantic === 'enemy_spawn').map((e) => e.transform.position);
+    return [...this.holeMarkers.map((m) => m.pos), ...spawns];
+  }
+
+  /** Opens a bug hole at ground point `at` (rumble, burst, then a pack pours out). */
+  openHole(at: ArrayLike<number>): BugHole | null {
+    const g = this.rt.world.collision.groundHeight(at[0], at[1] + 1.5, at[2], 4);
+    const h = this.holes.open([at[0], g > -Infinity ? g : at[1], at[2]]);
+    if (h) h.pending = this.holePack;
+    return h;
+  }
+
+  /** It burst: the crater leaves the nav, anything standing on it is crushed, the flow field is redone. */
+  private holeBurst(h: BugHole) {
+    const c = h.centre, D = this.holes.def;
+    if (this.horde.nav) h.navUndo = this.horde.nav.blockDisc(c[0], c[1], c[2], D.crest + 0.9);
+    for (const t of this.horde.list) {
+      if (!t.alive || t.state === 'emerge') continue;
+      if (Math.hypot(t.pos[0] - c[0], t.pos[2] - c[2]) < D.crest + 0.6 && Math.abs(t.pos[1] - c[1]) < 2) this.horde.kill(t, t.shown, [0, 1, 0], 30);
+    }
+    this.horde.invalidateFlow();
+  }
+
+  /** Holes: markers burst as you approach, open holes let their packs out, and refill while you are near. */
+  private updateHoles(dt: number) {
+    const { player, camera } = this.rt, H = this.horde;
+    this.holes.update(dt, camera.position);
+    // Rumble trembles the view; the burst kicks it.
+    const s = this.holes.shake, k = this.holes.kick;
+    if (s > 0) this.recoil.kickView((Math.random() - 0.5) * s * dt * 60, (Math.random() - 0.5) * s * dt * 60, (Math.random() - 0.5) * s * dt * 40);
+    if (k > 0) this.recoil.kickView(-k * 0.6, (Math.random() - 0.5) * k * 0.5, (Math.random() - 0.5) * k);
+    if (!this.active || !H.enabled || this.vitals.dead) return;
+    if (this.runTime > this.holeDelay) {
+      for (const m of this.holeMarkers) {
+        if (m.opened || Math.hypot(m.pos[0] - player.feet[0], m.pos[2] - player.feet[2]) > this.holeTrigger) continue;
+        m.opened = true;
+        this.openHole(m.pos);
+      }
+    }
+    for (const h of this.holes.holes) {
+      if (!h.active || !h.open) continue;
+      if (h.pending > 0) {
+        h.nextT -= dt;
+        if (h.nextT <= 0 && H.alive < 150) {
+          if (H.emergeFrom(h, player.feet)) h.pending--;
+          // A gush at first, then a steady stream.
+          h.nextT = h.pending > this.holePack - 6 ? 0.08 + Math.random() * 0.1 : 0.18 + Math.random() * 0.3;
+        }
+        h.idleT = 0;
+      } else if (Math.hypot(h.centre[0] - player.feet[0], h.centre[2] - player.feet[2]) < 90 && (h.idleT += dt) > this.holeRefill[0]) {
+        h.idleT = 0;
+        h.pending = Math.round(this.holeRefill[1] * (0.7 + Math.random() * 0.6));
+      }
+    }
+  }
+
+  /** Nobody walks into a crater (its rim is not in the collision): the player is held at the crest. */
+  private keepOutOfHoles() {
+    const { player } = this.rt, f = player.feet, v = player.velocity;
+    for (const h of this.holes.holes) {
+      if (!h.active || h.t < this.holes.def.rumble * 0.6) continue;
+      const R = this.holes.def.crest + 0.55, c = h.centre;
+      const dx = f[0] - c[0], dz = f[2] - c[2], d = Math.hypot(dx, dz);
+      if (d >= R || Math.abs(f[1] - c[1]) > 2) continue;
+      const nx = d > 1e-3 ? dx / d : 1, nz = d > 1e-3 ? dz / d : 0;
+      f[0] = c[0] + nx * R; f[2] = c[2] + nz * R;
+      const vn = v[0] * nx + v[2] * nz;
+      if (vn < 0) { v[0] -= vn * nx; v[2] -= vn * nz; }
+    }
   }
 
   /** Path distance (m) from the player that tomatoes are brought in at. */
@@ -372,7 +472,8 @@ export class Game {
     this.recoil.reset(rt.camera);
     this.viewmodel.reset();
     this.viewmodel.visible = true;
-    this.horde.begin(rt.player.feet);
+    this.collectHoleMarkers();
+    this.horde.begin(rt.player.feet, this.navKeep());
     this.respawnT = 1;
     this.group.left = 0;
     this.vitals.reset();
@@ -470,6 +571,7 @@ export class Game {
       this.weapon.tick(h, t, input, player, camera, armed);
       this.recoil.tick(h, camera);
       player.tick(h);
+      if (this.active) this.keepOutOfHoles();
       if (this.horde.enabled && this.active) this.horde.tick(h, { feet: player.feet, height: 1.7 });
       if (this.active) {
         this.vitals.tick(h);
@@ -482,6 +584,7 @@ export class Game {
     const now = this.clock.time + alpha * this.clock.step;
     player.frame(sdt, alpha);
     this.horde.pose(sdt, alpha);
+    this.updateHoles(sdt);
     this.hordeSounds(sdt);
     this.respawn(sdt);
     if (this.showHitboxes) this.drawHitboxes();
@@ -549,6 +652,7 @@ export class Game {
 
   /** Clears runtime effects (decals, traces, lights). */
   resetEffects() {
+    this.holes?.clear();
     this.rt.world.clearRuntimeDecals();
     this.shells.clear();
     this.debris?.clear();
@@ -578,10 +682,11 @@ export class Game {
     const runs: Record<number, { samples: { t: number; p: number[] }[]; shots: number[] }> = {};
     input.scripted = true;
     this.deterministic = true;
-    // No tomatoes in the run (they are random, and a bite shoves the player).
+    // No tomatoes or holes in the run (they are random, a bite shoves the player, a crater holds them off).
     const hordeOn = this.horde.enabled;
     this.horde.enabled = false;
     this.horde.clear();
+    this.holes.clear();
     const decals = this.impacts.decals;
     this.impacts.decals = false;
     const onShot = (e: ShotEvent) => run.shots.push(e.time);

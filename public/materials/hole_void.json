@@ -1,0 +1,1 @@
+{ "surface": "soil", "baseColorFactor": "#000000", "roughness": 1, "specular": 0, "porosity": 0, "snow": 0, "notes": "Bug hole throat: flat black, no sheen; the crater walls fade into it (vertex AO), so it reads as bottomless." }

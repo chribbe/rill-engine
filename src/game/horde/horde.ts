@@ -6,6 +6,7 @@ import type { Hittable, ShotHit } from '../combat/hitscan';
 import type { TomatoDef } from './def';
 import { loadTomatoModel, type TomatoModel } from './model';
 import { Tomato, type Prey } from './tomato';
+import type { BugHole } from './hole';
 
 /** Spatial hash size (buckets) for the crowd pass. */
 const HASH = 1024;
@@ -31,9 +32,12 @@ export class Horde implements Hittable {
   /** Nav grid (baked around the play area on `begin`), the world collision it was baked from, its centre. */
   nav: NavGrid | null = null;
   private navRev = -1;
-  private navCentre: [number, number] = [0, 0];
-  /** Half size of the baked square (m). */
+  /** Baked around the prey (m, half size), at most this big a side (m), and places it must cover. */
   navRadius = 80;
+  navMax = 280;
+  private keep: ArrayLike<number>[] = [];
+  /** The nav grid was (re)baked (changes made to the old one, like craters, must be redone). */
+  onNavBuilt: (() => void) | null = null;
   /** Path cost the flow field reaches (≈ m × 20). */
   flowReach = 2400;
   private flowT = 0;
@@ -65,19 +69,32 @@ export class Horde implements Hittable {
 
   /**
    * Ready for a session with the prey at `feet`: (re)bakes the nav grid when the world changed or
-   * the prey is near its border, and settles a first flow field.
+   * the area it covers no longer fits (the prey near its border, a `keep` point outside it), and
+   * settles a first flow field. The grid covers `navRadius` around the prey plus 30 m around each
+   * `keep` point (spawn and hole markers), at most `navMax` metres a side.
    */
-  begin(feet: ArrayLike<number>) {
-    const W = this.world, C = W.collision;
-    const off = Math.max(Math.abs(feet[0] - this.navCentre[0]), Math.abs(feet[2] - this.navCentre[1]));
-    if (!this.nav || this.navRev !== W.collisionRev || off > this.navRadius * 0.5) {
-      const r = this.navRadius;
-      this.nav = NavGrid.build(C.triangleData, { minX: feet[0] - r, maxX: feet[0] + r, minZ: feet[2] - r, maxZ: feet[2] + r });
+  begin(feet: ArrayLike<number>, keep: ArrayLike<number>[] = this.keep) {
+    const W = this.world, C = W.collision, nav = this.nav;
+    this.keep = keep;
+    const inside = (x: number, z: number, m: number) => !!nav && x > nav.x0 + m && z > nav.z0 + m && x < nav.x0 + nav.nx * nav.cell - m && z < nav.z0 + nav.nz * nav.cell - m;
+    const fits = inside(feet[0], feet[2], 25) && keep.every((k) => inside(k[0], k[2], 8));
+    if (!nav || this.navRev !== W.collisionRev || !fits) {
+      const r = this.navRadius, cap = this.navMax / 2;
+      let x0 = feet[0] - r, x1 = feet[0] + r, z0 = feet[2] - r, z1 = feet[2] + r;
+      for (const k of keep) {
+        x0 = Math.min(x0, k[0] - 30); x1 = Math.max(x1, k[0] + 30);
+        z0 = Math.min(z0, k[2] - 30); z1 = Math.max(z1, k[2] + 30);
+      }
+      // Too big: keep what is near the prey.
+      x0 = Math.max(x0, feet[0] - cap); x1 = Math.min(x1, feet[0] + cap);
+      z0 = Math.max(z0, feet[2] - cap); z1 = Math.min(z1, feet[2] + cap);
+      this.nav = NavGrid.build(C.triangleData, { minX: x0, maxX: x1, minZ: z0, maxZ: z1 });
       this.navRev = W.collisionRev;
-      this.navCentre[0] = feet[0]; this.navCentre[1] = feet[2];
+      for (const t of this.list) if (t.active && !t.renav(this.nav)) t.hide();
+      this.onNavBuilt?.();
     }
-    this.nav.computeFlow(feet[0], feet[1], feet[2], this.flowReach);
-    this.flowNode = this.nav.nearestNode(feet[0], feet[1], feet[2]);
+    this.nav!.computeFlow(feet[0], feet[1], feet[2], this.flowReach);
+    this.flowNode = this.nav!.nearestNode(feet[0], feet[1], feet[2]);
     this.flowT = 0;
   }
 
@@ -151,6 +168,40 @@ export class Horde implements Hittable {
     return false;
   }
 
+  /**
+   * Brings one out of `hole`: up from below ground in the throat, leaping out or clambering over
+   * the rim to a landing spot past the crater on the flow field, mostly on the side facing `toward`.
+   */
+  emergeFrom(hole: BugHole, toward: ArrayLike<number>, leapChance = 0.45): Tomato | null {
+    const nav = this.nav, t = this.list.find((x) => !x.active);
+    if (!nav || !t) return null;
+    const c = hole.centre, D = hole.def, to: [number, number, number] = [0, 0, 0];
+    const base = Math.atan2(toward[2] - c[2], toward[0] - c[0]);
+    for (let tries = 0; tries < 12; tries++) {
+      const a = base + (Math.random() * 2 - 1) * (tries < 6 ? 1.7 : Math.PI);
+      const r = D.outer + 0.4 + Math.random() * 2.4;
+      const node = nav.nearestNode(c[0] + Math.cos(a) * r, c[1] + 0.3, c[2] + Math.sin(a) * r, 2, true);
+      if (node < 0) continue;
+      nav.nodeCentre(node, to);
+      if (Math.hypot(to[0] - c[0], to[2] - c[2]) < D.outer * 0.85 || Math.abs(to[1] - c[1]) > 1.5) continue;
+      const out = Math.atan2(to[2] - c[2], to[0] - c[0]);
+      t.def = this.def;
+      t.reset(to, 0, (this.serial++ * 2654435761) >>> 0, node);
+      const leap = Math.random() < leapChance;
+      const from = hole.throatPoint(out, [0, 0, 0], 0.9 + t.ride, leap ? 0.45 : 0.95);
+      const cr = D.crest * 0.97;
+      t.emerge(from, to, node, leap, [c[0] + Math.cos(out) * cr, c[1] + D.height * 0.85 + t.ride * 0.5, c[2] + Math.sin(out) * cr]);
+      return t;
+    }
+    return null;
+  }
+
+  /** The world under the flow field changed (a crater opened): recompute it on the next tick. */
+  invalidateFlow() {
+    this.flowT = 99;
+    this.flowNode = -1;
+  }
+
   /** Kills `t` (events first: gore reads its posed parts), then frees the slot. */
   kill(t: Tomato, point: ArrayLike<number> | null = null, dir: ArrayLike<number> | null = null, impulse = 0) {
     if (!t.active) return;
@@ -164,8 +215,10 @@ export class Horde implements Hittable {
   }
 
   tick(h: number, prey: Prey) {
+    if (!this.nav) return;
+    const f = prey.feet, g = this.nav;
+    if (f[0] < g.x0 + 20 || f[2] < g.z0 + 20 || f[0] > g.x0 + g.nx * g.cell - 20 || f[2] > g.z0 + g.nz * g.cell - 20) this.begin(f);
     const nav = this.nav;
-    if (!nav) return;
     this.updateFlow(h, prey.feet);
     for (const t of this.list) {
       if (!t.alive) continue;
@@ -185,7 +238,7 @@ export class Horde implements Hittable {
     const nav = this.nav!, d = this.def, sp = d.crowd.spacing, VK = 1.3;
     const live = this.live;
     live.length = 0;
-    for (const t of this.list) if (t.alive) live.push(t);
+    for (const t of this.list) if (t.alive && t.state !== 'emerge') live.push(t);
     const n = live.length, head = this.head, next = this.next;
     let rmax = 0;
     for (const t of live) rmax = Math.max(rmax, t.radius);

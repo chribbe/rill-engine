@@ -630,3 +630,38 @@ performance) will need:
   - a GPU measurement at 160 in a real window;
   - the player being shoved by the crowd;
   - waves and holes.
+
+**Individuals, not clones (2026-10-05).** Your note: they feel like clones; give them some individuality.
+- Every tomato rolls its own:
+  - size: 0.72–1.22, and 8% are big ones at 1.45–1.8;
+  - body width and height (squat beefsteaks to tall plums), stance height, nose pitch;
+  - stride, foot lift and sway, jaw rhythm, crown turn and size;
+  - voice pitch;
+  - ripeness: deep red, crimson, orange-red, the odd yellow-orange or dark heirloom.
+- Big ones have health ∝ size² and move slower (speed ∝ size^-0.6); small ones are quick and fragile.
+- Crowd radii, hit shapes, gore and sounds follow each one's size.
+- **Colour** is a small renderer addition: instance flag `I_TINT`. Where the albedo is red-dominant, the instance seed adds green / blue per unit of red and scales the brightness, so the skin's own variation stays (the gold shoulders, the cracks). `Rig.setTint`.
+  - Nothing else sets the flag. Regression views 0 and 4–9 sit at baseline noise (hall views 1–3 vary run to run).
+- Spawns now land on the flow field. Before, a spawn point snapped into a pocket under the stairs could leave a tomato stuck there.
+- Panel: Horde → Variety (new spawns).
+
+**Bug holes (2026-10-05).** Your ask: a large hole that opens from underneath, tomatoes jumping and crawling out; maybe in front of the statue with the people.
+- **The approach, no renderer change:** a crater is built on top of the ground. Paving can't be cut without a discard in the ground shaders, which costs hidden-surface removal on this GPU.
+  - A raised ring of earth around a flat black throat, the Helldivers bug-hole look.
+  - The crater walls fade to black into the throat (vertex AO), so it reads as bottomless.
+  - A tomato starts below ground, where the ground hides it, and appears to climb up out of the dark.
+- **Sequence** (`src/game/horde/hole.ts`):
+  - Rumble (~2.8 s): a swelling sub rumble with stone cracking, the view trembling, cracks racing outwards, dust and grit spitting from the joints, a mound heaving up through the paving.
+  - Burst: a boom and a kick. The mound rises with an overshoot, 22 paving slabs flip up into a ragged rim (some lying half buried, the odd one upside down) and 12 more fly as debris pieces. Then a dust and earth plume, soil and grit raining, spilled-earth stains around it. Dust breathes out of the throat afterwards.
+  - Tomatoes pour out: a gush, then a stream. 28 per hole, about 3–4 a second. About half leap straight out in one arc; the rest climb the throat wall nose-up and hop over the rim. They land 6–9 m out, mostly on your side, and chase.
+  - Tomatoes standing on the spot when it bursts are crushed (they burst).
+  - The crater leaves the nav (`NavGrid.blockDisc`, undoable), and the player is held at the crest; the rim is not in the collision.
+  - A hole refills with ~12 more every 25 s while you are within 90 m.
+- **Markers:** `bug_hole` markers burst when you come within 45 m, from 6 s into a run. One is placed in front of the Resenärer statue, 7 m north of the plinth (pending in the editor as a changeset for you to accept).
+- **Nav:** the bake now also covers the spawn and hole markers (up to 280 m a side; 160 × 170 m on Hässelby, ~190 ms). It re-bakes around you if you get near its edge; tomatoes and craters carry over.
+- **Sounds** (synthesised): `hole_rumble`, `hole_burst`.
+- **Panel:** Horde → Bug holes: open one 16 m ahead, tomatoes per hole, trigger distance, rumble length, burst shake.
+- **Known limits:**
+  - Bullets pass through the rim (not in the collision).
+  - A mid-fight re-bake hitches ~0.2 s.
+  - Thrown slabs don't paint or crush anything.

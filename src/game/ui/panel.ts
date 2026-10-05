@@ -251,6 +251,13 @@ export class TuningPanel {
     f.add(dir, 'packMax', 1, 30, 1).name('Pack size to');
     f.add(dir, 'near', 5, 80, 1).name('Spawn path from (m)');
     f.add(dir, 'far', 7, 110, 1).name('Spawn path to (m)');
+    const ho = f.addFolder('Bug holes');
+    ho.add({ open: () => { const p = g.rt.player, a = g.rt.camera.yaw; g.openHole([p.feet[0] + Math.sin(a) * 16, p.feet[1], p.feet[2] - Math.cos(a) * 16]); } }, 'open').name('Open one ahead (16 m)');
+    ho.add(g, 'holePack', 0, 100, 1).name('Tomatoes per hole');
+    ho.add(g, 'holeTrigger', 5, 150, 1).name('Map holes burst within (m)');
+    ho.add(g.holes.def, 'rumble', 0.3, 8, 0.1).name('Rumble before burst (s)');
+    ho.add(g.holes.def, 'burstShake', 0, 12, 0.1).name('Burst shake');
+    ho.close();
     const pl = f.addFolder('Player health');
     pl.add(g.vitals, 'god').name('Invulnerable');
     pl.add(g.vitals, 'max', 10, 500, 5).name('Health');

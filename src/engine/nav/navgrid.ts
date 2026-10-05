@@ -519,6 +519,45 @@ export class NavGrid {
     if (L[b + 3] < 0 && p[1] < bz0 + margin) p[1] = bz0 + margin;
   }
 
+  /**
+   * Takes the floor within `r` of (x, z) and within 1.5 m of height y out of the grid (a crater
+   * opened there): every link into or out of those nodes goes. Returns an undo.
+   */
+  blockDisc(x: number, y: number, z: number, r: number): () => void {
+    const saved: number[] = [];
+    const cut = (li: number) => { if (this.link[li] >= 0) { saved.push(li, this.link[li]); this.link[li] = -1; } };
+    const cr = Math.ceil(r / this.cell) + 1;
+    const cx = Math.floor((x - this.x0) / this.cell), cz = Math.floor((z - this.z0) / this.cell);
+    for (let iz = cz - cr; iz <= cz + cr; iz++) {
+      for (let ix = cx - cr; ix <= cx + cr; ix++) {
+        if (ix < 0 || iz < 0 || ix >= this.nx || iz >= this.nz) continue;
+        const px = this.x0 + (ix + 0.5) * this.cell - x, pz = this.z0 + (iz + 0.5) * this.cell - z;
+        if (px * px + pz * pz > r * r) continue;
+        const c = iz * this.nx + ix;
+        for (let l = 0; l < this.layerN[c]; l++) {
+          const node = c * MAXL + l;
+          if (Math.abs(this.layerH[node] - y) > 1.5) continue;
+          for (let d = 0; d < 8; d++) {
+            const nb = this.neighbour(node, d);
+            cut(node * 8 + d);
+            if (nb >= 0 && this.link[nb * 8 + OPP[d]] === l) cut(nb * 8 + OPP[d]);
+          }
+          // Links from any neighbour layer onto this one.
+          for (let d = 0; d < 8; d++) {
+            const jx = ix + DIRS[d][0], jz = iz + DIRS[d][1];
+            if (jx < 0 || jz < 0 || jx >= this.nx || jz >= this.nz) continue;
+            const cj = jz * this.nx + jx;
+            for (let lj = 0; lj < this.layerN[cj]; lj++) if (this.link[(cj * MAXL + lj) * 8 + OPP[d]] === l) cut((cj * MAXL + lj) * 8 + OPP[d]);
+          }
+        }
+      }
+    }
+    return () => {
+      for (let i = saved.length - 2; i >= 0; i -= 2) this.link[saved[i]] = saved[i + 1];
+      saved.length = 0;
+    };
+  }
+
   /** Path cost (≈ metres × 20) from (x, y, z) to the target, or Infinity. */
   costAt(x: number, y: number, z: number) {
     const node = this.nodeAt(x, y, z);

@@ -26,7 +26,7 @@ const GAIT_OFFSET = [0, 0.54, 0.08, 0.5, 0.04, 0.58];
 const RAD = Math.PI / 180;
 type V3 = [number, number, number];
 
-export type TomatoState = 'chase' | 'windup' | 'bite' | 'recover' | 'lunge' | 'stagger' | 'dead';
+export type TomatoState = 'chase' | 'windup' | 'bite' | 'recover' | 'lunge' | 'stagger' | 'emerge' | 'dead';
 
 /** What a tomato needs to know about its target each tick. */
 export interface Prey {
@@ -117,6 +117,16 @@ export class Tomato {
   private wobZ = spring();
   private lean = spring();
   private roll = spring();
+  /** Nose-up pitch while clambering out of a hole (and following its flight). */
+  private climbP = spring();
+  /** Coming out of a hole: climbing the throat (phase 0) or in the air (1), where it lands. */
+  private emergePhase = 0;
+  private emergeTop = 0;
+  private emergeTo: V3 = [0, 0, 0];
+  private emergeNode = -1;
+  /** Climb path: bottom (below ground at the throat edge) to the crest, horizontally. */
+  private emergeA: [number, number, number] = [0, 0, 0];
+  private emergeB: [number, number] = [0, 0];
   private lastVel: V3 = [0, 0, 0];
   private gaitPhase = 0;
   /** Turn rate (rad/s, smoothed) and feet planted since the last read (footstep sounds). */
@@ -182,7 +192,7 @@ export class Tomato {
     this.cooldown = 0.3 + this.rand() * 0.4;
     this.stagger = 0;
     this.flinchT = 0;
-    for (const s of [this.jaw, this.squash, this.tiltX, this.tiltZ, this.wobX, this.wobZ, this.lean, this.roll]) s.x = s.v = 0;
+    for (const s of [this.jaw, this.squash, this.tiltX, this.tiltZ, this.wobX, this.wobZ, this.lean, this.roll, this.climbP]) s.x = s.v = 0;
     for (const l of this.legs) { l.hp = 22; l.lost = false; l.t = -1; l.upper.visible = l.lower.visible = true; }
     this.lid.visible = this.crown.visible = this.body.visible = true;
     this.fresh = true;
@@ -229,8 +239,88 @@ export class Tomato {
 
   // ------------------------------------------------------------------ simulation (fixed rate)
 
+  /**
+   * Comes out of a bug hole: from `from` (below ground in the throat) it either leaps straight out
+   * in one arc, or climbs the throat wall up to `crest` (x, height, z) and hops over the rim,
+   * landing at `to` (a ground point on nav `node`), then chases.
+   */
+  emerge(from: ArrayLike<number>, to: ArrayLike<number>, node: number, leap: boolean, crest: ArrayLike<number>) {
+    const top = crest[1];
+    this.state = 'emerge';
+    this.stateT = 0;
+    this.pos[0] = this.prev[0] = from[0]; this.pos[1] = this.prev[1] = from[1]; this.pos[2] = this.prev[2] = from[2];
+    this.emergeTo[0] = to[0]; this.emergeTo[1] = to[1]; this.emergeTo[2] = to[2];
+    this.emergeNode = node;
+    this.emergeTop = top;
+    this.onFloor = this.grounded = false;
+    this.yaw = this.prevYaw = Math.atan2(to[0] - from[0], -(to[2] - from[2]));
+    if (leap) this.launch(top + 1.6 + this.rand() * 1.4);
+    else {
+      this.emergePhase = 0;
+      this.vel[0] = this.vel[2] = 0;
+      this.vel[1] = 2.2 + this.rand() * 0.9;
+      this.emergeA[0] = from[0]; this.emergeA[1] = from[1]; this.emergeA[2] = from[2];
+      this.emergeB[0] = crest[0]; this.emergeB[1] = crest[2];
+    }
+  }
+
+  /** The nav grid was rebaked: find its cells again (false when it no longer stands on any). */
+  renav(nav: NavGrid): boolean {
+    if (this.state === 'emerge') {
+      this.emergeNode = nav.nearestNode(this.emergeTo[0], this.emergeTo[1] + 0.3, this.emergeTo[2], 4);
+      return this.emergeNode >= 0;
+    }
+    this.node = nav.nearestNode(this.pos[0], this.pos[1] - this.ride + 0.3, this.pos[2], 4);
+    return this.node >= 0;
+  }
+
+  /** Ballistic arc from here to the landing point over `apex` (height). */
+  private launch(apex: number) {
+    const g = 9.81, land = this.emergeTo[1] + this.ride;
+    apex = Math.max(apex, this.pos[1] + 0.3, land + 0.3);
+    const up = Math.sqrt(2 * g * (apex - this.pos[1])), T = up / g + Math.sqrt((2 * (apex - land)) / g);
+    this.vel[0] = (this.emergeTo[0] - this.pos[0]) / T;
+    this.vel[1] = up;
+    this.vel[2] = (this.emergeTo[2] - this.pos[2]) / T;
+    this.emergePhase = 1;
+  }
+
+  private tickEmerge(h: number) {
+    if (this.emergePhase === 0) {
+      // Up the throat wall (out along its slope as it rises), then over.
+      this.pos[1] += this.vel[1] * h;
+      const A = this.emergeA, f = Math.max(0, Math.min(1, (this.pos[1] - A[1]) / (this.emergeTop - A[1])));
+      const k = f * f * (3 - 2 * f);
+      this.pos[0] = A[0] + (this.emergeB[0] - A[0]) * k;
+      this.pos[2] = A[2] + (this.emergeB[1] - A[2]) * k;
+      if (this.pos[1] >= this.emergeTop) this.launch(this.emergeTop + 0.45);
+      return;
+    }
+    this.vel[1] -= 9.81 * h;
+    this.pos[0] += this.vel[0] * h; this.pos[1] += this.vel[1] * h; this.pos[2] += this.vel[2] * h;
+    const land = this.emergeTo[1] + this.ride;
+    if (this.vel[1] < 0 && this.pos[1] <= land) {
+      this.pos[1] = land;
+      this.pos[0] = this.emergeTo[0]; this.pos[2] = this.emergeTo[2];
+      this.squash.v -= Math.min(8, -this.vel[1] * 1.2);
+      this.vel[0] *= 0.35; this.vel[1] = 0; this.vel[2] *= 0.35;
+      this.node = this.emergeNode;
+      this.ground = this.emergeTo[1];
+      this.onFloor = this.grounded = true;
+      this.enter('chase');
+      this.cooldown = 0.3;
+    }
+  }
+
   tick(h: number, prey: Prey, nav: NavGrid, onBite: (t: Tomato) => void) {
     if (!this.alive) return;
+    if (this.state === 'emerge') {
+      this.prev[0] = this.pos[0]; this.prev[1] = this.pos[1]; this.prev[2] = this.pos[2];
+      this.prevYaw = this.yaw;
+      this.stateT += h;
+      this.tickEmerge(h);
+      return;
+    }
     const d = this.def, M = d.move, A = d.attack, Cr = d.crowd, S = this.size, range = A.range * S, radius = this.radius, ride0 = this.ride;
     this.prev[0] = this.pos[0]; this.prev[1] = this.pos[1]; this.prev[2] = this.pos[2];
     this.prevYaw = this.yaw;
@@ -408,7 +498,7 @@ export class Tomato {
     this.vel[2] += dir[2] * impulse * R.knock;
     this.flinchT = 0.15;
     this.stagger += damage;
-    if (this.stagger > R.staggerThreshold && this.state !== 'lunge') { this.enter('stagger'); this.stagger = 0; }
+    if (this.stagger > R.staggerThreshold && this.state !== 'lunge' && this.state !== 'emerge') { this.enter('stagger'); this.stagger = 0; }
     if (this.health <= 0) {
       this.state = 'dead';
       result = 'kill';
@@ -462,7 +552,10 @@ export class Tomato {
     const M = this.root;
     mat4.translation([p[0], p[1] + bob, p[2]], M);
     mat4.rotateY(M, -yaw, M);
-    mat4.rotateX(M, this.lean.x + this.tiltX.x + this.pitch0, M);
+    // Clambering out of a hole: nose up the wall, then along the flight.
+    const climbT = this.state !== 'emerge' ? 0 : this.emergePhase === 0 ? 1.15 : Math.max(-0.6, Math.min(0.9, Math.atan2(this.vel[1], Math.hypot(this.vel[0], this.vel[2]) + 0.5) * 0.7));
+    stepSpring(this.climbP, climbT, 5, 0.7, dt);
+    mat4.rotateX(M, this.lean.x + this.tiltX.x + this.pitch0 + this.climbP.x, M);
     mat4.rotateZ(M, this.roll.x + this.tiltZ.x + sway, M);
     mat4.uniformScale(M, this.size, M);
     mat4.inverse(M, this.inv);

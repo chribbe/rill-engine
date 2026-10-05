@@ -28,6 +28,8 @@
     "tomato_hiss": {"spatial": true, "ref": 3, "max": 60, "air": true, "maxVoices": 6, "layers": [{"samples": ["tomato/hiss_1.wav", "tomato/hiss_2.wav", "tomato/hiss_3.wav"], "gain": -6, "gainJitter": 2, "pitch": [0.85, 1.15], "send": 0.25}]},
     "tomato_splat": {"spatial": true, "ref": 2, "max": 45, "air": true, "maxVoices": 8, "layers": [{"samples": ["tomato/splat_1.wav", "tomato/splat_2.wav", "tomato/splat_3.wav", "tomato/splat_4.wav"], "gain": -5, "gainJitter": 2, "pitch": [0.85, 1.15], "send": 0.15}]},
     "tomato_step": {"spatial": true, "ref": 1.5, "max": 25, "air": true, "maxVoices": 10, "layers": [{"samples": ["tomato/step_1.wav", "tomato/step_2.wav", "tomato/step_3.wav", "tomato/step_4.wav"], "gain": -14, "gainJitter": 2, "pitch": [0.9, 1.15], "send": 0.05}]},
-    "tomato_leg": {"spatial": true, "ref": 2.5, "max": 70, "air": true, "maxVoices": 4, "layers": [{"samples": ["tomato/leg_1.wav", "tomato/leg_2.wav"], "gain": -1, "gainJitter": 1, "pitch": [0.9, 1.1], "send": 0.15}]}
+    "tomato_leg": {"spatial": true, "ref": 2.5, "max": 70, "air": true, "maxVoices": 4, "layers": [{"samples": ["tomato/leg_1.wav", "tomato/leg_2.wav"], "gain": -1, "gainJitter": 1, "pitch": [0.9, 1.1], "send": 0.15}]},
+    "hole_rumble": {"spatial": true, "ref": 10, "max": 220, "air": true, "maxVoices": 2, "layers": [{"samples": ["hole/rumble_1.wav"], "gain": 4, "gainJitter": 0, "pitch": [0.95, 1.05], "send": 0.35}]},
+    "hole_burst": {"spatial": true, "ref": 12, "max": 300, "air": true, "maxVoices": 2, "layers": [{"samples": ["hole/burst_1.wav", "hole/burst_2.wav"], "gain": 7, "gainJitter": 1, "pitch": [0.92, 1.05], "send": 0.4}]}
   }
 }
