@@ -84,6 +84,11 @@ export class CollisionWorld {
     return this.stampId;
   }
 
+  /** All triangles, 9 floats each (world space, read-only): navigation baking and similar passes. */
+  get triangleData(): readonly number[] {
+    return this.tris;
+  }
+
   /** Surface class of a triangle. */
   surfaceOf(tri: number): Surface {
     return this.surf[tri] as Surface;
