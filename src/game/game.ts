@@ -13,9 +13,13 @@ import { Recoil } from './weapon/recoil';
 import { ImpactFx, type ImpactTable } from './fx/impacts';
 import { Shells } from './fx/shells';
 import { GameAudio } from './audio/gameaudio';
-import { BEET_DEFAULTS, type EnemyDef } from './enemy/def';
-import { Enemies } from './enemy/manager';
-import type { Enemy } from './enemy/enemy';
+import { Debris } from '../engine/physics/debris';
+import type { MarkerObject } from '../engine/scene/mapformat';
+import { TOMATO_DEFAULTS, type TomatoDef } from './horde/def';
+import { Horde } from './horde/horde';
+import { TomatoGore, GORE_DECALS } from './horde/gore';
+import type { Tomato } from './horde/tomato';
+import { DamageFlash } from './ui/damage';
 import { TuningPanel } from './ui/panel';
 import { DebugHud } from './ui/hud';
 import { Crosshair } from './ui/crosshair';
@@ -43,7 +47,7 @@ export class Game {
   readonly clock = new FixedClock(120);
   readonly playerConfig = new ConfigFile<PlayerTuning>('player', PLAYER_DEFAULTS);
   readonly weaponConfig = new ConfigFile<WeaponDef>('weapons/carbine', CARBINE_DEFAULTS);
-  readonly enemyConfig = new ConfigFile<EnemyDef>('enemies/beet', BEET_DEFAULTS);
+  readonly hordeConfig = new ConfigFile<TomatoDef>('enemies/tomato', TOMATO_DEFAULTS);
   readonly debug: DebugDraw;
   readonly pulses = new LightPulses();
   readonly hitscan: Hitscan;
@@ -52,9 +56,14 @@ export class Game {
   readonly recoil: Recoil;
   readonly shells: Shells;
   readonly audio: GameAudio;
-  readonly enemies: Enemies;
-  /** Draw enemy hit capsules. */
+  readonly horde: Horde;
+  debris!: Debris;
+  gore!: TomatoGore;
+  /** Draw tomato hit shapes. */
   showHitboxes = false;
+  /** Seconds until the next respawn while below `horde.maxAlive`. */
+  private respawnT = 1;
+  damage: DamageFlash | null = null;
   impacts!: ImpactFx;
   private impactTable: ImpactTable = { fallback: 'concrete', surfaces: {} };
   panel: TuningPanel | null = null;
@@ -84,17 +93,21 @@ export class Game {
     this.recoil = new Recoil(this.weaponConfig.data);
     this.shells = new Shells(rt.renderer, rt.world, () => rt.world.collision);
     this.audio = new GameAudio(() => this.impactTable);
-    this.enemies = new Enemies(rt.renderer, rt.world, this.hitscan, this.enemyConfig.data);
+    this.horde = new Horde(rt.renderer, rt.world, this.hordeConfig.data);
+    this.hitscan.targets.push(this.horde);
   }
 
   async init(opts: { panel?: HTMLElement; overlay?: HTMLElement } = {}) {
     const { rt } = this;
     const impacts = fetch('/game/impacts.json', { cache: 'no-store' }).then((r) => r.json() as Promise<ImpactTable>);
-    await Promise.all([this.playerConfig.load(), this.weaponConfig.load(), this.enemyConfig.load(), this.viewmodel.load(), this.shells.load(), this.audio.init(rt.gpu.canvas)]);
-    await this.enemies.load();
+    await Promise.all([this.playerConfig.load(), this.weaponConfig.load(), this.hordeConfig.load(), this.viewmodel.load(), this.shells.load(), this.audio.init(rt.gpu.canvas)]);
+    this.horde.def = this.hordeConfig.data;
+    await this.horde.load();
+    this.debris = new Debris(rt.renderer, rt.world.renderables, () => rt.world.collision, this.horde.model.any, 360);
+    this.gore = new TomatoGore(rt.world, rt.renderer.particles, this.debris, this.audio, this.horde.model, this.hordeConfig.data);
     this.impactTable = await impacts;
     this.impacts = new ImpactFx(this.impactTable, rt.world, rt.renderer.particles, this.pulses);
-    const decalMats = [...Object.values(this.impactTable.surfaces).map((e) => e.decal), this.enemyConfig.data.impact.splat.decal].filter((d): d is string => !!d);
+    const decalMats = [...Object.values(this.impactTable.surfaces).map((e) => e.decal), ...GORE_DECALS].filter((d): d is string => !!d);
     await rt.world.addRuntimeDecalMaterials(decalMats);
     rt.player.tuning = this.playerConfig.data;
     rt.sandbox.ownsParticles = false;
@@ -126,10 +139,9 @@ export class Game {
         fwd, [up[0] * w + j() * 6, up[1] * w + j() * 6, up[2] * w + j() * 6]);
     });
     this.shells.onBounce.push((pos, speed, surface, bounce) => this.audio.brass(surface, pos, speed, bounce));
-    this.enemies.onSpawn.push((e) => {
-      e.onStrike.push((en) => this.onStrike(en));
-      e.onBodyLand.push((en, pos, speed) => this.onBodyLand(en, pos, speed));
-    });
+    this.horde.onKill.push((t, point, dir, impulse) => this.onTomatoKill(t, point, dir, impulse));
+    this.horde.onLeg.push((t, i, point, dir) => this.gore.legOff(t, i, point, dir));
+    this.horde.onBite.push((t) => this.onBite(t));
     if (opts.panel) this.panel = new TuningPanel(this, opts.panel);
     // Overlays (crosshair, readout, recoil plot) centre on `overlay` (positioned), default the page.
     const overlay = opts.overlay ?? document.body;
@@ -137,6 +149,7 @@ export class Game {
     this.crosshair = new Crosshair(overlay);
     this.recoilPlot = new RecoilPlot(overlay);
     this.ammo = new AmmoIndicator(overlay);
+    this.damage = new DamageFlash(overlay);
     document.getElementById('crosshair')?.remove();
     this.ready = true;
   }
@@ -165,8 +178,8 @@ export class Game {
     this.clock.reset();
     // Gun smoke and impact dust drift with only part of the map's wind (restored in end()).
     rt.renderer.particles.airScale = this.impactTable.wind ?? 1;
-    this.enemies.clear();
-    if (this.enemies.enabled) this.enemies.spawn(rt.player);
+    this.horde.clear();
+    this.respawnT = 1;
     if (this.crosshair) this.crosshair.visible = true;
     if (this.hud) this.hud.el.style.visibility = '';
     this.active = true;
@@ -176,7 +189,7 @@ export class Game {
   end() {
     const { rt } = this;
     this.active = false;
-    this.enemies.clear();
+    this.horde.clear();
     this.resetEffects();
     this.viewmodel.hide();
     this.recoil.reset(rt.camera);
@@ -187,62 +200,62 @@ export class Game {
     if (this.recoilPlot) this.recoilPlot.el.style.display = 'none';
   }
 
-  /**
-   * Enemy-specific hit feedback (EnemyDef.impact): the surface profile's juice,
-   * hard chunks that land, sometimes a splat sprayed onto the world behind the
-   * hit; on a kill a burst, more chunks and (headshot) a neck spray.
-   */
-  private enemyHitFx(en: Enemy, h: { point: [number, number, number]; normal: [number, number, number]; region: string }, dir: ArrayLike<number>, killed: boolean, wasAlive: boolean) {
-    const I = en.def.impact, P = this.rt.renderer.particles, W = this.rt.world, C = W.collision;
-    this.impacts.playSurface(I.surface, h.point, h.normal, dir, false);
-    const floor = C.groundHeight(h.point[0], h.point[1] + 0.1, h.point[2], 4);
-    const n = h.normal;
-    const out = [n[0] * 0.6 + dir[0] * 0.4, n[1] * 0.6 + dir[1] * 0.4 + 0.3, n[2] * 0.6 + dir[2] * 0.4];
-    const count = (wasAlive ? I.chunks[0] + Math.floor(Math.random() * (I.chunks[1] - I.chunks[0] + 1)) : 1) + (killed ? I.deathChunks : 0);
-    P.emit('debris', { count, pos: h.point, dir: out, spread: killed ? 1 : 0.6, speed: killed ? [1.5, 5] : [1.2, 3.5], life: [1.4, 2.6], size: [0.012, 0.032], color: I.chunkColor, alpha: 1, drag: 0.5, gravity: 9.8, floor: floor > -Infinity ? floor : undefined });
-    if (killed) {
-      P.emit('dust', { count: I.deathBurst, pos: h.point, dir: out, spread: 1, speed: [1, 4.5], life: [0.4, 1], size: [0.01, 0.045], color: I.juice, alpha: 0.95, drag: 1.1, gravity: 9.8 });
-      if (h.region === 'head' && en.ragdoll?.headPopped) {
-        const neck = en.ragdoll.joint(en.def.ragdoll.head[0]);
-        if (neck) P.emit('dust', { count: 26, pos: neck.pos, dir: [0, 1, 0], spread: 0.5, speed: [1.5, 4.5], life: [0.5, 1.1], size: [0.012, 0.05], color: I.juice, alpha: 0.95, drag: 1, gravity: 9.8 });
+  /** Spawn points: `enemy_spawn` markers, else 14 m in front of the map's player start. */
+  spawnPoints(): { position: [number, number, number]; yaw: number }[] {
+    const W = this.rt.world;
+    const m = W.doc.entities.filter((e): e is MarkerObject => e.type === 'marker' && e.semantic === 'enemy_spawn');
+    if (m.length) return m.map((e) => ({ position: [...e.transform.position] as [number, number, number], yaw: e.yaw ?? 0 }));
+    const s = W.spawn(), a = (s.yaw * Math.PI) / 180;
+    return [{ position: [s.position[0] + Math.sin(a) * 14, s.position[1], s.position[2] - Math.cos(a) * 14], yaw: s.yaw + 180 }];
+  }
+
+  /** Spawns a tomato at `at` (ground point), or at the spawn point farthest from the player. */
+  spawnTomato(at?: ArrayLike<number>) {
+    const { player } = this.rt;
+    let pos: ArrayLike<number> | undefined = at, yaw = 0;
+    if (!pos) {
+      let bd = -1;
+      for (const p of this.spawnPoints()) {
+        const d = Math.hypot(p.position[0] - player.feet[0], p.position[2] - player.feet[2]);
+        if (d > bd) { bd = d; pos = p.position; yaw = (p.yaw * Math.PI) / 180; }
       }
+    } else {
+      yaw = Math.atan2(player.feet[0] - pos[0], -(player.feet[2] - pos[2]));
     }
-    // Spray behind the hit onto walls within reach, else down onto the ground behind it.
-    if (Math.random() < I.splat.chance * (killed ? 2 : 1)) {
-      const [a, b] = I.splat.size;
-      let hit = C.raycast(h.point, dir, I.splat.reach);
-      if (!hit) {
-        const dl = Math.hypot(dir[0], dir[2]) || 1, f = 0.3 + Math.random() * 0.5;
-        const down = [dir[0] / dl * f, -1, dir[2] / dl * f], l = Math.hypot(down[0], down[1], down[2]);
-        hit = C.raycast(h.point, [down[0] / l, down[1] / l, down[2] / l], I.splat.reach + 1.5);
-      }
-      if (hit) W.addDecal(I.splat.decal, hit.point, hit.normal, a + Math.random() * (b - a), true);
+    const g = this.rt.world.collision.groundHeight(pos![0], pos![1] + 1, pos![2], 4);
+    return this.horde.spawn([pos![0], g > -Infinity ? g : pos![1], pos![2]], yaw);
+  }
+
+  /** Keeps `horde.maxAlive` tomatoes coming (one every ~1.2 s). */
+  private respawn(dt: number) {
+    if (!this.active || !this.horde.enabled) return;
+    if (this.horde.alive >= this.horde.maxAlive) { this.respawnT = Math.max(this.respawnT, 0.6); return; }
+    this.respawnT -= dt;
+    if (this.respawnT <= 0) {
+      this.spawnTomato();
+      this.respawnT = 1.2;
     }
   }
 
-  /** The corpse hits the ground: a splat under it, a wet thud. */
-  private onBodyLand(en: Enemy, pos: ArrayLike<number>, speed: number) {
-    const W = this.rt.world, I = en.def.impact;
-    const g = W.collision.groundHeight(pos[0], pos[1] + 0.3, pos[2], 2);
-    if (g > -Infinity) {
-      const [a, b] = I.landSplat;
-      W.addDecal(I.splat.decal, [pos[0], g, pos[2]], [0, 1, 0], a + Math.random() * (b - a), true);
-    }
-    this.audio.play('land_soft', { pos, gain: Math.min(4, speed * 2), pitch: 0.75 });
-    this.audio.play('impact_flesh', { pos, gain: -3, pitch: 0.8 });
-    this.rt.renderer.particles.emit('dust', { count: 10, pos, dir: [0, 1, 0], spread: 1, speed: [0.5, 2], life: [0.4, 0.8], size: [0.01, 0.035], color: I.juice, alpha: 0.9, drag: 1.5, gravity: 9.8 });
+  /** A tomato burst: gore, a shake when it is close, the kill confirm on the crosshair. */
+  private onTomatoKill(t: Tomato, point: ArrayLike<number> | null, dir: ArrayLike<number> | null, impulse: number) {
+    this.gore.burst(t, point, dir, impulse);
+    const { camera } = this.rt;
+    const d = Math.hypot(t.shown[0] - camera.position[0], t.shown[1] - camera.position[1], t.shown[2] - camera.position[2]);
+    const k = this.hordeConfig.data.gore.shake / Math.max(1, d);
+    if (k > 0.05) this.recoil.kickView(k * (Math.random() - 0.3), k * (Math.random() - 0.5), k * (Math.random() - 0.5) * 1.5);
   }
 
-  /** An enemy's swing connected: the player feels it (view kick, thud). */
-  private onStrike(e: Enemy) {
+  /** A bite connected: the view is knocked away from it, the player shoved, a red flash, a crunch. */
+  private onBite(t: Tomato) {
     const { camera, player } = this.rt;
-    const dx = player.feet[0] - e.feet[0], dz = player.feet[2] - e.feet[2], l = Math.hypot(dx, dz) || 1;
-    // Knock the view away from the blow and shove the player.
+    const dx = player.feet[0] - t.pos[0], dz = player.feet[2] - t.pos[2], l = Math.hypot(dx, dz) || 1;
     const side = (dx / l) * Math.cos(camera.yaw) + (dz / l) * Math.sin(camera.yaw);
-    this.recoil.kickView(-4, side * 6, side * 5);
-    player.velocity[0] += (dx / l) * 3.5;
-    player.velocity[2] += (dz / l) * 3.5;
-    this.audio.play('impact_flesh', { pos: camera.position, gain: 3, pitch: 0.7 });
+    this.recoil.kickView(-3.5, side * 5, side * 6);
+    player.velocity[0] += (dx / l) * 3;
+    player.velocity[2] += (dz / l) * 3;
+    this.damage?.hit(this.hordeConfig.data.attack.damage, dx / l, dz / l, camera.yaw);
+    this.audio.play('tomato_bite', { pos: t.shown, gain: 3 });
   }
 
   private onShot(e: ShotEvent) {
@@ -256,16 +269,14 @@ export class Game {
     let end: number[] = [e.origin[0] + e.dir[0] * 300, e.origin[1] + e.dir[1] * 300, e.origin[2] + e.dir[2] * 300];
     for (let i = 0; i < e.hitCount; i++) {
       const h = e.hits[i];
-      if (h.kind === 'target') {
-        const en = h.target as Enemy;
-        const reg = en.def.regions[h.region] ?? { damage: 1, stagger: 1 };
-        const dmg = h.damage * reg.damage;
-        h.damage = dmg;
-        const wasAlive = en.alive;
-        const killed = en.hit(dmg, h.region, h.point, e.dir, this.weapon.def.fire.impactForce, h.part || 'body', this.clock.step);
-        this.enemyHitFx(en, h, e.dir, killed, wasAlive);
-        this.audio.play('impact_flesh', { pos: h.point, at: at + h.t / 900, gain: killed ? 3 : wasAlive ? 0 : -4 });
-        if (wasAlive) this.crosshair?.confirm(killed);
+      if (h.kind === 'target' && h.target === this.horde && h.index >= 0) {
+        const t = this.horde.list[h.index];
+        h.damage *= h.region === 'maw' ? 1.8 : h.region === 'leg' ? 0.6 : 1;
+        if (t.alive) {
+          this.gore.hitSpurt(t, h.point, h.normal, e.dir, h.region);
+          const r = this.horde.hit(h.index, h.damage, h.point, e.dir, this.weapon.def.fire.impactForce, h.part);
+          this.crosshair?.confirm(r === 'kill');
+        }
       }
       if (h.kind === 'world') {
         this.impacts.play(h, e.dir);
@@ -336,13 +347,14 @@ export class Game {
       this.weapon.tick(h, t, input, player, camera, armed);
       this.recoil.tick(h, camera);
       player.tick(h);
-      this.enemies.tick(h, player);
+      if (this.horde.enabled && this.active) this.horde.tick(h, { feet: player.feet, height: 1.7 });
       input.endTick();
     });
     const sdt = dt * this.clock.timeScale;
     const now = this.clock.time + alpha * this.clock.step;
     player.frame(sdt, alpha);
-    this.enemies.pose(sdt, alpha, player);
+    this.horde.pose(sdt, alpha);
+    this.respawn(sdt);
     if (this.showHitboxes) this.drawHitboxes();
     this.recoil.frame(sdt, alpha, camera);
     world.update(sdt, player.feet);
@@ -358,6 +370,9 @@ export class Game {
     this.viewmodel.update(sdt, now, look, player, armed && input.buttonDown(0), this.weapon.interval);
     this.ammo?.update(sdt, W.ammo, W.def.fire.magazine, W.def.fire.infiniteAmmo, W.reloading ? { t: W.reloadT, total: W.reloadEmpty ? W.def.reload.empty : W.def.reload.tactical } : null, this.active);
     this.shells.update(sdt);
+    this.debris.update(sdt);
+    this.gore.update(sdt);
+    this.damage?.update(sdt);
     this.impacts.update(sdt);
     this.audio.frame(dt, camera, world.collision);
     // Exact burst cadence: the next shot's sound is scheduled ~a frame ahead and the shot committed
@@ -378,13 +393,17 @@ export class Game {
   };
 
   private drawHitboxes() {
-    for (const en of this.enemies.list) {
-      const C = en.capsules();
-      for (let i = 0; i < C.length; i += 7) {
-        const col: [number, number, number, number] = en.alive ? [1, 0.4, 0.2, 1] : [0.5, 0.5, 0.5, 1];
-        this.debug.line([C[i], C[i + 1], C[i + 2]], [C[i + 3], C[i + 4], C[i + 5]], col, 0);
-        this.debug.cross([C[i], C[i + 1], C[i + 2]], C[i + 6] * 2, col, 0);
-        this.debug.cross([C[i + 3], C[i + 4], C[i + 5]], C[i + 6] * 2, col, 0);
+    const A: [number, number, number] = [0, 0, 0], B: [number, number, number] = [0, 0, 0];
+    for (const t of this.horde.list) {
+      if (!t.alive) continue;
+      const col: [number, number, number, number] = [1, 0.4, 0.2, 1];
+      this.debug.cross(t.shown, this.horde.def.radius * 1.9, col, 0);
+      for (let i = 0; i < 6; i++) {
+        if (t.legs[i].lost) continue;
+        for (const lower of [false, true]) {
+          t.legSegment(i, lower, A, B);
+          this.debug.line(A, B, col, 0);
+        }
       }
     }
   }
@@ -393,6 +412,8 @@ export class Game {
   resetEffects() {
     this.rt.world.clearRuntimeDecals();
     this.shells.clear();
+    this.debris?.clear();
+    this.gore?.clear();
     this.debug.clear();
     this.pulses.clear();
   }
@@ -417,6 +438,10 @@ export class Game {
     const runs: Record<number, { samples: { t: number; p: number[] }[]; shots: number[] }> = {};
     input.scripted = true;
     this.deterministic = true;
+    // No tomatoes in the run (they are random, and a bite shoves the player).
+    const hordeOn = this.horde.enabled;
+    this.horde.enabled = false;
+    this.horde.clear();
     const decals = this.impacts.decals;
     this.impacts.decals = false;
     const onShot = (e: ShotEvent) => run.shots.push(e.time);
@@ -446,6 +471,7 @@ export class Game {
       }
     } finally {
       this.deterministic = false;
+      this.horde.enabled = hordeOn;
       this.beforeTick = null;
       this.weapon.onShot.splice(this.weapon.onShot.indexOf(onShot), 1);
       this.impacts.decals = decals;

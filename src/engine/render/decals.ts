@@ -134,7 +134,7 @@ export class DecalSet {
    * Adds a runtime decal projected along -normal onto the surface at `point`.
    * `size` is the footprint (m); depth is a few cm so it only touches the hit surface.
    */
-  addDynamic(material: string, point: ArrayLike<number>, normal: ArrayLike<number>, size: number, angle = Math.random() * Math.PI * 2, depth = 0.06) {
+  addDynamic(material: string, point: ArrayLike<number>, normal: ArrayLike<number>, size: number, angle = Math.random() * Math.PI * 2, depth = Math.max(0.06, size * 0.22)) {
     // Box +Z = surface normal (projection axis), rolled by `angle` around it.
     const z = vec3.normalize(vec3.fromValues(normal[0], normal[1], normal[2]));
     const ref = Math.abs(z[1]) < 0.9 ? vec3.fromValues(0, 1, 0) : vec3.fromValues(1, 0, 0);

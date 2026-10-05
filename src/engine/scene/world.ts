@@ -168,10 +168,12 @@ export class World {
    * Runtime decal (bullet hole...) on the surface hit at `point` with outward
    * `normal`. `defer`: batch the grid rebuild and upload into `flushRuntimeDecals`
    * (call it once before rendering), so full-auto fire costs one rebuild per frame.
+   * `angle`: roll about the normal (radians; random when omitted; 0 on a wall = texture up is world up).
+   * The projection box is deeper for bigger decals (a large splat drapes over uneven paving and kerbs).
    */
-  addDecal(material: string, point: ArrayLike<number>, normal: ArrayLike<number>, size: number, defer = false) {
+  addDecal(material: string, point: ArrayLike<number>, normal: ArrayLike<number>, size: number, defer = false, angle?: number) {
     if (!this.decals?.has(material)) return false;
-    this.decals.addDynamic(material, point, normal, size);
+    this.decals.addDynamic(material, point, normal, size, angle);
     if (defer) this.runtimeDecalsDirty = true;
     else this.uploadDecals();
     return true;

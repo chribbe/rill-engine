@@ -20,13 +20,15 @@ export interface ShotHit {
   region: string;
   part: string;
   target: Hittable | null;
+  /** Which of the target's members was hit (e.g. a horde agent), -1 = none. */
+  index: number;
   /** The bullet continued through this surface (glass). */
   pierced: boolean;
   /** Filled by the weapon. */
   damage: number;
 }
 
-const newHit = (): ShotHit => ({ kind: 'world', t: 0, point: [0, 0, 0], normal: [0, 0, 0], surface: 0, owner: '', region: '', part: '', target: null, pierced: false, damage: 0 });
+const newHit = (): ShotHit => ({ kind: 'world', t: 0, point: [0, 0, 0], normal: [0, 0, 0], surface: 0, owner: '', region: '', part: '', target: null, index: -1, pierced: false, damage: 0 });
 
 const GLASS = surfaceId('glass');
 const MAX_HITS = 4;
@@ -82,6 +84,7 @@ export class Hitscan {
       h.region = '';
       h.part = '';
       h.target = null;
+      h.index = -1;
       h.pierced = pierceGlass && w.surface === GLASS;
       if (!h.pierced) return n;
       // Continue just beyond the pane.

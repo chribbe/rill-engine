@@ -1,0 +1,16 @@
+{
+  "surface": "flesh",
+  "baseColor": "enemies/tomato_albedo.png",
+  "orm": "enemies/tomato_orm.png",
+  "normal": "enemies/tomato_normal.png",
+  "normalStrength": 1,
+  "physicalSize": 1,
+  "roughness": 1,
+  "metallic": 1,
+  "roughnessRange": [0, 1],
+  "aoStrength": 1,
+  "specular": 0.35,
+  "porosity": 0,
+  "snow": 0,
+  "notes": "Tomato bug (tools/blender/build_tomato.py): one baked 2048 atlas for rig parts and gibs; ORM = AO, roughness, 0."
+}

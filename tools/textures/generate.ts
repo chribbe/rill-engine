@@ -1296,34 +1296,78 @@ recipes.decals = () => {
   });
 };
 
-// Splat (enemy juice on walls / ground): white mask tinted by its decal material.
-recipes.splats = () => {
-  const rr = (() => { let s = 0x5a17; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); })();
-  const drops: { x: number; y: number; r: number; sx: number; sy: number }[] = [];
-  for (let k = 0; k < 46; k++) {
-    const a = rr() * Math.PI * 2, d = 0.3 + Math.pow(rr(), 0.7) * 0.62;
-    const r = (0.012 + rr() * 0.035) * (1.25 - d);
-    // Streak drops are stretched along the radial direction.
-    const st = rr() < 0.4 ? 2.5 + rr() * 3 : 1;
-    drops.push({ x: 0.5 + Math.cos(a) * d * 0.5, y: 0.5 + Math.sin(a) * d * 0.5, r, sx: Math.cos(a), sy: Math.sin(a) * 1 + 0 * st });
-    (drops[drops.length - 1] as unknown as { st: number }).st = st;
-  }
-  decal('splat', (u, v, o) => {
-    const dx = u - 0.5, dy = v - 0.5;
-    const r = Math.hypot(dx, dy) * 2;
-    const ca = dx / Math.max(1e-6, r) * 2, sa = dy / Math.max(1e-6, r) * 2;
-    const edge = 0.34 + fbm(0.5 + ca * 0.16, 0.5 + sa * 0.16, 5, 3, 611) * 0.32 + fbm(u, v, 20, 2, 612) * 0.05;
-    let a = smoothstep(edge + 0.015, edge - 0.015, r);
-    for (const d of drops) {
-      const st = (d as unknown as { st: number }).st;
-      const px = u - d.x, py = v - d.y;
-      const along = px * d.sx + py * d.sy, across = -px * d.sy + py * d.sx;
-      const q = Math.hypot(along / st, across) / d.r;
-      a = Math.max(a, smoothstep(1.05, 0.9, q));
+
+// Tomato gore (linear colour, wet; tint 1 in the materials): thin dark juice film at the edges and
+// in satellite drops, thick orange-red pulp lumps in the body, pale seeds; three floor splats and a
+// wall splat whose drips run down the image (v grows downwards = world down on a wall decal).
+recipes.gore = () => {
+  const juice = [0.028, 0.0012, 0.001], thin = [0.045, 0.0025, 0.0018], pulp = [0.14, 0.012, 0.005], seed = [0.36, 0.27, 0.11];
+  const mk = (seedBase: number) => {
+    let s = seedBase >>> 0;
+    const rr = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+    return rr;
+  };
+  const splat = (name: string, sd: number, drip: boolean) => {
+    const rr = mk(sd);
+    const drops: { x: number; y: number; r: number; dx: number; dy: number; st: number }[] = [];
+    for (let k = 0; k < (drip ? 26 : 60); k++) {
+      const a = rr() * Math.PI * 2, d = 0.28 + Math.pow(rr(), 0.6) * 0.66;
+      const st = rr() < 0.45 ? 2 + rr() * 4 : 1;
+      drops.push({ x: 0.5 + Math.cos(a) * d * 0.5, y: (drip ? 0.36 : 0.5) + Math.sin(a) * d * (drip ? 0.32 : 0.5), r: (0.008 + rr() * 0.03) * (1.3 - d), dx: Math.cos(a), dy: Math.sin(a), st });
     }
-    const c = 0.8 + fbm(u, v, 14, 3, 613) * 0.2 + smoothstep(0.9, 0.2, r) * 0.08;
-    o[0] = c; o[1] = c; o[2] = c; o[3] = clamp01(a * (0.92 + fbm(u, v, 30, 2, 614) * 0.08));
-  });
+    const lumps: { x: number; y: number; r: number }[] = [];
+    for (let k = 0; k < 9; k++) lumps.push({ x: 0.5 + (rr() - 0.5) * 0.36, y: (drip ? 0.34 : 0.5) + (rr() - 0.5) * (drip ? 0.24 : 0.36), r: 0.05 + rr() * 0.08 });
+    const seeds: { x: number; y: number; a: number }[] = [];
+    for (let k = 0; k < 34; k++) {
+      const l = lumps[k % lumps.length];
+      seeds.push({ x: l.x + (rr() - 0.5) * l.r * 2.2, y: l.y + (rr() - 0.5) * l.r * 2.2, a: rr() * Math.PI });
+    }
+    const runs: { x: number; w: number; len: number }[] = [];
+    if (drip) for (let k = 0; k < 9; k++) runs.push({ x: 0.22 + rr() * 0.56, w: 0.008 + rr() * 0.018, len: 0.25 + rr() * 0.5 });
+    decal(name, (u, v, o) => {
+      const cy = drip ? 0.36 : 0.5;
+      const dx = u - 0.5, dy = (v - cy) / (drip ? 0.7 : 1);
+      const r = Math.hypot(dx, dy) * 2;
+      const ca = dx / Math.max(1e-6, r) * 2, sa = dy / Math.max(1e-6, r) * 2;
+      const edge = 0.3 + fbm(0.5 + ca * 0.18, 0.5 + sa * 0.18, 5, 3, sd + 11) * 0.36 + fbm(u, v, 22, 2, sd + 12) * 0.05;
+      let body = smoothstep(edge + 0.012, edge - 0.012, r);
+      let a = body;
+      for (const d of drops) {
+        const px = u - d.x, py = v - d.y;
+        const along = px * d.dx + py * d.dy, across = -px * d.dy + py * d.dx;
+        a = Math.max(a, smoothstep(1.05, 0.88, Math.hypot(along / d.st, across) / d.r));
+      }
+      // Drips: run down from the body, thinning, with a bead at the end.
+      for (const d of runs) {
+        const y0 = cy + 0.08, y1 = y0 + d.len;
+        if (v < y0 || v > y1 + 0.03) continue;
+        const t = (v - y0) / d.len, w = d.w * (1 - t * 0.55) * (1 + 0.15 * Math.sin(v * 60 + d.x * 30));
+        const x = d.x + Math.sin(v * 9 + d.x * 17) * 0.006;
+        a = Math.max(a, smoothstep(w * 1.05, w * 0.8, Math.abs(u - x)) * (v <= y1 ? 1 : 0));
+        a = Math.max(a, smoothstep(1.05, 0.85, Math.hypot(u - x, v - y1) / (d.w * 1.5)));
+      }
+      // Thickness: pulp lumps in the body, thin film elsewhere.
+      let thick = 0;
+      for (const l of lumps) thick = Math.max(thick, smoothstep(1, 0.25, Math.hypot(u - l.x, v - l.y) / l.r));
+      thick = clamp01(thick * body * (0.75 + fbm(u, v, 18, 3, sd + 13) * 0.5));
+      let c = [0, 0, 0];
+      const n = fbm(u, v, 30, 2, sd + 14);
+      for (let i = 0; i < 3; i++) c[i] = juice[i] + (thin[i] - juice[i]) * (1 - body) + (pulp[i] - juice[i]) * thick * (0.8 + n * 0.4);
+      let sa2 = 0;
+      for (const q of seeds) {
+        const px = u - q.x, py = v - q.y, ca2 = Math.cos(q.a), sa3 = Math.sin(q.a);
+        const e = Math.hypot((px * ca2 + py * sa3) / 0.011, (-px * sa3 + py * ca2) / 0.0075);
+        sa2 = Math.max(sa2, smoothstep(1, 0.6, e) * thick);
+      }
+      for (let i = 0; i < 3; i++) c[i] = c[i] * (1 - sa2) + seed[i] * sa2;
+      o[0] = c[0]; o[1] = c[1]; o[2] = c[2];
+      o[3] = clamp01(a * (0.85 + thick * 0.15) * (0.9 + fbm(u, v, 40, 2, sd + 15) * 0.1));
+    });
+  };
+  splat('tomato_splat_a', 0x7a11, false);
+  splat('tomato_splat_b', 0x7a22, false);
+  splat('tomato_splat_c', 0x7a33, false);
+  splat('tomato_drip', 0x7a44, true);
 };
 
 // Effects atlas (additive sprites, sRGB colour = premultiplied intensity), 2048 x 1024, 512 tiles:

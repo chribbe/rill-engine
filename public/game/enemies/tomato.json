@@ -1,0 +1,110 @@
+{
+  "name": "Tomato",
+  "model": "/assets/enemies/tomato.glb",
+  "material": "veg_tomato",
+  "scale": 1.35,
+  "radius": 0.42,
+  "rideHeight": 0.56,
+  "health": 70,
+  "move": {
+    "speed": 4.2,
+    "sprint": 6.5,
+    "sprintDistance": 14,
+    "accel": 14,
+    "turnRate": 300,
+    "speedJitter": 0.18
+  },
+  "gait": {
+    "stride": 0.42,
+    "lift": 0.14,
+    "stepTime": 0.13,
+    "bob": 0.035,
+    "lean": 1.4,
+    "roll": 10,
+    "lead": 0.12
+  },
+  "attack": {
+    "range": 1.25,
+    "windup": 0.18,
+    "bite": 0.08,
+    "recover": 0.35,
+    "cooldown": 0.5,
+    "damage": 12,
+    "lungeRange": [
+      2.4,
+      5.5
+    ],
+    "lungeSpeed": 7.5,
+    "lungeUp": 3.4,
+    "lungeChance": 1.2,
+    "jawChase": 14,
+    "jawOpen": 52
+  },
+  "reactions": {
+    "knock": 0.09,
+    "squash": 0.18,
+    "springHz": 5,
+    "springDamping": 0.32,
+    "staggerThreshold": 40,
+    "staggerTime": 0.35,
+    "flinch": 0.5
+  },
+  "gore": {
+    "shells": [
+      5,
+      7
+    ],
+    "chunks": [
+      1,
+      2
+    ],
+    "pulp": [
+      3,
+      5
+    ],
+    "gibSpeed": [
+      2.5,
+      8
+    ],
+    "gibSpin": 16,
+    "gibScale": [
+      1,
+      1.5
+    ],
+    "gibLife": 60,
+    "legsOff": 3,
+    "spray": 120,
+    "splats": 10,
+    "splatSize": [
+      0.6,
+      1.4
+    ],
+    "splatRadius": 3.6,
+    "wallSplats": 5,
+    "poolSize": [
+      2.2,
+      3.2
+    ],
+    "mist": 0.35,
+    "juice": [
+      0.05,
+      0.0022,
+      0.0015
+    ],
+    "flesh": [
+      0.2,
+      0.018,
+      0.007
+    ],
+    "seed": [
+      0.42,
+      0.33,
+      0.15
+    ],
+    "hitSpray": 12,
+    "hitSplatChance": 0.45,
+    "hitSplatReach": 2.5,
+    "light": 120,
+    "shake": 2.2
+  }
+}

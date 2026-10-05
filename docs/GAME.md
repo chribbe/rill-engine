@@ -3,9 +3,10 @@
 Living document for the gameplay phase. The renderer ([ENGINE.md](ENGINE.md)) and the editor
 ([EDITOR.md](EDITOR.md)) are stable subsystems; gameplay adds to them, it doesn't rewrite them.
 
-**Current milestone: G1 — movement + one gun + one enemy that feel exceptional.**
-Not in G1: subway, narration, radio, missions, inventory, more weapons or enemy types, hordes,
-holes, bosses, cinematics, saves, destruction (see the brief; G2–G5 come later, in order).
+**Current milestone: G2 — the tomato horde** (plan in §8). G1 (movement, the gun, one enemy) is
+done; the gun was signed off on 2026-10-05 ("it looks juicy").
+Not yet: subway, narration, radio, missions, inventory, more weapons, holes in the ground (later in
+G2's direction, not in its first steps), bosses, cinematics, saves.
 
 ---
 
@@ -428,3 +429,103 @@ performance) will need:
 - View punch pitch 0.55° and weapon kick back / rise (2.8 cm / 2.4°): the "weight" of each shot.
 - Look lag (0.9) and bob: how glued the gun feels.
 - Enemy part kick (2.2), stagger threshold (60), health (180): how hits read and how long a fight lasts.
+
+---
+
+## 8. G2 — the tomato horde (plan, 2026-10-05)
+
+**Direction (yours):**
+- Scrap the beetroot.
+- Go for a Starship Troopers / Helldivers 2 / Warhammer 40k vibe, starting with a tomato enemy that explodes into a gory mess when it dies: big chunky splats with great feel.
+- They come in hordes that climb on top of each other and chase you up the subway platform.
+- The key contrast: the level stays real, grey, overcast suburbia, and the enemies are ridiculous and over the top.
+- Later they flow up out of holes in the ground; start without. AAA, massively juicy, gore welcome.
+
+**The tomato (design proposal):** a tomato *bug*.
+- A bloated, glossy beefsteak-tomato body about 0.8 m across, standing about 1 m tall on six thorny green vine legs (insect-like, two segments each).
+- A green sepal crown and stem on top.
+- A horizontal maw splitting the fruit that gapes open on pale gel, seeds for teeth and wet red pulp.
+- It skitters fast, rears up and lunges. At a distance it reads as a red blob against the grey city.
+- Hits: juice spurts, the skin dents (squash) and seeds spray.
+- Death: it bursts.
+  - 8–12 chunk meshes (skin shells, pulp lumps, the crown, leg pieces) are thrown spinning; they bounce, slide and settle.
+  - Juice, pulp and seed spray paints splats where the drops land.
+  - A red mist puff, one big splat on the ground (and the wall behind, if close).
+  - A heavy wet squelch and a bass thump.
+  - Chunks and splats persist (within budgets), so a fight leaves the square painted.
+
+**Architecture (new, data-oriented; the G1 `Enemy` is one heavy object with a capsule motor and a ragdoll, fine for one, not for 200):**
+1. **Agents:** a struct-of-arrays `Horde` (position, velocity, heading, state, health, gait phase...), ticked at a fixed rate.
+2. **Nav grid (engine):** a layered 0.5 m grid of walkable heights baked from the collision mesh. Several levels per column: square, hall, stair flights, platform at +8.25 m.
+   - A flow field (Dijkstra from the player) refreshed a few times a second.
+   - Ground and walls come from the grid (O(1)) instead of triangle tests.
+3. **Crowd physics (engine):** spheres in a spatial hash that push apart.
+   - A tomato blocked by others on the way to its goal climbs onto them and stands on their tops.
+   - So they pile up at chokepoints (doors, the 2 m stair flights, around you) and pour over each other. Ones that lose their footing tumble off.
+4. **Attacks:** a bite or slam up close, a lunge from a few metres.
+   - The player gets minimal health, damage feedback (red edge, view knock, sound), death and restart.
+5. **Rendering:** rigid parts (body, maw, crown, 6 × 2 legs) on the existing instancing.
+   - Draws are batched per mesh, so 200 tomatoes ≈ 3,000 instances but about 15 draws.
+   - Procedural animation: tripod gait with planted feet, body bob and lean, maw chomp, crown wobble, squash on landing and hits; distance LOD.
+6. **Hitscan against the horde** through the spatial hash (sphere per tomato in the ray's cells, then part capsules). G1 tested every enemy.
+7. **Gore budgets:** an instanced pool of rigid chunks; a larger runtime decal budget for splats (oldest fade first); particles.
+8. **Spawning:** spawn markers (editor operations, markers only) around the square and the shop street; waves with a maximum alive. Holes later.
+
+**Steps** (each ends with: run it, test it, look at it, fix the obvious):
+1. Scrap the beet (assets, code, data). Build the tomato in Blender (parts, gib meshes, glossy skin) with preview renders for you.
+2. One tomato, perfected: gait, chase on open ground, hit reactions, the burst death with gibs, splats and sound. One kill must feel amazing before there are many.
+3. Nav grid and flow field for Hässelby (square, hall, stairs, platform), with a debug view.
+4. The horde: agents, crowd physics, climbing and piling, attacks, player health.
+5. Scale: 200 alive at 60 fps; animation LOD, gore budgets, timings.
+6. Waves and the platform-chase scenario; a Horde folder in the tuning panel.
+7. Verification (frame-rate test, renderer regression, editor play mode), docs.
+
+**Success criteria:**
+- Killing one tomato is the most satisfying thing in the game.
+- About 200 tomatoes chase you from the square into the hall and up the stairs, piling over each other on the flights, at 60 fps.
+- Gore accumulates: the grey station ends up red.
+- Nav grid, crowd physics and debris stay generic engine pieces; the tomato is data and game code.
+
+### G2 status
+
+**Steps 1–2: the tomato, and one kill (done, 2026-10-05).**
+- **Beetroot scrapped:** code (`src/game/enemy/`), model, textures, materials, data, Blender builder and splat texture.
+- **Tomato bug** (`npm run enemy`, `tools/blender/build_tomato.py`):
+  - A lobed beefsteak body split into a jaw and a lid hinged at the back.
+  - Cross-section mouth: pericarp ring, gel chambers, seeds, dark throat, seed teeth on both rims.
+  - Sepal crown, six fluted thorny vine legs (thigh and shin, IK tips in node extras).
+  - 15 rig parts, 15.9k triangles (LODs come in the scale step).
+  - Gibs: skin shells, a wall chunk, pulp lumps, plus centred copies of the lid, crown and leg segments.
+  - 2048 atlas: glossy deep-red skin with gold shoulders and growth cracks, gel, seeds, hairy vine.
+- **Agent** (`src/game/horde/tomato.ts`; data in `public/game/enemies/tomato.json`, scale 1.35):
+  - States: chase (sprints when far), windup → bite, lunge (leaps from 2.4–5.5 m, bites in the air), recover, stagger.
+  - Ground and walls still come from collision queries (the nav grid replaces them in step 3).
+- **Animation:**
+  - Alternating-tripod gait with planted feet, a stepping arc and lead, two-bone IK (knees up and out).
+  - Body bob, lean into acceleration, roll in turns.
+  - Jaw chatter while chasing, a gape on the windup and lunge, a snap on the bite; crown wobble.
+  - Hits: squash, a tilt away from the hit, knockback, flinch, stagger.
+- **Hits:**
+  - One Hittable for the whole horde (bounding sphere, then the body sphere and twelve leg capsules).
+  - Leg hits do 0.6× damage, and enough of them tears the leg off (it flies, the stump gushes, the tomato slows).
+  - Shots into the open maw do 1.8×.
+- **Gore** (`src/game/horde/gore.ts`, engine `Debris` pool of 360 instanced rigid pieces):
+  - On death, the lid, crown and twelve leg pieces fly whole with 5–7 skin shells, a chunk and 3–5 pulp lumps.
+    - Pieces bounce wet, can stick to walls and slide down, then settle flat (shells) or lie along the ground (legs).
+    - Each paints a splat where it lands.
+  - A dark juice spray, pulp and seed debris, a short dark mist.
+  - A 2.2–3.2 m pool under it, ten satellite splats timed to the drops' flight, upright drip splats on walls in reach.
+  - Burst sound and a shake when close.
+  - Bullet hits spurt from the entry and exit wounds and paint what's behind.
+- **Splat textures** (`npm run textures -- gore`): three full-colour floor splats and a wall splat with drips.
+  - Very dark reds: the paving's albedo is low and brightly lit, so mid reds read pink.
+  - Roughness 0.42: glossier ones mirror the overcast sky and wash out.
+- **Engine:**
+  - `Debris`.
+  - Runtime decals take an angle, and their projection box deepens with size. At a fixed 6 cm, big splats on uneven paving were clipped to fragments.
+  - `ShotHit.index`.
+- **Sounds** (synthesised placeholders): burst, hit, bite, hiss, gib splat, foot tick, leg snap.
+- **Player:** a bite knocks the view, shoves you and flashes red at the screen edge. No health yet (step 4).
+- **Panel:** Horde folder (on/off, alive at once, spawn, movement, gait, attack, reactions, gore).
+- **Cost:** about 10 µs simulation and 7 µs posing per tomato per frame (8 alive).
+

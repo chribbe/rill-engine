@@ -287,6 +287,109 @@ function impactFlesh(seed: number) {
   return finish(x, -1);
 }
 
+// ------------------------------------------------------------------ tomato bug (G2)
+
+/** Wet gurgle: lowpassed noise with a slow, uneven amplitude wobble. */
+function gurgle(sec: number, r: () => number, cutoff: number, rate: number) {
+  const x = biquad(noise(Math.ceil(sec * SR), r), 'lp', cutoff);
+  let ph = 0;
+  for (let i = 0; i < x.length; i++) {
+    ph += (2 * Math.PI * rate * (0.7 + 0.6 * Math.sin(i / 2300))) / SR;
+    x[i] *= 0.45 + 0.55 * Math.max(0, Math.sin(ph));
+  }
+  return x;
+}
+
+/** Death: a sub thump, a wet bursting blast, squelch, then a patter of pulp and juice landing. */
+function tomatoBurst(seed: number) {
+  const r = rng(seed), x = buf(1.3);
+  mix(x, tone(0.4, (t) => 95 - 140 * t, (t) => (t < 0.003 ? t / 0.003 : Math.exp(-t / 0.09))), 1.1);
+  const blastN = sweepLp(noise(x.length, r), (t) => 4200 * Math.exp(-t / 0.05) + 500);
+  mix(x, env(blastN, 0.001, v(r, 0.07)), 1.0);
+  mix(x, env(gurgle(0.5, r, 900, v(r, 38, 0.3)), 0.004, 0.12), 0.9, 0.01);
+  mix(x, env(biquad(noise(x.length, r), 'bp', v(r, 320), 1.4), 0.002, 0.08), 0.7, 0.02);
+  // Pulp and drops landing all around.
+  mix(x, grains(1.3, 60, 0.9, 500, 2200, r, 0.5), 0.9, 0.12);
+  const slaps = buf(1.3);
+  for (let k = 0; k < 9; k++) {
+    const t0 = 0.15 + Math.pow(r(), 1.3) * 0.8;
+    mix(slaps, env(biquad(noise(Math.ceil(0.08 * SR), r), 'lp', v(r, 700, 0.3)), 0.001, v(r, 0.018)), 0.35 + r() * 0.4, t0);
+  }
+  mix(x, slaps, 1);
+  saturate(x, 1.6);
+  return finish(x, -0.5);
+}
+
+/** Bullet into the fruit: skin pop, wet thwack, a short spurt. */
+function tomatoHit(seed: number) {
+  const r = rng(seed), x = buf(0.3);
+  mix(x, env(biquad(noise(x.length, r), 'bp', v(r, 2600), 1.2), 0, 0.004), 0.8);
+  mix(x, env(biquad(noise(x.length, r), 'lp', v(r, 1100)), 0.001, v(r, 0.045)), 1);
+  mix(x, tone(0.2, (t) => 180 - 300 * t, (t) => (t < 0.002 ? t / 0.002 : Math.exp(-t / 0.025))), 0.6);
+  mix(x, env(gurgle(0.22, r, 1400, v(r, 70, 0.3)), 0.003, 0.05), 0.5, 0.015);
+  saturate(x, 1.3);
+  return finish(x, -1);
+}
+
+/** Bite: a crunchy snap of seed teeth, a wet squelch. */
+function tomatoBite(seed: number) {
+  const r = rng(seed), x = buf(0.4);
+  mix(x, grains(0.4, 40, 0.05, 1800, 4800, r, 0.4), 1.0);
+  mix(x, env(biquad(noise(x.length, r), 'bp', v(r, 600), 2), 0.001, 0.03), 0.8);
+  mix(x, env(gurgle(0.35, r, 1000, v(r, 45, 0.3)), 0.01, 0.08), 0.7, 0.02);
+  mix(x, tone(0.2, (t) => 120 - 100 * t, (t) => (t < 0.003 ? t / 0.003 : Math.exp(-t / 0.04))), 0.6);
+  return finish(x, -1);
+}
+
+/** Chitter / hiss: a rattling, wet hiss with a growl under it. */
+function tomatoHiss(seed: number) {
+  const r = rng(seed), sec = v(r, 0.8, 0.25), x = buf(sec);
+  const hiss = biquad(biquad(noise(x.length, r), 'bp', v(r, 3200), 0.9), 'hp', 1500);
+  const trem = v(r, 28, 0.3);
+  for (let i = 0; i < hiss.length; i++) {
+    const t = i / SR;
+    hiss[i] *= (0.35 + 0.65 * Math.max(0, Math.sin(2 * Math.PI * trem * t + Math.sin(t * 9)))) * Math.min(1, t / 0.05) * Math.exp(-Math.max(0, t - sec * 0.6) / 0.08);
+  }
+  mix(x, hiss, 0.8);
+  const growl = buf(sec);
+  let ph = 0;
+  for (let i = 0; i < growl.length; i++) {
+    const t = i / SR;
+    ph += (2 * Math.PI * (v(r, 62, 0.02) + 8 * Math.sin(t * 13))) / SR;
+    growl[i] = ((ph / Math.PI) % 2 - 1) * Math.min(1, t / 0.06) * Math.exp(-Math.max(0, t - sec * 0.5) / 0.1);
+  }
+  mix(x, biquad(growl, 'lp', 500), 0.5);
+  mix(x, grains(sec, 50, sec * 0.8, 2500, 6000, r, 0.8), 0.4);
+  saturate(x, 1.4);
+  return finish(x, -3);
+}
+
+/** A gib landing: wet slap. */
+function tomatoSplat(seed: number) {
+  const r = rng(seed), x = buf(0.25);
+  mix(x, env(biquad(noise(x.length, r), 'lp', v(r, 1300, 0.3)), 0.0005, v(r, 0.022)), 1);
+  mix(x, env(gurgle(0.2, r, 1600, v(r, 90, 0.4)), 0.004, 0.03), 0.5, 0.008);
+  mix(x, grains(0.25, 10, 0.08, 900, 2600, r, 0.5), 0.5, 0.01);
+  return finish(x, -2);
+}
+
+/** A thorn foot on hard ground: a small dry tick. */
+function tomatoStep(seed: number) {
+  const r = rng(seed), x = buf(0.08);
+  mix(x, env(biquad(noise(x.length, r), 'bp', v(r, 3400, 0.2), 2.5), 0, 0.004), 1);
+  mix(x, env(biquad(noise(x.length, r), 'lp', 600), 0.0005, 0.01), 0.4);
+  return finish(x, -6);
+}
+
+/** A leg torn off: woody snap, fibrous tear. */
+function tomatoLeg(seed: number) {
+  const r = rng(seed), x = buf(0.45);
+  mix(x, env(biquad(noise(x.length, r), 'bp', v(r, 1500), 1.5), 0, 0.006), 1);
+  mix(x, grains(0.45, 45, 0.18, 1200, 4500, r, 0.5), 0.8, 0.004);
+  mix(x, env(gurgle(0.4, r, 1200, v(r, 60, 0.3)), 0.01, 0.07), 0.6, 0.02);
+  return finish(x, -1);
+}
+
 function step(seed: number, kind: 'hard' | 'soft' | 'gravel' | 'metal', land = false) {
   const r = rng(seed), x = buf(land ? 0.35 : 0.22), L = land ? 1.6 : 1;
   if (kind === 'hard') {
@@ -361,6 +464,13 @@ for (let i = 1; i <= 3; i++) out(`impact/wood_${i}`, impactWood(900 + i));
 for (let i = 1; i <= 2; i++) out(`impact/glass_${i}`, impactGlass(1000 + i));
 for (let i = 1; i <= 3; i++) out(`impact/soil_${i}`, impactSoil(1100 + i));
 for (let i = 1; i <= 3; i++) out(`impact/flesh_${i}`, impactFlesh(1200 + i));
+for (let i = 1; i <= 3; i++) out(`tomato/burst_${i}`, tomatoBurst(2000 + i));
+for (let i = 1; i <= 4; i++) out(`tomato/hit_${i}`, tomatoHit(2100 + i));
+for (let i = 1; i <= 2; i++) out(`tomato/bite_${i}`, tomatoBite(2200 + i));
+for (let i = 1; i <= 3; i++) out(`tomato/hiss_${i}`, tomatoHiss(2300 + i));
+for (let i = 1; i <= 4; i++) out(`tomato/splat_${i}`, tomatoSplat(2400 + i));
+for (let i = 1; i <= 4; i++) out(`tomato/step_${i}`, tomatoStep(2500 + i));
+for (let i = 1; i <= 2; i++) out(`tomato/leg_${i}`, tomatoLeg(2600 + i));
 for (const k of ['hard', 'soft', 'gravel', 'metal'] as const) {
   for (let i = 1; i <= 4; i++) out(`step/${k}_${i}`, step(1300 + i * 7 + k.length, k));
   out(`step/${k}_land`, step(1400 + k.length, k, true));

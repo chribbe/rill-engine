@@ -217,52 +217,81 @@ export class TuningPanel {
   }
 
   private buildEnemy() {
-    const g = this.game, cfg = g.enemyConfig, d = cfg.data;
-    const f = this.gui.addFolder('Enemy (Rödbeta)');
+    const g = this.game, cfg = g.hordeConfig, d = cfg.data;
+    const f = this.gui.addFolder('Horde (tomato)');
     const b = <O extends object>(folder: GUI, obj: O, path: string, key: keyof O & string, label: string, min?: number, max?: number, step?: number) =>
       this.bind(folder, cfg, obj, key, path ? `${path}.${key}` : key, label, min, max, step);
-    b(f, d, '', 'health', 'Health', 1, 1000, 1);
-    b(f, d, '', 'respawn', 'Respawn (s)', 0, 30, 0.5);
-    const mv = f.addFolder('Movement');
-    b(mv, d.move, 'move', 'walkSpeed', 'Walk (m/s)', 0, 6, 0.05);
-    b(mv, d.move, 'move', 'chaseSpeed', 'Chase (m/s)', 0, 8, 0.05);
-    b(mv, d.move, 'move', 'chaseDistance', 'Chase beyond (m)', 0, 40, 0.5);
-    b(mv, d.move, 'move', 'accel', 'Accel (m/s²)', 0.5, 30, 0.5);
-    b(mv, d.move, 'move', 'turnRate', 'Turn rate (°/s)', 10, 720, 5);
-    mv.close();
-    const re = f.addFolder('Hit reactions');
-    b(re, d.reactions, 'reactions', 'partKick', 'Part kick ×', 0, 10, 0.05);
-    b(re, d.reactions, 'reactions', 'bodyKick', 'Body kick ×', 0, 5, 0.05);
-    b(re, d.reactions, 'reactions', 'knockback', 'Knockback ×', 0, 3, 0.01);
-    b(re, d.reactions, 'reactions', 'squash', 'Squash ×', 0, 1, 0.01);
-    b(re, d.reactions, 'reactions', 'springHz', 'Spring (Hz)', 0.5, 12, 0.1);
-    b(re, d.reactions, 'reactions', 'springDamping', 'Spring damping', 0.05, 1.5, 0.01);
-    b(re, d.reactions, 'reactions', 'staggerThreshold', 'Stagger threshold', 1, 400, 1);
-    b(re, d.reactions, 'reactions', 'staggerDecay', 'Stagger decay (/s)', 0, 200, 1);
-    b(re, d.reactions, 'reactions', 'staggerTime', 'Stagger time (s)', 0, 2, 0.01);
-    b(re, d.reactions, 'reactions', 'flinchSlow', 'Flinch slow', 0, 1, 0.01);
-    const reg = f.addFolder('Damage by region (×)');
-    for (const [k, v] of Object.entries(d.regions)) b(reg, v, `regions.${k}`, 'damage', k, 0, 5, 0.05);
-    reg.close();
-    const at = f.addFolder('Attack');
-    b(at, d.attack, 'attack', 'range', 'Range (m)', 0.5, 4, 0.05);
-    b(at, d.attack, 'attack', 'windup', 'Wind-up (s)', 0.05, 2, 0.01);
-    b(at, d.attack, 'attack', 'cooldown', 'Cooldown (s)', 0, 4, 0.05);
-    at.close();
     const act = {
-      spawn: () => g.enemies.spawn(g.rt.player),
-      clear: () => g.enemies.clear(),
-      get ai() { return g.enemies.enabled; },
-      set ai(v: boolean) { g.enemies.enabled = v; },
+      spawn: () => {
+        const p = g.rt.player, a = g.rt.camera.yaw;
+        g.spawnTomato([p.feet[0] + Math.sin(a) * 10, p.feet[1], p.feet[2] - Math.cos(a) * 10]);
+      },
+      spawn5: () => { for (let i = 0; i < 5; i++) g.spawnTomato(); },
+      clear: () => g.horde.clear(),
+      get ai() { return g.horde.enabled; },
+      set ai(v: boolean) { g.horde.enabled = v; },
+      get max() { return g.horde.maxAlive; },
+      set max(v: number) { g.horde.maxAlive = v; },
       get boxes() { return g.showHitboxes; },
       set boxes(v: boolean) { g.showHitboxes = v; },
     };
-    f.add(act, 'ai').name('Enemy on (spawns, AI)');
-    f.add(act, 'boxes').name('Show hitboxes');
-    f.add(act, 'spawn').name('Spawn one');
+    f.add(act, 'ai').name('Horde on (spawns, AI)');
+    f.add(act, 'max', 0, 32, 1).name('Alive at once');
+    f.add(act, 'spawn').name('Spawn one in front');
+    f.add(act, 'spawn5').name('Spawn 5 (spawn points)');
     f.add(act, 'clear').name('Remove all');
+    f.add(act, 'boxes').name('Show hit shapes');
+    b(f, d, '', 'health', 'Health', 1, 500, 1);
+    const mv = f.addFolder('Movement');
+    b(mv, d.move, 'move', 'speed', 'Chase (m/s)', 0, 12, 0.05);
+    b(mv, d.move, 'move', 'sprint', 'Sprint far away (m/s)', 0, 16, 0.05);
+    b(mv, d.move, 'move', 'sprintDistance', 'Sprint beyond (m)', 0, 60, 0.5);
+    b(mv, d.move, 'move', 'accel', 'Accel (m/s²)', 1, 60, 0.5);
+    b(mv, d.move, 'move', 'turnRate', 'Turn rate (°/s)', 30, 1080, 5);
+    b(mv, d.move, 'move', 'speedJitter', 'Speed variation', 0, 0.6, 0.01);
+    mv.close();
+    const ga = f.addFolder('Gait');
+    b(ga, d.gait, 'gait', 'stride', 'Stride (m)', 0.1, 1.2, 0.01);
+    b(ga, d.gait, 'gait', 'lift', 'Foot lift (m)', 0, 0.4, 0.005);
+    b(ga, d.gait, 'gait', 'stepTime', 'Step time (s)', 0.04, 0.4, 0.005);
+    b(ga, d.gait, 'gait', 'bob', 'Body bob (m)', 0, 0.15, 0.002);
+    b(ga, d.gait, 'gait', 'lean', 'Lean (° per m/s²)', 0, 6, 0.05);
+    b(ga, d.gait, 'gait', 'roll', 'Roll in turns (°)', 0, 40, 0.5);
+    b(ga, d.gait, 'gait', 'lead', 'Foot lead (s)', 0, 0.4, 0.005);
+    ga.close();
+    const at = f.addFolder('Attack');
+    b(at, d.attack, 'attack', 'range', 'Bite range (m)', 0.5, 3, 0.05);
+    b(at, d.attack, 'attack', 'windup', 'Wind-up (s)', 0.02, 1, 0.01);
+    b(at, d.attack, 'attack', 'recover', 'Recover (s)', 0, 2, 0.01);
+    b(at, d.attack, 'attack', 'cooldown', 'Cooldown (s)', 0, 3, 0.05);
+    b(at, d.attack, 'attack', 'damage', 'Damage', 0, 100, 1);
+    b(at, d.attack, 'attack', 'lungeSpeed', 'Lunge speed (m/s)', 0, 20, 0.1);
+    b(at, d.attack, 'attack', 'lungeUp', 'Lunge up (m/s)', 0, 10, 0.1);
+    b(at, d.attack, 'attack', 'lungeChance', 'Lunge chance (/s)', 0, 5, 0.05);
+    b(at, d.attack, 'attack', 'jawOpen', 'Jaw open (°)', 0, 80, 1);
+    at.close();
+    const re = f.addFolder('Hit reactions');
+    b(re, d.reactions, 'reactions', 'knock', 'Knockback ×', 0, 1, 0.005);
+    b(re, d.reactions, 'reactions', 'squash', 'Squash ×', 0, 1, 0.01);
+    b(re, d.reactions, 'reactions', 'springHz', 'Spring (Hz)', 0.5, 15, 0.1);
+    b(re, d.reactions, 'reactions', 'springDamping', 'Spring damping', 0.05, 1.5, 0.01);
+    b(re, d.reactions, 'reactions', 'staggerThreshold', 'Stagger threshold', 1, 300, 1);
+    b(re, d.reactions, 'reactions', 'staggerTime', 'Stagger time (s)', 0, 2, 0.01);
+    b(re, d.reactions, 'reactions', 'flinch', 'Flinch speed ×', 0, 1, 0.01);
+    re.close();
+    const go = f.addFolder('Gore');
+    b(go, d.gore, 'gore', 'spray', 'Burst droplets', 0, 300, 1);
+    b(go, d.gore, 'gore', 'splats', 'Splats around', 0, 30, 1);
+    b(go, d.gore, 'gore', 'splatRadius', 'Splat radius (m)', 0, 8, 0.1);
+    b(go, d.gore, 'gore', 'wallSplats', 'Wall splat rays', 0, 16, 1);
+    b(go, d.gore, 'gore', 'mist', 'Mist', 0, 1, 0.01);
+    b(go, d.gore, 'gore', 'gibSpin', 'Gib spin (rad/s)', 0, 60, 0.5);
+    b(go, d.gore, 'gore', 'gibLife', 'Gibs stay (s)', 1, 300, 1);
+    b(go, d.gore, 'gore', 'hitSpray', 'Hit droplets', 0, 60, 1);
+    b(go, d.gore, 'gore', 'hitSplatChance', 'Hit splat chance', 0, 1, 0.01);
+    b(go, d.gore, 'gore', 'shake', 'Burst shake (° at 1 m)', 0, 10, 0.1);
+    go.close();
     this.fileButtons(f, cfg);
-    f.close();
   }
 
   private buildAudio() {
