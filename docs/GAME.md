@@ -353,6 +353,13 @@ Your notes: much better. Smoke is far too visible after shooting (fine while sho
   - The frame-rate test is identical at 30–240 fps with every new feature on.
   - Known quirk: the first frame-rate test after a page load can show about 3e-5 m drift in the reference run, with or without these features; repeat runs are exact.
 
+**Brass (2026-10-05).** You asked whether the empty shells were missing. They were ejected sideways at about 3 m/s, 0.4 m from the eye, so each was on screen for about 2 frames, pale and thin.
+- Cases now leave the port up and a little forward (gun space: right 1.15, up 1.75, forward 0.55 m/s, ±25%) and arc through the upper right of the view for about 0.35 s, tumbling.
+- They're drawn 1.3× (collision stays the real case) in a saturated brass gold.
+- They litter the ground: a pool of 160, each staying 40 s.
+- All of it is tunable in the panel ("Brass …" under Shot effects).
+- The frame-rate test quirk above is not only a first-run effect: an occasional test call's reference run lands 2.71e-5 m off (always that value, with or without these features). Back-to-back runs in any rate order are exact. It's a state carried into the test call, still to be found.
+
 ### How to play / test
 - `npm run dev`, open `http://127.0.0.1:5173/play.html?map=hasselby`, click to capture the mouse.
 - Controls: WASD, Shift sprint, Alt walk, C / Ctrl crouch, Space jump, LMB fire, R reload, L flashlight, F fly, H hides the panels.

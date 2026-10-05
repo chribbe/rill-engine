@@ -116,11 +116,14 @@ export class Game {
     });
     rt.player.onStep.push((surface, speed) => this.audio.step(surface, rt.player.feet, speed, rt.player.tuning.runSpeed, rt.player.stance === 'crouch'));
     this.viewmodel.onEject.push((port, right, up, fwd) => {
-      const v = rt.player.velocity, j = () => Math.random() * 2 - 1;
-      const sr = 2.4 + Math.random() * 0.9, su = 1.3 + Math.random() * 0.7, sb = 0.4 + Math.random() * 0.4;
+      // Up and a little forward out of the port: the case arcs through the upper right of the view.
+      const fx = this.weapon.def.fx, v = rt.player.velocity, j = () => Math.random() * 2 - 1, q = () => 1 + j() * fx.ejectRandom;
+      const sr = fx.ejectRight * q(), su = fx.ejectUp * q(), sf = fx.ejectForward * q(), w = fx.ejectSpin * q();
+      this.shells.scale = fx.brassScale;
+      this.shells.life = fx.brassLife;
       this.shells.eject(port,
-        [right[0] * sr + up[0] * su - fwd[0] * sb + v[0], right[1] * sr + up[1] * su - fwd[1] * sb + v[1], right[2] * sr + up[2] * su - fwd[2] * sb + v[2]],
-        fwd, [up[0] * 25 + j() * 6, up[1] * 25 + j() * 6, up[2] * 25 + j() * 6]);
+        [right[0] * sr + up[0] * su + fwd[0] * sf + v[0], right[1] * sr + up[1] * su + fwd[1] * sf + v[1], right[2] * sr + up[2] * su + fwd[2] * sf + v[2]],
+        fwd, [up[0] * w + j() * 6, up[1] * w + j() * 6, up[2] * w + j() * 6]);
     });
     this.shells.onBounce.push((pos, speed, surface, bounce) => this.audio.brass(surface, pos, speed, bounce));
     this.enemies.onSpawn.push((e) => {

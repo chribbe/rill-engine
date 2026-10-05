@@ -11,8 +11,7 @@ import { transformAabb } from '../../engine/render/culling';
  * flat). Cosmetic, so it runs per frame with small substeps. Bounces report
  * the surface and impact speed (tinkle sounds).
  */
-const POOL = 40;
-const LIFE = 9;
+const POOL = 160;
 const R = 0.005;
 
 interface Shell {
@@ -34,6 +33,10 @@ export class Shells {
   private m = mat4.create();
   private q = quat.create();
   onBounce: ((pos: ArrayLike<number>, speed: number, surface: number, bounce: number) => void)[] = [];
+  /** Seconds a case lives (then recycled; the pool also recycles the oldest). */
+  life = 40;
+  /** Drawn size × (readability; collision stays the real case). */
+  scale = 1;
 
   constructor(private renderer: Renderer, private world: World, private collision: () => CollisionWorld) {}
 
@@ -77,7 +80,7 @@ export class Shells {
     for (const s of this.list) {
       if (!s.active) continue;
       s.age += dt;
-      if (s.age > LIFE) {
+      if (s.age > this.life) {
         s.active = false;
         s.r.visible = false;
         continue;
@@ -124,7 +127,9 @@ export class Shells {
         }
       }
       mat4.fromQuat(s.rot, this.m);
-      this.m[12] = s.pos[0]; this.m[13] = s.pos[1]; this.m[14] = s.pos[2];
+      if (this.scale !== 1) mat4.uniformScale(this.m, this.scale, this.m);
+      // A resting case lies on its side: lift it by the extra radius of the scaled drawing.
+      this.m[12] = s.pos[0]; this.m[13] = s.pos[1] + (s.resting ? R * (this.scale - 1) : 0); this.m[14] = s.pos[2];
       s.r.visible = true;
       transformAabb(this.m, s.r.mesh.aabb.min, s.r.mesh.aabb.max, s.r.worldMin, s.r.worldMax);
       R_.instances.set(s.r.slot, this.m, null, -1, 2 | R_.probeBits(s.r.worldMin, s.r.worldMax), 1, 0x5eed);

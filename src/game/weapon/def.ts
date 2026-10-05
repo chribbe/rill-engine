@@ -170,6 +170,17 @@ export interface WeaponDef {
     barrelSmoke: number;
     /** Camera punch on the reload beats (degrees): magazine seated, bolt slammed home. */
     reloadPunch: number;
+    /**
+     * Ejected brass: speed out of the port (m/s, gun space: right, up, forward), random
+     * variation (0..1), tumble (rad/s), size × (readability), seconds a case stays on the ground.
+     */
+    ejectRight: number;
+    ejectUp: number;
+    ejectForward: number;
+    ejectRandom: number;
+    ejectSpin: number;
+    brassScale: number;
+    brassLife: number;
   };
   /** Mechanical animation. */
   mechanics: {
@@ -300,6 +311,13 @@ export const CARBINE_DEFAULTS: WeaponDef = {
     shotSmoke: 0.2,
     barrelSmoke: 0.25,
     reloadPunch: 1.4,
+    ejectRight: 1.15,
+    ejectUp: 1.75,
+    ejectForward: 0.55,
+    ejectRandom: 0.25,
+    ejectSpin: 28,
+    brassScale: 1.3,
+    brassLife: 40,
   },
   mechanics: {
     boltTravel: 0.065,

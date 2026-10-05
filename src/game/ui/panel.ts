@@ -173,6 +173,9 @@ export class TuningPanel {
       ['tracerWidth', 'Tracer half width (m)', 0.002, 0.05, 0.0005], ['tracerEmissive', 'Tracer brightness (nits)', 0, 100000, 500],
       ['fovPunch', 'FOV punch per shot (°)', 0, 4, 0.05], ['shotSmoke', 'Muzzle smoke per shot', 0, 1, 0.01],
       ['barrelSmoke', 'Barrel smoke after firing', 0, 1, 0.01], ['reloadPunch', 'Reload view jolt (°)', 0, 5, 0.05],
+      ['ejectRight', 'Brass out right (m/s)', 0, 5, 0.05], ['ejectUp', 'Brass out up (m/s)', 0, 5, 0.05],
+      ['ejectForward', 'Brass out forward (m/s)', -3, 3, 0.05], ['ejectRandom', 'Brass variation', 0, 1, 0.01],
+      ['ejectSpin', 'Brass tumble (rad/s)', 0, 80, 1], ['brassScale', 'Brass size ×', 0.5, 3, 0.05], ['brassLife', 'Brass stays (s)', 1, 120, 1],
     ], true);
     const vm = table('Viewmodel motion', 'viewmodel', [
       ['fov', 'Weapon FOV (vertical °)', 30, 90, 0.5],
