@@ -9,6 +9,7 @@ import { Hitscan } from './combat/hitscan';
 import { CARBINE_DEFAULTS, type WeaponDef } from './weapon/def';
 import { Firearm, type ShotEvent } from './weapon/firearm';
 import { Viewmodel } from './weapon/viewmodel';
+import { Recoil } from './weapon/recoil';
 import { ImpactFx, type ImpactTable } from './fx/impacts';
 import { TuningPanel } from './ui/panel';
 import { DebugHud } from './ui/hud';
@@ -40,6 +41,7 @@ export class Game {
   readonly hitscan: Hitscan;
   readonly weapon: Firearm;
   readonly viewmodel: Viewmodel;
+  readonly recoil: Recoil;
   impacts!: ImpactFx;
   panel: TuningPanel | null = null;
   hud: DebugHud | null = null;
@@ -57,7 +59,8 @@ export class Game {
     this.debug = new DebugDraw(rt.renderer);
     this.hitscan = new Hitscan(() => rt.world.collision);
     this.weapon = new Firearm(this.weaponConfig.data, this.hitscan);
-    this.viewmodel = new Viewmodel(rt.renderer, rt.world, rt.camera, this.pulses);
+    this.viewmodel = new Viewmodel(rt.renderer, rt.world, rt.camera, this.pulses, this.weaponConfig.data);
+    this.recoil = new Recoil(this.weaponConfig.data);
   }
 
   async init(opts: { panel?: HTMLElement } = {}) {
@@ -69,6 +72,7 @@ export class Game {
     rt.sandbox.ownsParticles = false;
     rt.world.ensureCollision();
     this.weapon.onShot.push((e) => this.onShot(e));
+    rt.player.onLand.push((speed) => this.viewmodel.land(speed));
     if (opts.panel) {
       this.panel = new TuningPanel(this, opts.panel);
       this.hud = new DebugHud(this);
@@ -80,6 +84,7 @@ export class Game {
   }
 
   private onShot(e: ShotEvent) {
+    this.recoil.onShot(e.burstIndex);
     this.viewmodel.onShot(e);
     const muzzle = this.viewmodel.muzzle(this.muzzle);
     let end: number[] = [e.origin[0] + e.dir[0] * 300, e.origin[1] + e.dir[1] * 300, e.origin[2] + e.dir[2] * 300];
@@ -107,24 +112,35 @@ export class Game {
   update = (dt: number) => {
     const t0 = performance.now();
     const { player, input, world, sandbox, camera, renderer } = this.rt;
-    player.look();
+    const look = player.look();
+    this.recoil.absorb(look[0], look[1], camera);
+    const armed = input.locked || input.scripted;
+    player.sprintBlocked = false;
+    this.weapon.aimOffset[0] = this.recoil.aimP;
+    this.weapon.aimOffset[1] = this.recoil.aimY;
+    this.weapon.pressNow(this.clock.timeAfter(dt), input, player, camera, armed);
     const alpha = this.clock.advance(dt, (h, t) => {
       this.beforeTick?.(t);
       player.sprintBlocked = false;
-      this.weapon.tick(h, t, input, player, camera, input.locked || input.scripted);
+      this.weapon.aimOffset[0] = this.recoil.aimP;
+      this.weapon.aimOffset[1] = this.recoil.aimY;
+      this.weapon.tick(h, t, input, player, camera, armed);
+      this.recoil.tick(h, camera);
       player.tick(h);
       input.endTick();
     });
     const sdt = dt * this.clock.timeScale;
+    const now = this.clock.time + alpha * this.clock.step;
     player.frame(sdt, alpha);
+    this.recoil.frame(sdt, alpha, camera);
     world.update(sdt, player.feet);
     sandbox.update(sdt);
-    this.viewmodel.update(sdt, player);
+    this.viewmodel.update(sdt, now, look, player, armed && input.buttonDown(0), this.weapon.interval);
     renderer.particles.update(sdt);
     this.pulses.update(sdt, renderer.dynamicLights);
     world.flushRuntimeDecals(camera.position);
     this.debug.flush();
-    this.crosshair?.update(sdt, this.weapon.spread(player), camera.fovY, this.rt.gpu.canvas.clientHeight || window.innerHeight);
+    this.crosshair?.update(sdt, this.weapon.spread(player), camera.fovY, this.rt.gpu.canvas.clientHeight || window.innerHeight, this.recoil.punch);
     this.simMs = performance.now() - t0;
     this.hud?.update();
   };
@@ -166,6 +182,8 @@ export class Game {
         player.fly = false;
         player.teleport(start.feet, start.yaw, 0);
         this.weapon.reset();
+        this.recoil.reset(camera);
+        this.viewmodel.reset();
         this.clock.reset();
         const k0 = this.clock.ticks, t0 = this.clock.time;
         run = { samples: [], shots: [] };

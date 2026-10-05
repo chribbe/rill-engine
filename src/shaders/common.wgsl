@@ -42,6 +42,7 @@ struct Frame {
   wind2: vec4f,          // x gustiness, y gust scale (1/m), z gust speed (m/s), w twig flutter
   decalDyn: vec4f,       // runtime decal grid: x origin x, y origin z, z inv cell size, w cells per side
   decalDyn2: vec4u,      // x slots per cell, y word offset of its cells in decalCells
+  vmViewProj: mat4x4f,   // first-person viewmodel: own field of view, same view
 };
 
 // debug.y flags

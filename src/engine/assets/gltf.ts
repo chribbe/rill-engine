@@ -60,7 +60,43 @@ export async function loadGlb(url: string): Promise<GltfAsset> {
   return parseGlb(await res.arrayBuffer(), url);
 }
 
-export function parseGlb(buf: ArrayBuffer, name = 'glb'): GltfAsset {
+/**
+ * A GLB whose top-level nodes are separate rigid parts (weapon bolt, trigger,
+ * creature limbs): each part's mesh is its node subtree in the node's own
+ * frame (origin = pivot) and `rest` its transform in asset space, or relative
+ * to `parent` when the node's extras name one.
+ */
+export interface GltfPart {
+  name: string;
+  parent?: string;
+  rest: Mat4;
+  mesh: MeshData;
+  extras: Record<string, unknown>;
+}
+
+export async function loadGlbParts(url: string): Promise<GltfPart[]> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`GLB fetch failed: ${url} (${res.status})`);
+  return parseGlbParts(await res.arrayBuffer(), url);
+}
+
+export function parseGlbParts(buf: ArrayBuffer, name = 'glb'): GltfPart[] {
+  const parts: GltfPart[] = [];
+  const rests = new Map<string, Mat4>();
+  parseGlb(buf, name, (nodeName, rest, mesh, extras) => {
+    const parent = typeof extras.parent === 'string' ? extras.parent : undefined;
+    rests.set(nodeName, rest);
+    parts.push({ name: nodeName, parent, rest, mesh, extras });
+  });
+  // Parented parts: rest relative to the parent's rest.
+  for (const p of parts) {
+    const pr = p.parent ? rests.get(p.parent) : undefined;
+    if (pr) p.rest = mat4.multiply(mat4.inverse(pr), p.rest);
+  }
+  return parts;
+}
+
+export function parseGlb(buf: ArrayBuffer, name = 'glb', onPart?: (name: string, rest: Mat4, mesh: MeshData, extras: Record<string, unknown>) => void): GltfAsset {
   const dv = new DataView(buf);
   if (dv.getUint32(0, true) !== 0x46546c67) throw new Error(`${name}: not a GLB file`);
   let off = 12;
@@ -118,8 +154,9 @@ export function parseGlb(buf: ArrayBuffer, name = 'glb'): GltfAsset {
     return m;
   };
 
-  // Gather primitives per material in asset space.
-  const groups = new Map<string, { pos: number[]; nrm: number[]; tan: number[]; uv0: number[]; uv1: number[]; col: number[]; idx: number[]; hasTan: boolean; hasUv1: boolean; hasCol: boolean }>();
+  // Gather primitives per material in asset space (or per part in its own frame).
+  type Group = { pos: number[]; nrm: number[]; tan: number[]; uv0: number[]; uv1: number[]; col: number[]; idx: number[]; hasTan: boolean; hasUv1: boolean; hasCol: boolean };
+  let groups = new Map<string, Group>();
   const markers: GltfAsset['markers'] = [];
   const visit = (ni: number, parent: Mat4) => {
     const node = g.nodes![ni];
@@ -179,21 +216,33 @@ export function parseGlb(buf: ArrayBuffer, name = 'glb'): GltfAsset {
     }
     for (const c of node.children ?? []) visit(c, world);
   };
+  const toPrimitives = (gs: Map<string, Group>): PrimitiveData[] => {
+    const primitives: PrimitiveData[] = [];
+    for (const [material, grp] of gs) {
+      primitives.push({
+        material,
+        positions: new Float32Array(grp.pos),
+        normals: new Float32Array(grp.nrm),
+        tangents: grp.hasTan ? new Float32Array(grp.tan) : undefined,
+        uv0: new Float32Array(grp.uv0),
+        uv1: grp.hasUv1 ? new Float32Array(grp.uv1) : undefined,
+        colors: grp.hasCol ? new Float32Array(grp.col) : undefined,
+        indices: new Uint32Array(grp.idx),
+      });
+    }
+    return primitives;
+  };
   const sceneNodes = g.scenes?.[g.scene ?? 0]?.nodes ?? (g.nodes ?? []).map((_, i) => i);
-  for (const ni of sceneNodes) visit(ni, mat4.identity());
-
-  const primitives: PrimitiveData[] = [];
-  for (const [material, grp] of groups) {
-    primitives.push({
-      material,
-      positions: new Float32Array(grp.pos),
-      normals: new Float32Array(grp.nrm),
-      tangents: grp.hasTan ? new Float32Array(grp.tan) : undefined,
-      uv0: new Float32Array(grp.uv0),
-      uv1: grp.hasUv1 ? new Float32Array(grp.uv1) : undefined,
-      colors: grp.hasCol ? new Float32Array(grp.col) : undefined,
-      indices: new Uint32Array(grp.idx),
-    });
+  if (onPart) {
+    // One mesh per top-level node, in that node's frame.
+    for (const ni of sceneNodes) {
+      const node = g.nodes![ni];
+      groups = new Map();
+      visit(ni, mat4.inverse(localMatrix(node)));
+      onPart(node.name ?? `node${ni}`, localMatrix(node), { name: `${name}#${node.name ?? ni}`, primitives: toPrimitives(groups) }, node.extras ?? {});
+    }
+    return { mesh: { name, primitives: [] }, markers, extras: g.extras ?? {} };
   }
-  return { mesh: { name, primitives }, markers, extras: g.extras ?? {} };
+  for (const ni of sceneNodes) visit(ni, mat4.identity());
+  return { mesh: { name, primitives: toPrimitives(groups) }, markers, extras: g.extras ?? {} };
 }

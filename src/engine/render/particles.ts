@@ -28,6 +28,9 @@ interface P {
   drag: number;
   gravity: number;
   seed: number;
+  flags: number;
+  /** Anchor id (follows a moving point, e.g. a muzzle), -1 = free. */
+  anchor: number;
 }
 
 export interface EmitOptions {
@@ -43,6 +46,12 @@ export interface EmitOptions {
   emissive?: number;
   drag?: number;
   gravity?: number;
+  /** Drawn with the first-person weapon's projection and depth range (muzzle flash on the gun). */
+  viewmodel?: boolean;
+  /** Stretch the sprite along its velocity (directional flash); speed sets the length. */
+  stretch?: boolean;
+  /** Follow anchor `id` (see `setAnchor`): the particle keeps its offset from that point. */
+  anchor?: number;
 }
 
 export class ParticleSystem {
@@ -78,12 +87,28 @@ export class ParticleSystem {
         size0: o.size?.[0] ?? 0.2, size1: o.size?.[1] ?? 0.6, rot: r() * Math.PI * 2, spin: (r() - 0.5) * 1.5,
         alpha: o.alpha ?? 1, color: o.color ?? [0.5, 0.5, 0.5], emissive: o.emissive ?? 0,
         drag: o.drag ?? 1.5, gravity: o.gravity ?? 0, seed: (this.seed++ * 2654435761) >>> 0,
+        flags: (o.viewmodel ? 1 : 0) | (o.stretch ? 2 : 0),
+        anchor: o.anchor ?? -1,
       });
+      const a = o.anchor !== undefined ? this.anchors.get(o.anchor) : undefined;
+      if (a) {
+        // Store the offset from the anchor; the position follows it.
+        const q = this.list[this.list.length - 1];
+        q.pos[0] -= a[0]; q.pos[1] -= a[1]; q.pos[2] -= a[2];
+      }
     }
   }
 
   /** Air velocity (m/s, world x/z): drag relaxes smoke and dust towards it (set from the wind). */
   air: [number, number] = [0, 0];
+  /** Moving points particles can follow (muzzle flashes stay on a swinging gun). */
+  private anchors = new Map<number, [number, number, number]>();
+
+  setAnchor(id: number, p: ArrayLike<number>) {
+    let a = this.anchors.get(id);
+    if (!a) this.anchors.set(id, (a = [0, 0, 0]));
+    a[0] = p[0]; a[1] = p[1]; a[2] = p[2];
+  }
 
   update(dt: number) {
     for (const p of this.list) {
@@ -112,7 +137,12 @@ export class ParticleSystem {
       const lit = p.kind === 'smoke' || p.kind === 'dust';
       const fade = lit ? Math.min(1, 0.2 + p.age / 0.08) * (1 - t) * (1 - t) : 1 - t;
       const kind = p.kind === 'smoke' ? 0 : p.kind === 'dust' ? 1 : p.kind === 'flash' ? 2 : 3;
-      this.cpu.set([p.pos[0], p.pos[1], p.pos[2], size, p.rot, p.alpha * fade, kind, (p.seed % 1000) / 1000, p.color[0], p.color[1], p.color[2], p.emissive, p.vel[0], p.vel[1], p.vel[2], 0], o);
+      const a = p.anchor >= 0 ? this.anchors.get(p.anchor) : undefined;
+      const C = this.cpu;
+      C[o] = p.pos[0] + (a ? a[0] : 0); C[o + 1] = p.pos[1] + (a ? a[1] : 0); C[o + 2] = p.pos[2] + (a ? a[2] : 0); C[o + 3] = size;
+      C[o + 4] = p.rot; C[o + 5] = p.alpha * fade; C[o + 6] = kind; C[o + 7] = (p.seed % 1000) / 1000;
+      C[o + 8] = p.color[0]; C[o + 9] = p.color[1]; C[o + 10] = p.color[2]; C[o + 11] = p.emissive;
+      C[o + 12] = p.vel[0]; C[o + 13] = p.vel[1]; C[o + 14] = p.vel[2]; C[o + 15] = p.flags;
     };
     alpha.forEach((p, i) => write(p, i));
     add.forEach((p, i) => write(p, alpha.length + i));

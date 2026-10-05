@@ -54,6 +54,8 @@ export interface ViewParams {
   proj: ArrayLike<number>;
   viewProj: Float32Array;
   invViewProj: ArrayLike<number>;
+  /** First-person viewmodel projection × view (own field of view); defaults to viewProj. */
+  vmViewProj?: ArrayLike<number>;
   fovY: number;
   aspect: number;
   near: number;
@@ -1491,6 +1493,7 @@ export class Renderer {
     F.mat(FO.view, v.view);
     F.mat(FO.proj, v.proj);
     F.mat(FO.invViewProj, v.invViewProj);
+    F.mat(FO.vmViewProj, v.vmViewProj ?? v.viewProj);
     for (let i = 0; i < CASCADES; i++) F.mat(FO.cascadeViewProj + i * 16, this.shadows.cascades[i].viewProj);
     F.vec4(FO.cameraPos, v.position[0], v.position[1], v.position[2], this.time);
     F.vec4(FO.viewport, width, height, 1 / width, 1 / height);

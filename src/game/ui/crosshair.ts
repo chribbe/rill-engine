@@ -39,9 +39,15 @@ export class Crosshair {
     (this.hit.firstChild as SVGElement).querySelector('g')!.setAttribute('stroke', kill ? '#ff8a6a' : 'white');
   }
 
-  /** `spreadDeg`: cone half-angle; `fovY` radians; `heightPx`: viewport CSS height. */
-  update(dt: number, spreadDeg: number, fovY: number, heightPx: number) {
+  /**
+   * `spreadDeg`: cone half-angle; `fovY` radians; `heightPx`: viewport CSS height;
+   * `punch` (pitch, yaw radians): visual-only view kick, which the crosshair
+   * counters so it keeps marking where bullets go.
+   */
+  update(dt: number, spreadDeg: number, fovY: number, heightPx: number, punch: [number, number] = [0, 0]) {
     this.el.style.display = this.visible ? 'block' : 'none';
+    const f = heightPx / 2 / Math.tan(fovY / 2);
+    this.el.style.transform = `translate(${(-Math.tan(punch[1]) * f).toFixed(2)}px, ${(Math.tan(punch[0]) * f).toFixed(2)}px)`;
     const gap = this.showSpread ? Math.max(3, (Math.tan((spreadDeg * Math.PI) / 180) / Math.tan(fovY / 2)) * (heightPx / 2)) + 2 : 0;
     const show = this.showSpread ? '1' : '0';
     const [r, d, l, u] = this.ticks;

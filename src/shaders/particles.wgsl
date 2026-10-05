@@ -17,7 +17,7 @@ struct Particle {
   posSize: vec4f,   // xyz centre, w half size (m)
   misc: vec4f,      // x rotation, y opacity, z kind (0 smoke, 1 dust, 2 flash, 3 spark), w seed
   color: vec4f,     // rgb albedo (lit kinds) or emission colour, w emissive (nits)
-  vel: vec4f,       // xyz velocity (sparks stretch along it)
+  vel: vec4f,       // xyz velocity (sparks stretch along it), w flags (1 viewmodel space, 2 stretch along velocity)
 };
 
 @group(1) @binding(0) var<storage, read> particles: array<Particle>;
@@ -91,8 +91,10 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
   var ax = right;
   var ay = up;
   var ext = vec2f(p.posSize.w);
-  if (k == 3u) {
-    // Sparks: a streak along the screen-plane velocity.
+  let flags = u32(p.vel.w + 0.5);
+  let vm = (flags & 1u) != 0u;
+  if (k == 3u || (flags & 2u) != 0u) {
+    // Sparks (and stretched flashes): a streak along the screen-plane velocity.
     let v = p.vel.xyz - toCam * dot(p.vel.xyz, toCam);
     let speed = length(v);
     if (speed > 1e-3) {
@@ -109,12 +111,18 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
   let wp = p.posSize.xyz + ax * corner.x * ext.x + ay * corner.y * ext.y;
 
   var o: VOut;
-  o.pos = frame.viewProj * vec4f(wp, 1.0);
+  if (vm) {
+    // Attached to the first-person weapon: its projection and depth range.
+    o.pos = frame.vmViewProj * vec4f(wp, 1.0);
+    o.pos.z = o.pos.z * 0.25 + o.pos.w * 0.75;
+  } else {
+    o.pos = frame.viewProj * vec4f(wp, 1.0);
+  }
   o.uv = corner;
   o.nuv = corner * 0.18 + vec2f(p.misc.w * 7.31, p.misc.w * 3.17) + p.misc.x * 0.02;
   let dist = length(wp - cam);
   // Fade particles that reach the eye instead of clipping them at the near plane.
-  let nearFade = saturate((dist - 0.15) / 0.6);
+  let nearFade = select(saturate((dist - 0.15) / 0.6), 1.0, vm);
   o.params = vec4f(p.misc.y * nearFade, f32(k), p.misc.w, 0.0);
   var T = 1.0;
   o.inscatter = vec3f(0.0);

@@ -164,6 +164,34 @@ Measured:
 
 Note: the controller now sets the camera FOV from tuning (95° horizontal = 63.1° vertical). Captures that must match older baselines set `rill.player.tuning.fov = 93.78` (62° vertical).
 
+**Step 3 — gun, motion, recoil (done, 2026-10-05).**
+
+Engine:
+- `scene/rig.ts`: rigid-part rig, allocation-free posing into instance slots.
+- `assets/gltf.ts` `loadGlbParts`: top-level nodes become parts around their pivots, with `extras.parent` for hierarchy.
+- Viewmodel projection with its own FOV: `Frame.vmViewProj`, used by the standard vertex path and by particles flagged `viewmodel`. This fixes the old flash-behind-the-barrel issue.
+- Particle `stretch` flag and anchors (a flash follows the moving muzzle).
+- `Camera.viewmodelFovY`.
+
+The gun:
+- `tools/blender/build_carbine.py` (`npm run weapon [-- --preview]`): Ak 5-flavoured carbine with olive paint, black steel and green polymer. Parts: receiver, bolt (carrier + reciprocating charging handle), trigger, magazine, plus `muzzle` / `eject` markers. 9k triangles.
+- One 2048² atlas from Cycles bakes: AO, an edge mask from a bevel-normal difference, and material ids, composed into worn paint / polished steel edges / cavity grime.
+- `public/materials/weapon_carbine.json`.
+
+Recoil (`weapon/recoil.ts`):
+- Aim kick, applied in ticks over `kickTime`, follows a learnable sin pattern plus noise.
+- First-shot scale and ramp.
+- A permanent share goes into the player's angles. The recoverable share returns after a delay that is longer than the shot interval.
+- `absorb`: pulling against the kick consumes it, so recovery never overshoots.
+- View punch is a visual-only spring. The crosshair counters it so it marks where bullets go.
+
+Viewmodel (`weapon/viewmodel.ts`):
+- Layers: base pose, crouch, sprint pose, look inertia springs, figure-eight bob on the footstep phase, strafe roll, acceleration lag, air lift/pitch, landing kick, breathing, shot kick springs.
+- Kick impulses are applied at their exact shot times (segmented closed-form steps).
+- The bolt cycles over exactly one shot interval. The trigger follows the finger.
+
+Latency: a trigger press is fired at frame start (`Firearm.pressNow`) instead of waiting for the next tick. The shot lands on the first frame after the press at 60 and 240 fps. Held fire keeps the exact tick cadence, and the frame-rate test stays identical (≤ 14 µm).
+
 ## 7. Known limits to carry into G2
 
 Written up as G1 progresses: skinning and clips, navigation, enemy broadphase (spatial hash),

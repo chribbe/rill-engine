@@ -34,6 +34,11 @@ export class FixedClock {
     return this.acc / this.step;
   }
 
+  /** Simulated time this frame will reach after advancing by `dt` (real seconds). */
+  timeAfter(dt: number) {
+    return this.time + this.acc + Math.max(0, dt) * this.timeScale;
+  }
+
   reset() {
     this.acc = 0;
   }

@@ -39,6 +39,98 @@ export interface WeaponDef {
     air: number;
     crouch: number;
   };
+  /**
+   * Aim displacement (moves where bullets go). Each shot kicks up by `pitch` and sideways along a
+   * learnable pattern, `yaw * sin(i * patternFreq + patternPhase)`, plus a little noise. The kick is
+   * applied over `kickTime` (a physical rise, not a jump). `permanent` of it stays until the player
+   * corrects it; the rest returns after `recoverDelay` at `recoverRate` (1/s). Pulling against it
+   * uses it up, so recovery never overshoots the player's own correction.
+   */
+  recoil: {
+    pitch: number;
+    yaw: number;
+    patternFreq: number;
+    patternPhase: number;
+    randomPitch: number;
+    randomYaw: number;
+    /** Kick multiplier of the first shot of a pull, ramping to 1 over `ramp` shots. */
+    firstShot: number;
+    ramp: number;
+    maxPitch: number;
+    maxYaw: number;
+    kickTime: number;
+    permanent: number;
+    recoverDelay: number;
+    recoverRate: number;
+  };
+  /** View punch: visual-only camera rotation per shot (degrees), a damped spring. */
+  punch: {
+    pitch: number;
+    yaw: number;
+    roll: number;
+    hz: number;
+    damping: number;
+  };
+  /** Weapon model kick per shot (weapon space): metres back / up, degrees of rise / yaw / roll. */
+  kick: {
+    back: number;
+    up: number;
+    pitch: number;
+    yaw: number;
+    roll: number;
+    /** Per-shot variation (0..1). */
+    random: number;
+    posHz: number;
+    posDamping: number;
+    rotHz: number;
+    rotDamping: number;
+  };
+  /** First-person presentation. Offsets in camera space (x right, y up, z back), angles in degrees. */
+  viewmodel: {
+    /** Vertical field of view of the weapon (degrees). */
+    fov: number;
+    offset: [number, number, number];
+    /** Base rotation (pitch, yaw, roll degrees; yaw + = muzzle right, roll + = right side down). */
+    rotation: [number, number, number];
+    /** Rotation pivot in weapon space (near the grip). */
+    pivot: [number, number, number];
+    /** Look inertia: degrees of lag per rad/s of turning, cap, spring. */
+    sway: number;
+    swayMax: number;
+    swayHz: number;
+    swayDamping: number;
+    /** Walk cycle at run speed: metres side / up, degrees roll. */
+    bobSide: number;
+    bobUp: number;
+    bobRoll: number;
+    /** Strafe roll (degrees per m/s) and forward-acceleration lag (metres per m/s²). */
+    strafeRoll: number;
+    accelLag: number;
+    /** Vertical velocity response (metres and degrees per m/s), landing kick (per m/s of impact). */
+    airLift: number;
+    airPitch: number;
+    landDrop: number;
+    landPitch: number;
+    /** Crouched offset (added) and cant (degrees roll). */
+    crouchOffset: [number, number, number];
+    crouchRoll: number;
+    /** Sprint pose (offset, pitch / yaw / roll degrees) and blend rate (1/s). */
+    sprintOffset: [number, number, number];
+    sprintRot: [number, number, number];
+    sprintRate: number;
+    /** Idle breathing: metres, degrees, cycles per second. */
+    breathe: number;
+    breathePitch: number;
+    breatheRate: number;
+  };
+  /** Mechanical animation. */
+  mechanics: {
+    /** Bolt / charging-handle travel (m) and the fraction of the cycle spent moving back. */
+    boltTravel: number;
+    boltBack: number;
+    /** Trigger rotation when pulled (degrees). */
+    triggerPull: number;
+  };
 }
 
 export const CARBINE_DEFAULTS: WeaponDef = {
@@ -67,5 +159,72 @@ export const CARBINE_DEFAULTS: WeaponDef = {
     moving: 0.6,
     air: 2.5,
     crouch: 0.75,
+  },
+  recoil: {
+    pitch: 0.42,
+    yaw: 0.16,
+    patternFreq: 0.42,
+    patternPhase: 0.9,
+    randomPitch: 0.06,
+    randomYaw: 0.07,
+    firstShot: 0.55,
+    ramp: 4,
+    maxPitch: 5.5,
+    maxYaw: 2.2,
+    kickTime: 0.045,
+    permanent: 0.25,
+    recoverDelay: 0.12,
+    recoverRate: 7,
+  },
+  punch: {
+    pitch: 0.55,
+    yaw: 0.18,
+    roll: 0.45,
+    hz: 7.5,
+    damping: 0.5,
+  },
+  kick: {
+    back: 0.028,
+    up: 0.004,
+    pitch: 2.4,
+    yaw: 0.5,
+    roll: 1.1,
+    random: 0.25,
+    posHz: 9,
+    posDamping: 0.55,
+    rotHz: 7,
+    rotDamping: 0.45,
+  },
+  viewmodel: {
+    fov: 52,
+    offset: [0.13, -0.122, -0.22],
+    rotation: [1.5, -3.5, -8],
+    pivot: [0, -0.06, 0.06],
+    sway: 0.9,
+    swayMax: 3.5,
+    swayHz: 3.2,
+    swayDamping: 0.62,
+    bobSide: 0.007,
+    bobUp: 0.005,
+    bobRoll: 0.7,
+    strafeRoll: 0.55,
+    accelLag: 0.0012,
+    airLift: 0.004,
+    airPitch: 0.5,
+    landDrop: 0.006,
+    landPitch: 0.9,
+    crouchOffset: [-0.02, 0.012, 0.015],
+    crouchRoll: -4,
+    sprintOffset: [0.03, -0.045, 0.03],
+    sprintRot: [-14, 28, -6],
+    sprintRate: 9,
+    breathe: 0.0012,
+    breathePitch: 0.12,
+    breatheRate: 0.22,
+  },
+  mechanics: {
+    boltTravel: 0.065,
+    boltBack: 0.42,
+    triggerPull: 12,
   },
 };

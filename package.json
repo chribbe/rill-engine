@@ -12,6 +12,7 @@
     "map": "node tools/blender/run.ts build",
     "bake": "node tools/blender/run.ts bake",
     "map:hasselby": "node tools/blender/run.ts hasselby",
+    "weapon": "node tools/blender/run.ts carbine",
     "scanned": "node tools/textures/scanned.ts",
     "compress": "node tools/textures/compress.ts"
   },

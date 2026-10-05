@@ -18,6 +18,8 @@ export class Camera {
    */
   punch: Vec3 = vec3.fromValues(0, 0, 0);
   fovY = (62 * Math.PI) / 180;
+  /** Field of view of the first-person viewmodel (radians); 0 = same as fovY. */
+  viewmodelFovY = 0;
   near = 0.05;
   aspect = 16 / 9;
 
@@ -25,6 +27,7 @@ export class Camera {
   proj: Mat4 = mat4.identity();
   viewProj: Mat4 = mat4.identity();
   invViewProj: Mat4 = mat4.identity();
+  vmViewProj: Mat4 = mat4.identity();
   forward: Vec3 = vec3.fromValues(0, 0, -1);
   right: Vec3 = vec3.fromValues(1, 0, 0);
 
@@ -48,6 +51,8 @@ export class Camera {
     this.proj = mat4.perspectiveReverseZ(this.fovY, this.aspect, this.near, Infinity);
     this.viewProj = mat4.multiply(this.proj, this.view);
     this.invViewProj = mat4.inverse(this.viewProj);
+    if (this.viewmodelFovY > 0) mat4.multiply(mat4.perspectiveReverseZ(this.viewmodelFovY, this.aspect, this.near, Infinity), this.view, this.vmViewProj);
+    else mat4.copy(this.viewProj, this.vmViewProj);
   }
 
   /** Flat forward (for walking). */

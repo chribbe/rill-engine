@@ -24,5 +24,96 @@
     "moving": 0.6,
     "air": 2.5,
     "crouch": 0.75
+  },
+  "recoil": {
+    "pitch": 0.42,
+    "yaw": 0.16,
+    "patternFreq": 0.42,
+    "patternPhase": 0.9,
+    "randomPitch": 0.06,
+    "randomYaw": 0.07,
+    "firstShot": 0.55,
+    "ramp": 4,
+    "maxPitch": 5.5,
+    "maxYaw": 2.2,
+    "kickTime": 0.045,
+    "permanent": 0.25,
+    "recoverDelay": 0.12,
+    "recoverRate": 7
+  },
+  "punch": {
+    "pitch": 0.55,
+    "yaw": 0.18,
+    "roll": 0.45,
+    "hz": 7.5,
+    "damping": 0.5
+  },
+  "kick": {
+    "back": 0.028,
+    "up": 0.004,
+    "pitch": 2.4,
+    "yaw": 0.5,
+    "roll": 1.1,
+    "random": 0.25,
+    "posHz": 9,
+    "posDamping": 0.55,
+    "rotHz": 7,
+    "rotDamping": 0.45
+  },
+  "viewmodel": {
+    "fov": 52,
+    "offset": [
+      0.13,
+      -0.122,
+      -0.22
+    ],
+    "rotation": [
+      1.5,
+      -3.5,
+      -8
+    ],
+    "pivot": [
+      0,
+      -0.06,
+      0.06
+    ],
+    "sway": 0.9,
+    "swayMax": 3.5,
+    "swayHz": 3.2,
+    "swayDamping": 0.62,
+    "bobSide": 0.007,
+    "bobUp": 0.005,
+    "bobRoll": 0.7,
+    "strafeRoll": 0.55,
+    "accelLag": 0.0012,
+    "airLift": 0.004,
+    "airPitch": 0.5,
+    "landDrop": 0.006,
+    "landPitch": 0.9,
+    "crouchOffset": [
+      -0.02,
+      0.012,
+      0.015
+    ],
+    "crouchRoll": -4,
+    "sprintOffset": [
+      0.03,
+      -0.045,
+      0.03
+    ],
+    "sprintRot": [
+      -14,
+      28,
+      -6
+    ],
+    "sprintRate": 9,
+    "breathe": 0.0012,
+    "breathePitch": 0.12,
+    "breatheRate": 0.22
+  },
+  "mechanics": {
+    "boltTravel": 0.065,
+    "boltBack": 0.42,
+    "triggerPull": 12
   }
 }

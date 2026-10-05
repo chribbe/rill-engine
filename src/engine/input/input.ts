@@ -117,6 +117,11 @@ export class Input {
     return this.buttonEdges.get(b) ?? -1;
   }
 
+  /** Marks a pending button press as handled (consumed before the ticks). */
+  consumeButton(b = 0) {
+    this.buttonEdges.delete(b);
+  }
+
   /** Mouse counts since the last call (per rendered frame). */
   takeMouse(out: [number, number]) {
     out[0] = this.dx;

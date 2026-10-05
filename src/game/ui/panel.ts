@@ -1,6 +1,7 @@
 import GUI, { type Controller } from 'lil-gui';
 import type { Game } from '../game';
 import type { ConfigFile } from '../config';
+import type { WeaponDef } from '../weapon/def';
 
 /**
  * Gameplay tuning panel (lil-gui). Every control edits the live config object
@@ -137,6 +138,58 @@ export class TuningPanel {
     b(sp, d.spread, 'spread', 'air', 'In the air', 0, 8, 0.1);
     b(sp, d.spread, 'spread', 'crouch', 'Crouched ×', 0.2, 1.5, 0.01);
     sp.close();
+    const table = (title: string, group: keyof WeaponDef, rows: [string, string, number, number, number][], open = false) => {
+      const folder = f.addFolder(title);
+      const obj = d[group] as unknown as Record<string, unknown>;
+      for (const [key, label, min, max, step] of rows) this.bind(folder, cfg, obj, key, `${group}.${key}`, label, min, max, step);
+      if (!open) folder.close();
+      return folder;
+    };
+    table('Recoil (aim, °)', 'recoil', [
+      ['pitch', 'Vertical per shot', 0, 2, 0.01], ['yaw', 'Horizontal pattern', 0, 1.5, 0.01],
+      ['patternFreq', 'Pattern frequency', 0, 2, 0.01], ['patternPhase', 'Pattern phase', -3.2, 3.2, 0.05],
+      ['randomPitch', 'Random vertical ±', 0, 0.5, 0.005], ['randomYaw', 'Random horizontal ±', 0, 0.5, 0.005],
+      ['firstShot', 'First shot ×', 0, 1.5, 0.01], ['ramp', 'Ramp (shots)', 0, 15, 1],
+      ['maxPitch', 'Max vertical', 0, 15, 0.1], ['maxYaw', 'Max horizontal', 0, 8, 0.1],
+      ['kickTime', 'Kick time (s)', 0.005, 0.2, 0.001], ['permanent', 'Permanent share', 0, 1, 0.01],
+      ['recoverDelay', 'Recovery delay (s)', 0, 0.5, 0.005], ['recoverRate', 'Recovery rate (1/s)', 0, 30, 0.1],
+    ], true);
+    table('View punch (visual, °)', 'punch', [
+      ['pitch', 'Pitch', 0, 3, 0.01], ['yaw', 'Yaw', 0, 2, 0.01], ['roll', 'Roll', 0, 3, 0.01],
+      ['hz', 'Spring (Hz)', 1, 25, 0.1], ['damping', 'Damping', 0.1, 1.5, 0.01],
+    ]);
+    table('Weapon kick (model)', 'kick', [
+      ['back', 'Back (m)', 0, 0.1, 0.001], ['up', 'Up (m)', 0, 0.03, 0.0005], ['pitch', 'Muzzle rise (°)', 0, 10, 0.05],
+      ['yaw', 'Yaw (°)', 0, 5, 0.05], ['roll', 'Roll (°)', 0, 6, 0.05], ['random', 'Variation', 0, 1, 0.01],
+      ['posHz', 'Position spring (Hz)', 1, 25, 0.1], ['posDamping', 'Position damping', 0.1, 1.5, 0.01],
+      ['rotHz', 'Rotation spring (Hz)', 1, 25, 0.1], ['rotDamping', 'Rotation damping', 0.1, 1.5, 0.01],
+    ]);
+    const vm = table('Viewmodel motion', 'viewmodel', [
+      ['fov', 'Weapon FOV (vertical °)', 30, 90, 0.5],
+      ['sway', 'Look lag (° per rad/s)', 0, 4, 0.01], ['swayMax', 'Look lag max (°)', 0, 10, 0.1],
+      ['swayHz', 'Look spring (Hz)', 0.5, 12, 0.1], ['swayDamping', 'Look damping', 0.1, 1.5, 0.01],
+      ['bobSide', 'Bob side (m)', 0, 0.03, 0.0005], ['bobUp', 'Bob up (m)', 0, 0.03, 0.0005], ['bobRoll', 'Bob roll (°)', 0, 4, 0.05],
+      ['strafeRoll', 'Strafe roll (° per m/s)', 0, 3, 0.01], ['accelLag', 'Accel lag (m per m/s²)', 0, 0.006, 0.0001],
+      ['airLift', 'Air lift (m per m/s)', 0, 0.02, 0.0005], ['airPitch', 'Air pitch (° per m/s)', 0, 3, 0.05],
+      ['landDrop', 'Landing drop (m)', 0, 0.03, 0.0005], ['landPitch', 'Landing pitch (°)', 0, 4, 0.05],
+      ['crouchRoll', 'Crouch cant (°)', -20, 20, 0.5], ['sprintRate', 'Sprint blend (1/s)', 1, 30, 0.5],
+      ['breathe', 'Breathing (m)', 0, 0.005, 0.0001], ['breathePitch', 'Breathing pitch (°)', 0, 1, 0.01], ['breatheRate', 'Breathing (Hz)', 0, 1, 0.01],
+    ]);
+    const vmo = d.viewmodel;
+    const vec = (label: string, arr: [number, number, number], path: string, lim: number) => {
+      const folder = vm.addFolder(label);
+      ['x', 'y', 'z'].forEach((axis, i) => this.bind(folder, cfg, arr, String(i), `${path}.${i}`, axis, -lim, lim, lim / 200));
+      folder.close();
+    };
+    vec('Offset (m)', vmo.offset, 'viewmodel.offset', 0.5);
+    vec('Rotation (pitch, yaw, roll °)', vmo.rotation, 'viewmodel.rotation', 30);
+    vec('Pivot (m)', vmo.pivot, 'viewmodel.pivot', 0.3);
+    vec('Crouch offset (m)', vmo.crouchOffset, 'viewmodel.crouchOffset', 0.1);
+    vec('Sprint offset (m)', vmo.sprintOffset, 'viewmodel.sprintOffset', 0.2);
+    vec('Sprint rotation (°)', vmo.sprintRot, 'viewmodel.sprintRot', 60);
+    table('Mechanics', 'mechanics', [
+      ['boltTravel', 'Bolt travel (m)', 0, 0.15, 0.001], ['boltBack', 'Bolt back share', 0.05, 0.95, 0.01], ['triggerPull', 'Trigger pull (°)', 0, 30, 0.5],
+    ]);
     this.fileButtons(f, cfg);
   }
 

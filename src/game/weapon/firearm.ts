@@ -77,6 +77,26 @@ export class Firearm {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
 
+  /**
+   * A trigger press seen at the start of a frame fires right away at the frame's
+   * simulated time `now`, instead of waiting for the next tick (up to a tick of
+   * latency at high frame rates). Held fire then continues on the tick cadence.
+   */
+  pressNow(now: number, input: Input, player: FirstPersonController, camera: Camera, enabled: boolean) {
+    if (!enabled || !input.buttonPressed(0)) return;
+    const f = this.def.fire;
+    if (this.reloading > 0 || now < this.nextShot) return;
+    this.pullTime = input.buttonPressTime(0);
+    input.consumeButton(0);
+    if (this.ammo <= 0 && !f.infiniteAmmo) {
+      for (const g of this.onDryFire) g();
+      return;
+    }
+    this.fire(now, now, player, camera);
+    this.nextShot = now + this.interval;
+    this.semiQueued = false;
+  }
+
   tick(h: number, t: number, input: Input, player: FirstPersonController, camera: Camera, enabled: boolean) {
     const f = this.def.fire;
     const pressed = enabled && input.buttonPressed(0);
@@ -164,6 +184,7 @@ export class Firearm {
   }
 
   reset() {
+    this.seed = 0x2545f491;
     this.ammo = this.def.fire.magazine;
     this.reloading = 0;
     this.bloom = 0;

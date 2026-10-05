@@ -147,13 +147,14 @@ struct VSOut {
 // Every vertex entry point that feeds the masked prepass / equal-depth colour pass
 // pair must compute positions through this one function (bit-identical depths).
 fn clipPosition(inst: Instance, wp: vec4f) -> vec4f {
-  var p = frame.viewProj * wp;
   if ((inst.info.y & I_VIEWMODEL) != 0u) {
-    // Same projection as the world (muzzle effects line up), depth remapped into
-    // [0.75, 1] of reverse-Z so the weapon never clips into walls.
-    p.z = p.z * 0.25 + p.w * 0.75;
+    // Own field of view (the weapon keeps its shape whatever the player's FOV),
+    // depth remapped into [0.75, 1] of reverse-Z so it never clips into walls.
+    var v = frame.vmViewProj * wp;
+    v.z = v.z * 0.25 + v.w * 0.75;
+    return v;
   }
-  return p;
+  return frame.viewProj * wp;
 }
 
 // Slim vertex stage for the masked depth prepass: only what coverage needs. On a
