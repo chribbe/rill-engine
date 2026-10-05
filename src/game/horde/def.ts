@@ -175,6 +175,6 @@ export const TOMATO_DEFAULTS: TomatoDef = {
     red: [0.13, 0.004, 0.003],
     splats: 20, streaks: 14, splatSize: [0.8, 2.0], splatRadius: 6, wallSplats: 10, poolSize: [3.2, 4.6], mist: 0.3,
     juice: [0.045, 0.0015, 0.001], flesh: [0.32, 0.022, 0.009], seed: [0.42, 0.33, 0.15],
-    hitSpray: 18, hitSplatChance: 0.6, hitSplatReach: 3, light: 0, shake: 3, screenDistance: 5,
+    hitSpray: 18, hitSplatChance: 0.6, hitSplatReach: 3, light: 0, shake: 2.2, screenDistance: 5,
   },
 };

@@ -188,7 +188,7 @@
     "hitSplatChance": 0.6,
     "hitSplatReach": 3,
     "light": 0,
-    "shake": 3,
+    "shake": 2.2,
     "screenDistance": 5
   }
 }

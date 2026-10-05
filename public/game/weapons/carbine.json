@@ -41,11 +41,11 @@
     "recoverRate": 7
   },
   "punch": {
-    "pitch": 1.05,
-    "yaw": 0.35,
-    "roll": 1.1,
+    "pitch": 0.8,
+    "yaw": 0.27,
+    "roll": 0.75,
     "hz": 9,
-    "damping": 0.48
+    "damping": 0.56
   },
   "kick": {
     "back": 0.048,
@@ -151,7 +151,7 @@
       0.14
     ],
     "tracerEmissive": 14000,
-    "fovPunch": 0.9,
+    "fovPunch": 0.65,
     "shotSmoke": 0.2,
     "barrelSmoke": 0.25,
     "reloadPunch": 1.4,

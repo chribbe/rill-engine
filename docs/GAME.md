@@ -685,3 +685,10 @@ performance) will need:
   - "In view" now means in sight (a ray from the eye), not just ahead.
 - From the platform start nothing at ground level is in sight (the stairwell and platform end hide the square; the open grey area on the right is a flat roof). So after 2 s the first hole bursts in the square in front of the station, heard and not seen, and the horde comes up the stairs after you.
 - Test: 30 s of quiet, the hole at 30–32 s 40 m away, 18 tomatoes on the platform within 20 s.
+- The player start is now 0.9 m from the platform edge where the train doors open, turned away from the track towards the platform and stairwell (-26.03, 8.26, -9.22, yaw -150). Saved to the map together with the statue hole marker; the pending changeset had never been accepted, so play still started in the square.
+
+**Less shake when shooting (2026-10-05).** Your note: lower the screen shake when shooting a tiny bit; it's hard to see what's going on.
+- View punch per shot: pitch 1.05 → 0.8°, yaw 0.35 → 0.27°, roll 1.1 → 0.75°, damping 0.48 → 0.56 (settles with less wobble).
+- FOV punch 0.9 → 0.65°.
+- Kick from a tomato bursting close by: 3 → 2.2 (it stacks up in a horde).
+- Aim recoil (where the bullets go) is unchanged.

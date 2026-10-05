@@ -114,8 +114,8 @@
       "type": "marker",
       "semantic": "spawn",
       "parent": "grp_spawn",
-      "transform": { "position": [-67.0582, 0.0734, 9.7418] },
-      "yaw": 69.810691,
+      "transform": { "position": [-26.03, 8.26, -9.22] },
+      "yaw": -150,
       "pitch": 0
     },
     { "id": "grp_terrain", "name": "Terrain", "type": "group", "locked": true },
@@ -32305,6 +32305,14 @@
       "parent": "grp_gameplay",
       "transform": { "position": [-53.9, 0.03948, 4.9] },
       "yaw": 250
+    },
+    {
+      "id": "bug_hole_statue",
+      "name": "Bug hole: in front of Resenärer",
+      "type": "marker",
+      "semantic": "bug_hole",
+      "parent": "grp_gameplay",
+      "transform": { "position": [-92.3, 0.18, -81] }
     }
   ]
 }
