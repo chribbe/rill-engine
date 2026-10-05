@@ -29,12 +29,12 @@ export interface DecalMaterialDef {
 export const DECAL_FLOATS = 24;
 const LAYER_SIZE = 512;
 /** Runtime decals (bullet holes) kept in a ring; the oldest is replaced. */
-export const MAX_DYNAMIC_DECALS = 256;
+export const MAX_DYNAMIC_DECALS = 1024;
 const CELL = 8;
 /** Runtime decal grid: cell size (m), cells per side, slots per cell. */
 const DYN_CELL = 1;
 const DYN_N = 96;
-const DYN_SLOTS = 16;
+const DYN_SLOTS = 24;
 const DYN_STRIDE = DYN_SLOTS + 1;
 
 export interface DecalGrid {

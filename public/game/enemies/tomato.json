@@ -51,94 +51,94 @@
   },
   "gore": {
     "shells": [
-      5,
-      7
+      6,
+      9
     ],
     "chunks": [
-      1,
-      2
+      2,
+      3
     ],
     "pulp": [
-      3,
-      5
+      5,
+      8
     ],
     "gibSpeed": [
-      2.5,
-      8
+      3.5,
+      10
     ],
     "gibSpin": 16,
     "gibScale": [
       1,
-      1.5
+      1.6
     ],
     "gibLife": 60,
     "legsOff": 3,
-    "pops": 5,
+    "pops": 7,
     "popSize": [
-      0.35,
-      1.1
+      0.6,
+      2.3
     ],
     "popLife": [
-      0.2,
-      0.38
+      0.26,
+      0.5
     ],
-    "sprays": 6,
+    "sprays": 10,
     "sprayLength": [
-      0.9,
-      1.9
+      1.6,
+      3.4
     ],
     "sprayLife": [
-      0.16,
-      0.3
+      0.2,
+      0.36
     ],
-    "jets": 6,
-    "jetBlobs": 60,
-    "jetCone": 34,
+    "jets": 9,
+    "jetBlobs": 80,
+    "jetCone": 44,
     "jetSpeed": [
-      2.5,
-      10
+      3,
+      13
     ],
     "jetSize": [
-      0.012,
-      0.034
+      0.015,
+      0.046
     ],
-    "backJets": 3,
-    "coreBlobs": 30,
+    "backJets": 4,
+    "coreBlobs": 70,
     "coreSize": [
-      0.03,
-      0.07
+      0.035,
+      0.09
     ],
-    "drops": 120,
+    "drops": 260,
     "dropSize": [
       0.008,
-      0.022
+      0.024
     ],
     "dropSpeed": [
       2,
-      8.5
+      11
     ],
-    "blobs": 40,
+    "blobs": 70,
     "blobSize": [
       0.025,
-      0.075
+      0.08
     ],
-    "seeds": 30,
+    "seeds": 40,
     "red": [
       0.13,
       0.004,
       0.003
     ],
-    "splats": 12,
-    "streaks": 8,
+    "splats": 20,
+    "streaks": 14,
     "splatSize": [
-      0.6,
-      1.4
+      0.8,
+      2
     ],
-    "splatRadius": 3.8,
-    "wallSplats": 6,
+    "splatRadius": 6,
+    "wallSplats": 10,
     "poolSize": [
-      2.4,
-      3.4
+      3.2,
+      4.6
     ],
     "mist": 0.3,
     "juice": [
@@ -156,11 +156,11 @@
       0.33,
       0.15
     ],
-    "hitSpray": 16,
-    "hitSplatChance": 0.55,
-    "hitSplatReach": 2.5,
+    "hitSpray": 18,
+    "hitSplatChance": 0.6,
+    "hitSplatReach": 3,
     "light": 0,
-    "shake": 2.4,
-    "screenDistance": 3.2
+    "shake": 3,
+    "screenDistance": 5
   }
 }

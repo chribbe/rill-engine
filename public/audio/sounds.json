@@ -22,7 +22,7 @@
     "carbine_magin": {"maxVoices": 2, "layers": [{"samples": ["carbine/magin_1.wav"], "gain": -2, "pitch": [1.0, 1.07], "send": 0.05}]},
     "carbine_rack": {"maxVoices": 2, "layers": [{"samples": ["carbine/rack_1.wav"], "gain": -4, "pitch": [1.0, 1.07], "send": 0.05}]},
     "carbine_release": {"maxVoices": 2, "layers": [{"samples": ["carbine/release_1.wav"], "gain": -2, "pitch": [1.0, 1.07], "send": 0.05}]},
-    "tomato_burst": {"spatial": true, "ref": 4, "max": 120, "air": true, "maxVoices": 6, "layers": [{"samples": ["tomato/burst_1.wav", "tomato/burst_2.wav", "tomato/burst_3.wav"], "gain": 2, "gainJitter": 1, "pitch": [0.9, 1.08], "send": 0.3}]},
+    "tomato_burst": {"spatial": true, "ref": 5, "max": 140, "air": true, "maxVoices": 6, "layers": [{"samples": ["tomato/burst_1.wav", "tomato/burst_2.wav", "tomato/burst_3.wav"], "gain": 4, "gainJitter": 1, "pitch": [0.9, 1.08], "send": 0.3}]},
     "tomato_hit": {"spatial": true, "ref": 3, "max": 90, "air": true, "maxVoices": 8, "layers": [{"samples": ["tomato/hit_1.wav", "tomato/hit_2.wav", "tomato/hit_3.wav", "tomato/hit_4.wav"], "gain": -1, "gainJitter": 1.5, "pitch": [0.9, 1.12], "send": 0.15}]},
     "tomato_bite": {"spatial": true, "ref": 2, "max": 40, "air": true, "maxVoices": 4, "layers": [{"samples": ["tomato/bite_1.wav", "tomato/bite_2.wav"], "gain": 0, "gainJitter": 1, "pitch": [0.9, 1.1], "send": 0.1}]},
     "tomato_hiss": {"spatial": true, "ref": 3, "max": 60, "air": true, "maxVoices": 6, "layers": [{"samples": ["tomato/hiss_1.wav", "tomato/hiss_2.wav", "tomato/hiss_3.wav"], "gain": -6, "gainJitter": 2, "pitch": [0.85, 1.15], "send": 0.25}]},

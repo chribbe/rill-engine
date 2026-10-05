@@ -565,3 +565,13 @@ performance) will need:
 - **Learned along the way:** big glossy spheres read as cherries and uniform jets as bead chains. Volume comes from lit sheets plus many small drops.
 - Renderer regression pixel-identical.
 
+**Gore, size pass (2026-10-05).** Your note: it needs to be larger, a bigger explosion; a tomato is full of liquid and splats large.
+- **Burst:** 7 lit burst sheets up to ~3 m, 10 sprays up to ~4.5 m, 9 jets × 80 blobs in a 44° cone at up to 13 m/s (with bigger, longer stream sheets), 4 back-jets, 70 core blobs, 260 fine drops, 70 pulp blobs, 6–9 skin shells, 5–8 pulp gibs.
+  - Liquid hangs in the air longer.
+  - A close burst peaks around 1,400 particles; game update plus particle upload ~0.6–0.9 ms a frame.
+  - Counts scale down with distance (×1 within ~10 m, to ×0.3 from ~31 m) for hordes.
+- **Paint:** a 3.2–4.6 m pool, 20 splats out to 6 m, 14 streaks of 2.4–4.6 m flung along the blast, 10 wall rays.
+- **Feel:** screen splatter within 5 m, a stronger shake, a louder burst that carries further.
+- **Engine budgets:** particles 16,384 (was 4,096), runtime decals 1,024 (was 256), 24 per runtime decal cell (was 16).
+- Renderer regression pixel-identical.
+

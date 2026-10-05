@@ -407,6 +407,7 @@ export class Game {
     this.ammo?.update(sdt, W.ammo, W.def.fire.magazine, W.def.fire.infiniteAmmo, W.reloading ? { t: W.reloadT, total: W.reloadEmpty ? W.def.reload.empty : W.def.reload.tactical } : null, this.active);
     this.shells.update(sdt);
     this.debris.update(sdt);
+    this.gore.viewer = camera.position;
     this.gore.update(sdt);
     this.damage?.update(sdt);
     this.screenGore?.update(dt);

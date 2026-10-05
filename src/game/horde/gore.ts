@@ -27,6 +27,8 @@ export class TomatoGore {
   private q: Quat = quat.create();
   private v: V3 = [0, 0, 0];
   private centres = new Map<string, V3>();
+  /** The camera position (set each frame): far bursts spend fewer particles. */
+  viewer: ArrayLike<number> = [0, 0, 0];
 
   constructor(private world: World, private particles: ParticleSystem, private debris: Debris, private audio: GameAudio, private model: TomatoModel, public def: TomatoDef) {
     for (const p of model.parts) {
@@ -77,11 +79,11 @@ export class TomatoGore {
    * they string out into a stream that arcs under gravity and breaks up into drops.
    */
   private jet(from: ArrayLike<number>, d: ArrayLike<number>, n: number, speed: [number, number], size: [number, number], color: [number, number, number], inherit: ArrayLike<number>, sheet = true) {
-    this.particles.emit('drop', { count: n, pos: from, dir: d, spread: 0.07, speed, life: [0.6, 1.4], size, color, alpha: 1, drag: 0.3, gravity: 9.8, stretch: true, addVel: inherit });
+    this.particles.emit('drop', { count: n, pos: from, dir: d, spread: 0.07, speed, life: [0.8, 1.8], size, color, alpha: 1, drag: 0.3, gravity: 9.8, stretch: true, addVel: inherit });
     if (!sheet) return;
     // The stream's body: a lit liquid sheet flung along the jet for its first few frames.
-    const L = (speed[0] + speed[1]) * 0.06, w = L * 0.16, sp = Math.max(0, (L * 0.5 - w) / 0.012);
-    this.particles.emit('splash', { pos: [from[0] + d[0] * L * 0.45, from[1] + d[1] * L * 0.45, from[2] + d[2] * L * 0.45], dir: d, spread: 0, speed: [sp, sp], life: [0.12, 0.22], size: [w * 0.7, w], color, alpha: 1, stretch: true, fixed: true });
+    const L = (speed[0] + speed[1]) * 0.085, w = L * 0.17, sp = Math.max(0, (L * 0.5 - w) / 0.012);
+    this.particles.emit('splash', { pos: [from[0] + d[0] * L * 0.45, from[1] + d[1] * L * 0.45, from[2] + d[2] * L * 0.45], dir: d, spread: 0, speed: [sp, sp], life: [0.14, 0.26], size: [w * 0.7, w], color, alpha: 1, stretch: true, fixed: true });
   }
 
   /** World centre and orientation of a rig part (its mesh bounds centre), for the gib that replaces it. */
@@ -111,6 +113,10 @@ export class TomatoGore {
   burst(t: Tomato, point: ArrayLike<number> | null, dir: ArrayLike<number> | null, impulse: number) {
     const G = this.def.gore, P = this.particles, C = this.world.collision;
     const S = this.def.scale, c = t.shown, r = this.def.radius * S;
+    // Far away a burst is small on screen: fewer particles (a horde dies many at a time).
+    const dv = Math.hypot(c[0] - this.viewer[0], c[1] - this.viewer[1], c[2] - this.viewer[2]);
+    const q = Math.max(0.3, Math.min(1, 1.35 - dv / 30));
+    const n = (x: number) => Math.max(1, Math.round(x * q));
     const push: V3 | null = dir ? [dir[0] * impulse * 0.22, dir[1] * impulse * 0.1 + 0.6, dir[2] * impulse * 0.22] : null;
     const inherit = t.vel;
     const pos: V3 = [0, 0, 0];
@@ -152,28 +158,28 @@ export class TomatoGore {
     const cone = G.jetCone * Math.PI / 180, ma = Math.atan2(main[2], main[0]);
     for (let k = 0; k < G.jets; k++) {
       const d = this.inCone(main, cone, 0.12);
-      this.jet([c[0] + d[0] * r * 0.6, c[1] + d[1] * r * 0.6, c[2] + d[2] * r * 0.6], d, G.jetBlobs, G.jetSpeed, [G.jetSize[0] * S, G.jetSize[1] * S], k % 3 === 2 ? G.juice : G.red, hv);
+      this.jet([c[0] + d[0] * r * 0.6, c[1] + d[1] * r * 0.6, c[2] + d[2] * r * 0.6], d, n(G.jetBlobs), G.jetSpeed, [G.jetSize[0] * S, G.jetSize[1] * S], k % 3 === 2 ? G.juice : G.red, hv);
     }
     const back: V3 = [-main[0], 0.35 - main[1] * 0.5, -main[2]];
     vec3.normalize(back, back);
     for (let k = 0; k < G.backJets; k++) {
       const d = this.inCone(back, cone * 1.2, 0.1);
-      this.jet([c[0] + d[0] * r * 0.7, c[1] + d[1] * r * 0.7, c[2] + d[2] * r * 0.7], d, Math.round(G.jetBlobs * 0.55), [G.jetSpeed[0] * 0.5, G.jetSpeed[1] * 0.5], [G.jetSize[0] * S * 0.8, G.jetSize[1] * S * 0.8], G.red, hv);
+      this.jet([c[0] + d[0] * r * 0.7, c[1] + d[1] * r * 0.7, c[2] + d[2] * r * 0.7], d, n(G.jetBlobs * 0.55), [G.jetSpeed[0] * 0.5, G.jetSpeed[1] * 0.5], [G.jetSize[0] * S * 0.8, G.jetSize[1] * S * 0.8], G.red, hv);
     }
     // Core: big blobs leaving slowly, biased along the blast (the bursting volume).
-    P.emit('drop', { count: G.coreBlobs, pos: c, dir: [main[0] * 0.6, 0.35, main[2] * 0.6], spread: 0.9, speed: [0.5, 3.2], life: [0.35, 0.7], size: [G.coreSize[0] * S, G.coreSize[1] * S], color: G.red, alpha: 1, drag: 1.2, gravity: 6, stretch: true, addVel: hv });
-    P.emit('drop', { count: Math.round(G.coreBlobs * 0.4), pos: c, dir: [main[0] * 0.5, 0.3, main[2] * 0.5], spread: 0.9, speed: [0.4, 2.4], life: [0.3, 0.6], size: [G.coreSize[0] * S * 0.8, G.coreSize[1] * S * 0.8], color: G.juice, alpha: 1, drag: 1.2, gravity: 6, stretch: true, addVel: hv });
-    P.emit('drop', { count: G.drops, pos: c, dir: [0, 0.45, 0], spread: 1, speed: G.dropSpeed, life: [0.5, 1.2], size: [G.dropSize[0] * S, G.dropSize[1] * S], color: G.red, alpha: 1, drag: 0.5, gravity: 9.8, stretch: true, addVel: hv });
+    P.emit('drop', { count: n(G.coreBlobs), pos: c, dir: [main[0] * 0.6, 0.35, main[2] * 0.6], spread: 0.9, speed: [0.6, 4.5], life: [0.4, 0.85], size: [G.coreSize[0] * S, G.coreSize[1] * S], color: G.red, alpha: 1, drag: 1.2, gravity: 6, stretch: true, addVel: hv });
+    P.emit('drop', { count: n(G.coreBlobs * 0.4), pos: c, dir: [main[0] * 0.5, 0.3, main[2] * 0.5], spread: 0.9, speed: [0.5, 3.4], life: [0.35, 0.7], size: [G.coreSize[0] * S * 0.8, G.coreSize[1] * S * 0.8], color: G.juice, alpha: 1, drag: 1.2, gravity: 6, stretch: true, addVel: hv });
+    P.emit('drop', { count: n(G.drops), pos: c, dir: [0, 0.45, 0], spread: 1, speed: G.dropSpeed, life: [0.6, 1.4], size: [G.dropSize[0] * S, G.dropSize[1] * S], color: G.red, alpha: 1, drag: 0.5, gravity: 9.8, stretch: true, addVel: hv });
     // A dark burst behind it all: the volume's silhouette for the first few frames.
-    if (G.pops > 0) P.emit('splash', { count: G.pops, pos: c, dir: [main[0] * 0.5, 0.5, main[2] * 0.5], spread: 0.8, speed: [0.3, 1.6], life: G.popLife, size: [G.popSize[0] * S, G.popSize[1] * S], color: G.red, alpha: 1, drag: 3, gravity: 1, addVel: hv });
+    if (G.pops > 0) P.emit('splash', { count: G.pops, pos: c, dir: [main[0] * 0.5, 0.5, main[2] * 0.5], spread: 0.8, speed: [0.4, 2.4], life: G.popLife, size: [G.popSize[0] * S, G.popSize[1] * S], color: G.red, alpha: 1, drag: 3, gravity: 1, addVel: hv });
     for (let k = 0; k < G.sprays; k++) {
       const d = this.inCone(main, cone * 1.4, 0.15);
       const L = this.rnd(G.sprayLength[0], G.sprayLength[1]) * S, w = L * this.rnd(0.16, 0.24);
       const half = L * 0.5, sp = Math.max(0, (half - w) / 0.012);
       P.emit('splash', { pos: [c[0] + d[0] * half * 0.8, c[1] + d[1] * half * 0.8, c[2] + d[2] * half * 0.8], dir: d, spread: 0, speed: [sp, sp], life: G.sprayLife, size: [w * 0.7, w], color: k % 2 ? G.juice : G.red, alpha: 1, stretch: true, fixed: true });
     }
-    P.emit('debris', { count: G.blobs, pos: c, dir: [0, 0.6, 0], spread: 1, speed: [2, 7.5], life: [1.4, 2.8], size: [G.blobSize[0] * S, G.blobSize[1] * S], color: G.flesh, alpha: 1, drag: 0.4, gravity: 9.8, floor });
-    P.emit('debris', { count: G.seeds, pos: c, dir: [0, 0.5, 0], spread: 1, speed: [1.5, 6.5], life: [1.0, 2.2], size: [0.006, 0.011], color: G.seed, alpha: 1, drag: 0.5, gravity: 9.8, floor });
+    P.emit('debris', { count: n(G.blobs), pos: c, dir: [0, 0.6, 0], spread: 1, speed: [2, 7.5], life: [1.4, 2.8], size: [G.blobSize[0] * S, G.blobSize[1] * S], color: G.flesh, alpha: 1, drag: 0.4, gravity: 9.8, floor });
+    P.emit('debris', { count: n(G.seeds), pos: c, dir: [0, 0.5, 0], spread: 1, speed: [1.5, 6.5], life: [1.0, 2.2], size: [0.006, 0.011], color: G.seed, alpha: 1, drag: 0.5, gravity: 9.8, floor });
     P.emit('smoke', { count: 4, pos: c, dir: [0, 0.4, 0], spread: 1, speed: [1.5, 4], life: [0.3, 0.7], size: [0.2, 0.9 * S], color: G.juice, alpha: G.mist, drag: 5, gravity: 1.5 });
 
     // Paint: a pool under it now, satellites timed to the drops' flight, drips on walls in reach.
@@ -192,7 +198,7 @@ export class TomatoGore {
       const x = c[0] + Math.cos(a) * d, z = c[2] + Math.sin(a) * d;
       const gy = C.groundHeight(x, c[1] + 0.6, z, 4);
       // The texture sprays along +u: roll it so +u points away from the burst.
-      if (gy > -Infinity) this.queue.push({ t: this.time + 0.06 + d * 0.07, mat: 'decal_tomato_streak', p: [x, gy, z], n: [0, 1, 0], size: this.rnd(1.1, 2.0) * S, angle: Math.atan2(Math.cos(a), Math.sin(a)) });
+      if (gy > -Infinity) this.queue.push({ t: this.time + 0.06 + d * 0.07, mat: 'decal_tomato_streak', p: [x, gy, z], n: [0, 1, 0], size: this.rnd(1.8, 3.4) * S, angle: Math.atan2(Math.cos(a), Math.sin(a)) });
     }
     for (let k = 0; k < G.wallSplats; k++) {
       // Rays mostly along the blast: what is behind the tomato gets painted.

@@ -7,7 +7,7 @@
  * encoding exact: C' = Cp*W + C*(1-a), W' = W  =>  C'/W' = cp*a + c*(1-a).
  */
 
-export const MAX_PARTICLES = 4096;
+export const MAX_PARTICLES = 16384;
 const UP = [0, 1, 0];
 const GREY: [number, number, number] = [0.5, 0.5, 0.5];
 const FLOATS = 16; // per GPU particle: pos.xyz size | rot alpha kind seed | rgb emissive | vel.xyz -
