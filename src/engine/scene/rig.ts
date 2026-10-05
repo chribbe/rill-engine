@@ -1,7 +1,7 @@
 import { mat4, quat, type Mat4, type Quat } from 'wgpu-matrix';
 import type { GpuMesh } from '../render/geometry';
 import type { Material } from '../render/materials';
-import type { Renderable, Renderer } from '../render/renderer';
+import type { LodLevel, Renderable, Renderer } from '../render/renderer';
 import { transformAabb } from '../render/culling';
 
 /**
@@ -32,6 +32,8 @@ export interface RigPartSource {
   rest: Mat4;
   mesh: GpuMesh | null;
   materials: Material[];
+  /** Optional distance LOD chain (lods[0] = mesh / materials). */
+  lods?: LodLevel[];
 }
 
 const TMP = mat4.create();
@@ -61,7 +63,7 @@ export class Rig {
       let r: Renderable | null = null;
       if (s.mesh) {
         r = {
-          slot: this.renderer.instances.alloc(), mesh: s.mesh, materials: s.materials, viewmodel: this.opts.viewmodel,
+          slot: this.renderer.instances.alloc(), mesh: s.mesh, materials: s.materials, lods: s.lods, viewmodel: this.opts.viewmodel,
           castShadow: this.opts.castShadow ?? !this.opts.viewmodel, visible: false, id: `${this.id}/${s.name}`,
           worldMin: new Float32Array(3), worldMax: new Float32Array(3),
         };

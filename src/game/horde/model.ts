@@ -3,6 +3,7 @@ import type { Renderer } from '../../engine/render/renderer';
 import type { RigPartSource } from '../../engine/scene/rig';
 import type { DebrisMesh } from '../../engine/physics/debris';
 import type { GpuMesh } from '../../engine/render/geometry';
+import type { LodLevel } from '../../engine/render/renderer';
 import { loadGlbParts } from '../../engine/assets/gltf';
 
 export const LEG_KEYS = ['fl', 'ml', 'rl', 'fr', 'mr', 'rr'] as const;
@@ -10,6 +11,9 @@ export const LEG_KEYS = ['fl', 'ml', 'rl', 'fr', 'mr', 'rr'] as const;
 export const LEG_GROUP = [0, 1, 0, 1, 0, 1];
 
 type V3 = [number, number, number];
+
+/** Distances (m, at the reference field of view) where the rig parts switch to LOD1 and LOD2. */
+const LOD_DIST = [9, 22];
 
 export interface LegInfo {
   key: string;
@@ -50,10 +54,19 @@ export async function loadTomatoModel(R: Renderer, url: string): Promise<TomatoM
   let any: GpuMesh | null = null;
   const rests = new Map<string, Float32Array>();
   const extras = new Map<string, Record<string, unknown>>();
+  const lodMeshes = new Map<string, LodLevel[]>();
   for (const p of raw) {
     if (!p.mesh.primitives.length) continue;
     const mesh = R.arena.upload(p.mesh);
     const materials = await Promise.all(mesh.primitives.map((q) => R.materials.get(q.material)));
+    const lod = /^(.*)__lod(\d)$/.exec(p.name);
+    if (lod) {
+      // Distance LODs of a rig part (same pivot): <part>__lod1, __lod2.
+      const list = lodMeshes.get(lod[1]) ?? [];
+      list[+lod[2]] = { mesh, materials, dist2: LOD_DIST[+lod[2] - 1] ** 2 };
+      lodMeshes.set(lod[1], list);
+      continue;
+    }
     any ??= mesh;
     extras.set(p.name, p.extras);
     if (p.name.startsWith('gib_')) {
@@ -70,6 +83,12 @@ export async function loadTomatoModel(R: Renderer, url: string): Promise<TomatoM
     rests.set(p.name, rest as Float32Array);
     const parent = p.name === 'body' ? 'frame' : p.parent === 'body' && p.name !== 'lid' ? 'frame' : p.parent;
     parts.push({ name: p.name, parent, rest, mesh, materials });
+  }
+  for (const part of parts) {
+    const l = lodMeshes.get(part.name);
+    if (!part.mesh || !l || !l[1]) continue;
+    l[0] = { mesh: part.mesh, materials: part.materials, dist2: 0 };
+    part.lods = l.filter(Boolean);
   }
   const legs: LegInfo[] = LEG_KEYS.map((key) => {
     const upper = `leg_${key}_upper`, lower = `leg_${key}_lower`;

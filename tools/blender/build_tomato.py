@@ -42,6 +42,7 @@ import kit  # noqa: E402
 from kit import Piece, setup_cycles, unwrap, bake_pass, id_emission, pixels, blur, save_png  # noqa: E402
 
 ATLAS = 2048
+LOD_RATIOS = (0.25, 0.08)     # rig part LOD1 / LOD2 triangle share (legs keep 1.6x)
 IDS = ['skin', 'flesh', 'gel', 'seed', 'core', 'dark', 'vine', 'thorn', 'sepal']
 kit.configure(IDS, ATLAS, 96)
 OUT_GLB = os.path.join(PUBLIC, 'assets', 'enemies', 'tomato.glb')
@@ -525,6 +526,33 @@ def main():
               gib_copy(legs[6], 'gib_leg_upper', (3.2, 0.0, 0.4)), gib_copy(legs[7], 'gib_leg_lower', (3.2, 0.6, 0.4))]
     objs += copies
     gibs += copies
+    # Distance LODs of the rig parts (a horde is mostly far away): collapse-decimated copies after the
+    # bake (same UVs and texels), same parent and transform, named <part>__lod1 / __lod2.
+    rig_parts = [o for o in objs if not o.name.startswith('gib_')]
+    lods = []
+    for ob in rig_parts:
+        for level, ratio in ((1, LOD_RATIOS[0]), (2, LOD_RATIOS[1])):
+            cp = ob.copy()
+            cp.data = ob.data.copy()
+            cp.name = f'{ob.name}__lod{level}'
+            for k in list(cp.keys()):
+                del cp[k]
+            if 'parent' in ob:
+                cp['parent'] = ob['parent']
+            bpy.context.scene.collection.objects.link(cp)
+            # Thin legs keep more of their few triangles.
+            r = ratio if not ob.name.startswith('leg_') else min(1.0, ratio * 1.6)
+            dec = cp.modifiers.new('dec', 'DECIMATE')
+            dec.decimate_type = 'COLLAPSE'
+            dec.ratio = r
+            dec.use_collapse_triangulate = True
+            bpy.context.view_layer.objects.active = cp
+            for o in bpy.context.selected_objects:
+                o.select_set(False)
+            cp.select_set(True)
+            bpy.ops.object.modifier_apply(modifier=dec.name)
+            lods.append(cp)
+    objs += lods
     final = bpy.data.materials.new('veg_tomato')
     for ob in objs:
         ob.data.materials.clear()
@@ -541,8 +569,10 @@ def main():
         export_materials='EXPORT', export_image_format='NONE', export_extras=True, export_apply=True,
     )
     tris = {o.name: len(o.data.polygons) for o in objs}
-    rig = sum(v for k, v in tris.items() if not k.startswith('gib_'))
-    print(f'tomato: {len(objs) - len(gibs)} rig parts ({rig} triangles), {len(gibs)} gibs -> {OUT_GLB}')
+    rig = sum(v for k, v in tris.items() if not k.startswith('gib_') and '__lod' not in k)
+    lod1 = sum(v for k, v in tris.items() if k.endswith('__lod1'))
+    lod2 = sum(v for k, v in tris.items() if k.endswith('__lod2'))
+    print(f'tomato: {len(rig_parts)} rig parts ({rig} triangles; LODs {lod1}, {lod2}), {len(gibs)} gibs -> {OUT_GLB}')
     if '--preview' in sys.argv:
         preview(objs, lid)
 
