@@ -1301,7 +1301,7 @@ recipes.decals = () => {
 // in satellite drops, thick orange-red pulp lumps in the body, pale seeds; three floor splats and a
 // wall splat whose drips run down the image (v grows downwards = world down on a wall decal).
 recipes.gore = () => {
-  const juice = [0.028, 0.0012, 0.001], thin = [0.045, 0.0025, 0.0018], pulp = [0.14, 0.012, 0.005], seed = [0.36, 0.27, 0.11];
+  const juice = [0.11, 0.003, 0.002], thin = [0.14, 0.005, 0.003], pulp = [0.24, 0.014, 0.006], seed = [0.42, 0.33, 0.15];
   const mk = (seedBase: number) => {
     let s = seedBase >>> 0;
     const rr = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
@@ -1364,15 +1364,46 @@ recipes.gore = () => {
       o[3] = clamp01(a * (0.85 + thick * 0.15) * (0.9 + fbm(u, v, 40, 2, sd + 15) * 0.1));
     });
   };
+  // Streak: liquid flung across the ground along +u from a blob near the left edge.
+  const streak = (name: string, sd: number) => {
+    const rr = mk(sd);
+    const lines: { a: number; len: number; w: number }[] = [];
+    for (let k = 0; k < 18; k++) lines.push({ a: (rr() - 0.5) * 0.5 * (0.3 + rr() * 0.7), len: 0.35 + rr() * 0.55, w: 0.008 + rr() * 0.02 });
+    const dots: { x: number; y: number; r: number }[] = [];
+    for (let k = 0; k < 40; k++) { const t = rr(); dots.push({ x: 0.15 + t * 0.82, y: 0.5 + (rr() - 0.5) * (0.1 + t * 0.45), r: (0.005 + rr() * 0.02) * (1.2 - t * 0.6) }); }
+    decal(name, (u, v, o) => {
+      const wu = u + (fbm(u, v, 6, 3, sd + 1) - 0.5) * 0.04, wv = v + (fbm(u, v, 6, 3, sd + 2) - 0.5) * 0.04;
+      const px = wu - 0.12, py = wv - 0.5;
+      let a = smoothstep(0.1, 0.07, Math.hypot(px * 0.8, py));
+      let thick = a;
+      for (const l of lines) {
+        const ca = Math.cos(l.a), sa = Math.sin(l.a);
+        const along = px * ca + py * sa, across = -px * sa + py * ca;
+        if (along < 0 || along > l.len) continue;
+        const t = along / l.len, w = l.w * (1.4 - t);
+        const m = smoothstep(w * 1.1, w * 0.8, Math.abs(across));
+        a = Math.max(a, m * (t < 0.7 ? 1 : smoothstep(0.3, 0.7, Math.sin(along * 60 + l.a * 9) * 0.5 + 0.5)));
+        thick = Math.max(thick, m * (1 - t) * 0.6);
+      }
+      for (const d of dots) a = Math.max(a, smoothstep(d.r * 1.1, d.r * 0.8, Math.hypot(u - d.x, v - d.y)));
+      const c = [0, 0, 0];
+      for (let i = 0; i < 3; i++) c[i] = thin[i] + (pulp[i] - thin[i]) * thick;
+      o[0] = c[0]; o[1] = c[1]; o[2] = c[2];
+      o[3] = clamp01(a * 0.95);
+    });
+  };
+  streak('tomato_streak', 0x7a55);
   splat('tomato_splat_a', 0x7a11, false);
   splat('tomato_splat_b', 0x7a22, false);
   splat('tomato_splat_c', 0x7a33, false);
   splat('tomato_drip', 0x7a44, true);
 };
 
-// Effects atlas (additive sprites, sRGB colour = premultiplied intensity), 2048 x 1024, 512 tiles:
-//   row 0: muzzle flash seen from behind the gun (hot core, five birdcage jets, ragged petals), 4 variants
-//   row 1: muzzle flash plume from the side (root at the left edge, flame along +u), 4 variants
+// Effects atlas, 2048 x 2048, 512 tiles:
+//   row 0: muzzle flash seen from behind the gun (hot core, five birdcage jets, ragged petals), 4 variants  } additive,
+//   row 1: muzzle flash plume from the side (root at the left edge, flame along +u), 4 variants              } premultiplied
+//   row 2: liquid burst splashes (core, radial fingers, flung drops)                                        } alpha + lit:
+//   row 3: liquid sprays flung along +u from a root blob at the left                                        } rgb shading, a coverage
 recipes.fx = () => {
   mkdirSync(join(OUT, 'fx'), { recursive: true });
   const ramp = (i: number): [number, number, number] => {
@@ -1388,9 +1419,75 @@ recipes.fx = () => {
     return [1, 1, 0.95];
   };
   const T = 512;
-  writePng('fx/muzzle_flash.png', 4 * T, 2 * T, (x, y, o) => {
+  // Gore sprites (rows 2-3, alpha-blended and lit in the particle shader): rgb = shading, a = coverage.
+  type Blob = { x: number; y: number; r: number };
+  type Finger = { a: number; len: number; w: number };
+  const gore: { fingers: Finger[]; drops: Blob[]; streaks: { a: number; len: number; w: number }[] }[] = [];
+  for (let k = 0; k < 8; k++) {
+    const rr = mulberry32(4200 + k * 13);
+    const fingers: Finger[] = [], drops: Blob[] = [], streaks: { a: number; len: number; w: number }[] = [];
+    const nf = 9 + Math.floor(rr() * 5);
+    for (let i = 0; i < nf; i++) fingers.push({ a: (i / nf) * Math.PI * 2 + (rr() - 0.5) * 0.5, len: 0.5 + rr() * 0.45, w: 0.035 + rr() * 0.05 });
+    for (let i = 0; i < 34; i++) {
+      const a = rr() * Math.PI * 2, d = 0.45 + rr() * 0.5;
+      drops.push(k < 4 ? { x: 0.5 + Math.cos(a) * d * 0.5, y: 0.5 + Math.sin(a) * d * 0.5, r: (0.008 + rr() * 0.03) * (1.2 - d) }
+        : { x: 0.12 + rr() * 0.8, y: 0.5 + (rr() - 0.5) * (0.08 + rr() * 0.55) * rr(), r: 0.006 + rr() * 0.022 });
+    }
+    for (let i = 0; i < 16; i++) streaks.push({ a: (rr() - 0.5) * 0.85 * (0.4 + rr() * 0.6), len: 0.45 + rr() * 0.5, w: 0.012 + rr() * 0.02 });
+    gore.push({ fingers, drops, streaks });
+  }
+  const goreSprite = (row: number, tile: number, u: number, v: number, o: number[]) => {
+    // (u, v are warped below)
+    const G = gore[(row - 2) * 4 + tile], seed = 4300 + tile * 7 + row * 3;
+    // Domain warp: wobbly, organic edges instead of straight spokes.
+    u += (fbm(u, v, 5, 3, seed + 7) - 0.5) * 0.09;
+    v += (fbm(u, v, 5, 3, seed + 8) - 0.5) * 0.09;
+    let a = 0, shade = 0;
+    if (row === 2) {
+      // Burst: a thick ragged core, radial fingers with bulbous tips, flung drops.
+      const dx = u - 0.5, dy = v - 0.5, r = Math.hypot(dx, dy) * 2, th = Math.atan2(dy, dx);
+      const coreR = 0.3 + fbm(0.5 + Math.cos(th) * 0.35, 0.5 + Math.sin(th) * 0.35, 5, 3, seed) * 0.22;
+      a = smoothstep(coreR + 0.02, coreR - 0.02, r);
+      for (const f of G.fingers) {
+        let d = th - f.a - Math.sin(r * 9 + f.a * 3) * 0.12;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        const along = r / f.len;
+        if (along < 1.05) {
+          // Thick at the root, pinched mid-way, swelling again before the tip.
+          const w = f.w * (1.25 - along * 0.75 + 0.35 * Math.max(0, along - 0.7));
+          a = Math.max(a, smoothstep(w * 1.15, w * 0.85, Math.abs(d) * r) * (along <= 1 ? 1 : 0));
+        }
+        const tx = Math.cos(f.a) * f.len, ty = Math.sin(f.a) * f.len;
+        a = Math.max(a, smoothstep(f.w * 1.6, f.w * 1.2, Math.hypot(dx * 2 - tx, dy * 2 - ty)));
+      }
+      for (const b of G.drops) a = Math.max(a, smoothstep(b.r * 1.1, b.r * 0.8, Math.hypot(u - b.x, v - b.y)));
+      a *= smoothstep(1.0, 0.92, r);
+      shade = 0.55 + 0.4 * Math.min(1, r) + (fbm(u, v, 18, 3, seed + 1) - 0.5) * 0.25;
+    } else {
+      // Spray: a cone of streaks and drops flung along +u from a blob at the root.
+      const px = u, py = v - 0.5;
+      a = smoothstep(0.075, 0.055, Math.hypot(px - 0.08, py));
+      for (const st of G.streaks) {
+        const ca = Math.cos(st.a), sa = Math.sin(st.a);
+        const along = (px - 0.08) * ca + py * sa, across = -(px - 0.08) * sa + py * ca;
+        if (along < 0 || along > st.len) continue;
+        const t = along / st.len, w = st.w * (1 - t * 0.6) * (0.7 + 0.5 * Math.abs(Math.sin(along * 40 + st.a * 9)));
+        // Past ~60% the streak breaks up into beads.
+        const beads = t < 0.6 ? 1 : smoothstep(0.2, 0.6, Math.sin(along * 70 + st.a * 5) * 0.5 + 0.5);
+        a = Math.max(a, smoothstep(w * 1.1, w * 0.8, Math.abs(across + Math.sin(along * 14 + st.a * 7) * 0.01)) * beads);
+        a = Math.max(a, smoothstep(st.w * 1.4, st.w * 1.0, Math.hypot(along - st.len, across)));
+      }
+      for (const b of G.drops) a = Math.max(a, smoothstep(b.r * 1.1, b.r * 0.8, Math.hypot(u - b.x, v - b.y)));
+      a *= smoothstep(1.0, 0.9, px);
+      shade = 0.6 + 0.35 * px + (fbm(u, v, 18, 3, seed + 1) - 0.5) * 0.2;
+    }
+    o[0] = o[1] = o[2] = linearToSrgb(clamp01(shade));
+    o[3] = clamp01(a);
+  };
+  writePng('fx/effects.png', 4 * T, 4 * T, (x, y, o) => {
     const tile = Math.floor(x / T), row = Math.floor(y / T);
     const u = (x % T + 0.5) / T, v = (y % T + 0.5) / T;
+    if (row >= 2) { goreSprite(row, tile, u, v, o); return; }
     const seed = 900 + tile * 37 + row * 11;
     const rr = mulberry32(seed);
     let I = 0;
@@ -1434,7 +1531,7 @@ recipes.fx = () => {
     const c = ramp(I), k = Math.pow(I, 0.85);
     o[0] = linearToSrgb(c[0] * k); o[1] = linearToSrgb(c[1] * k); o[2] = linearToSrgb(c[2] * k); o[3] = I;
   });
-  console.log('  fx/muzzle_flash');
+  console.log('  fx/effects');
 };
 
 // ------------------------------------------------------------ run

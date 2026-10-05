@@ -305,7 +305,7 @@ Your notes: the gun feel is not there yet; smoke dies too fast when you wait and
   - Front sight: gas block → sight tower → post and protective ears are one connected piece (the post no longer floats). The rear sight drum sits on a base block with swept wings.
   - New parts: a pressed spine on the receiver cover, rivets, takedown pins, magazine release, selector, brass deflector, vented handguard (2 × 5 vents per side), finger-grooved pistol grip, trigger-guard band, barrel cap ring, bayonet lug, sling swivel, seams.
 - Material: a generated normal map (orange peel, parkerised grain, stippling, scratch grooves); matte olive enamel (roughness ≈ 0.74). Chips go through to dark steel only on exposed edges and deep scratches. Light scuffs just dull the paint; grime sits in creases, dust over it.
-- Muzzle flash: a sprite atlas (`npm run textures -- fx`, `public/textures/fx/muzzle_flash.png`): 4 star variants seen from behind, 4 side plumes rooted at the muzzle.
+- Muzzle flash: a sprite atlas (`npm run textures -- fx`, now `public/textures/fx/effects.png`): 4 star variants seen from behind, 4 side plumes rooted at the muzzle.
   - Layered as an orange star, a white-hot inner star and a stretched forward plume.
   - A flickering light pulse per shot.
 - Smoke:
@@ -528,4 +528,26 @@ performance) will need:
 - **Player:** a bite knocks the view, shoves you and flashes red at the screen edge. No health yet (step 4).
 - **Panel:** Horde folder (on/off, alive at once, spawn, movement, gait, attack, reactions, gore).
 - **Cost:** about 10 µs simulation and 7 µs posing per tomato per frame (8 alive).
+
+**Step 2 revision: your first look (2026-10-05).** Your notes: speed nice but maybe too fast for hordes. The legs look like quick up-and-down tapping, not a real bug. The gore is "not even close": a tomato should explode in red, chunky like Wolverine's blood effects.
+- **Slower:** chase 3.0 m/s (was 4.2), sprint 4.6 beyond 18 m, softer acceleration and turning, lunge 6.5 m/s.
+- **Gait** (rewritten):
+  - One phase advances with distance travelled (and turning). Each leg has a fixed offset: alternating tripods, front legs leading slightly.
+  - A foot stays planted for 56% of the cycle while the body glides over it, then lifts early and reaches forward to a landing point half a stance ahead (tracking the body).
+  - Longer strides (0.84 m at scale).
+  - The body dips softly twice per cycle and sways as the tripods alternate.
+  - Standing still, only stray feet take corrective steps.
+  - Quiet thorn-tick footsteps near you, and the odd hiss from tomatoes closing in.
+- **The red explosion** (engine: particle kinds `drop`, a glossy stretched liquid droplet, and `splash`, a lit liquid sprite from atlas rows 2–3):
+  - Atlas row 2: organic bursts (core, wobbly fingers, flung drops). Row 3: sprays flung along their axis.
+  - Each death: expanding burst sprites (red, plus dark juice), nine sprays flung outward, ~220 droplets (two thirds red, one third dark), 45 pulp blobs, seeds, and the mesh gibs.
+  - Ground paint: a pool, splats, eight streaks flung outward (`decal_tomato_streak`, rolled to point away), wall drips.
+  - Screen splatter when one bursts within 3.2 m in front of you: blobs, drops and running drips on the lens that fade over ~2 s.
+  - Bullet hits: a red spurt sprite out of the entry, a spray and droplets out of the exit, painting what's behind.
+  - Shot-off legs gush from the stump.
+- **Colour:** linear red ≈ 0.2 for liquid in the air; the ground splats are a truer red too. Very dark reds read brown, mid reds pink.
+- **Verification:**
+  - Renderer regression (`?game=0`) is pixel-identical to the step-8 shots.
+  - The frame-rate test is exact on repeat runs (the known first-run quirk aside).
+  - The horde is kept out of the frame-rate test.
 

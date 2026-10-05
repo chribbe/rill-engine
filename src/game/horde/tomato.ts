@@ -8,6 +8,9 @@ import type { ShotHit } from '../combat/hitscan';
 import type { TomatoDef } from './def';
 import { LEG_GROUP, type TomatoModel } from './model';
 
+/** Phase offsets per leg (fl ml rl fr mr rr): alternating tripods, front legs leading a little. */
+const GAIT_OFFSET = [0, 0.54, 0.08, 0.5, 0.04, 0.58];
+
 const RAD = Math.PI / 180;
 type V3 = [number, number, number];
 
@@ -31,6 +34,7 @@ interface Leg {
   to: V3;
   t: number;
   dur: number;
+  swinging: boolean;
 }
 
 /**
@@ -74,6 +78,10 @@ export class Tomato {
   private lean = spring();
   private roll = spring();
   private lastVel: V3 = [0, 0, 0];
+  private gaitPhase = 0;
+  /** Turn rate (rad/s, smoothed) and feet planted since the last read (footstep sounds). */
+  private yawRate = 0;
+  planted = 0;
   private seed = 1;
   private root: Mat4 = mat4.identity();
   private inv: Mat4 = mat4.identity();
@@ -91,7 +99,7 @@ export class Tomato {
     this.body = this.rig.part('body')!;
     this.lid = this.rig.part('lid')!;
     this.crown = this.rig.part('crown')!;
-    this.legs = model.legs.map((l) => ({ upper: this.rig.part(l.upper)!, lower: this.rig.part(l.lower)!, hp: 0, lost: false, foot: [0, 0, 0], from: [0, 0, 0], to: [0, 0, 0], t: -1, dur: 0.1 }));
+    this.legs = model.legs.map((l) => ({ upper: this.rig.part(l.upper)!, lower: this.rig.part(l.lower)!, hp: 0, lost: false, foot: [0, 0, 0], from: [0, 0, 0], to: [0, 0, 0], t: -1, dur: 0.1, swinging: false }));
   }
 
   private rand() {
@@ -326,16 +334,18 @@ export class Tomato {
     else if (this.state === 'dead') jawT = A.jawOpen;
     stepSpring(this.jaw, jawT * RAD, this.state === 'bite' ? 18 : 7, 0.45, dt);
 
-    // Body bob from the gait: rises while a tripod swings.
-    let swing = 0;
-    for (const l of this.legs) if (!l.lost && l.t >= 0) swing = Math.max(swing, Math.sin(Math.PI * l.t));
-    const bob = (swing - 0.5) * G.bob * d.scale * Math.min(1, speed / 1.5) * 2;
+    // Body: two soft dips per gait cycle (each tripod landing) and a sway as the tripods alternate.
+    this.yawRate += (dy * inv - this.yawRate) * Math.min(1, dt * 12);
+    const gaitK = Math.min(1, speed / 1.5);
+    const ph = this.gaitPhase * Math.PI * 2;
+    const bob = -Math.cos(ph * 2) * G.bob * d.scale * gaitK;
+    const sway = Math.sin(ph) * G.sway * RAD * gaitK;
 
     const M = this.root;
     mat4.translation([p[0], p[1] + bob, p[2]], M);
     mat4.rotateY(M, -yaw, M);
     mat4.rotateX(M, this.lean.x + this.tiltX.x, M);
-    mat4.rotateZ(M, this.roll.x + this.tiltZ.x, M);
+    mat4.rotateZ(M, this.roll.x + this.tiltZ.x + sway, M);
     mat4.uniformScale(M, d.scale, M);
     mat4.inverse(M, this.inv);
     const sq = this.squash.x;
@@ -348,48 +358,70 @@ export class Tomato {
     this.rig.update(this.root);
   }
 
-  /** Tripod gait: a leg steps when its planted foot falls behind its home; alternate groups. */
+  /**
+   * Tripod gait driven by one phase that advances with distance travelled (and turning): each leg
+   * has a fixed offset in the cycle, plants for `duty` of it while the body glides over it, then
+   * lifts early and reaches forward to where it will land (tracking the moving body). Front legs
+   * lead their tripod slightly (a ripple, not a stamp). Standing still, feet only take corrective steps.
+   */
   private stepLegs(dt: number, M: Mat4, C: CollisionWorld) {
-    const d = this.def, G = d.gait, legs = this.model.legs;
+    const d = this.def, G = d.gait, S = d.scale, legs = this.model.legs;
     const vx = this.vel[0], vz = this.vel[2], speed = Math.hypot(vx, vz);
-    const stepDur = Math.max(0.07, G.stepTime * Math.min(1.6, Math.max(0.6, 3 / Math.max(0.5, speed))));
+    const stride = G.stride * S, D = G.duty;
+    const travel = speed + Math.abs(this.yawRate) * 0.8 * S;
+    const moving = this.grounded && travel > 0.3;
+    const freq = travel / stride;
+    if (moving) this.gaitPhase = (this.gaitPhase + dt * freq) % 1;
+    const stance = moving ? D / freq : 0.3;
     const home = this.tmp, hipW = this.tmp2;
-    const busy = [0, 0];
-    for (let i = 0; i < 6; i++) if (this.legs[i].t >= 0 && this.legs[i].t < 0.6) busy[LEG_GROUP[i]]++;
     for (let i = 0; i < 6; i++) {
       const L = this.legs[i], info = legs[i];
       if (L.lost) continue;
       vec3.transformMat4(info.foot, M, home);
       if (this.grounded) {
         home[1] = this.ground;
-        home[0] += vx * G.lead; home[2] += vz * G.lead;
       } else {
         // In the air the legs reach forward and down, splayed.
-        home[1] = this.shown[1] - d.rideHeight * d.scale * 0.55;
+        home[1] = this.shown[1] - d.rideHeight * S * 0.55;
       }
-      if (this.fresh) { L.foot[0] = home[0]; L.foot[1] = home[1]; L.foot[2] = home[2]; L.t = -1; continue; }
+      if (this.fresh) { L.foot[0] = home[0]; L.foot[1] = home[1]; L.foot[2] = home[2]; L.t = -1; L.swinging = false; continue; }
       if (!this.grounded) {
-        const k = Math.min(1, dt * 14);
+        const k = Math.min(1, dt * 12);
         L.foot[0] += (home[0] - L.foot[0]) * k; L.foot[1] += (home[1] - L.foot[1]) * k; L.foot[2] += (home[2] - L.foot[2]) * k;
+        L.swinging = false;
         L.t = -1;
-      } else if (L.t >= 0) {
-        L.t += dt / L.dur;
-        if (L.t >= 1) { L.t = -1; L.foot[0] = L.to[0]; L.foot[1] = L.to[1]; L.foot[2] = L.to[2]; }
-        else {
-          const e = L.t * L.t * (3 - 2 * L.t);
+      } else if (moving) {
+        const p = (this.gaitPhase + GAIT_OFFSET[i]) % 1;
+        if (p < 1 - D) {
+          // Swing: lands half a stance ahead of home, so it plants under the hip mid-stance.
+          if (!L.swinging) { L.swinging = true; L.from[0] = L.foot[0]; L.from[1] = L.foot[1]; L.from[2] = L.foot[2]; }
+          L.to[0] = home[0] + vx * stance * 0.5; L.to[1] = home[1]; L.to[2] = home[2] + vz * stance * 0.5;
+          const u = p / (1 - D);
+          const e = u * u * (3 - 2 * u);
           L.foot[0] = L.from[0] + (L.to[0] - L.from[0]) * e;
-          L.foot[1] = L.from[1] + (L.to[1] - L.from[1]) * e + Math.sin(Math.PI * L.t) * G.lift * d.scale;
           L.foot[2] = L.from[2] + (L.to[2] - L.from[2]) * e;
+          L.foot[1] = L.from[1] + (L.to[1] - L.from[1]) * e + Math.sin(Math.PI * Math.pow(u, 0.7)) * G.lift * S;
+        } else if (L.swinging) {
+          L.swinging = false;
+          L.foot[0] = L.to[0]; L.foot[1] = L.to[1]; L.foot[2] = L.to[2];
+          this.planted++;
         }
+        L.t = -1;
       } else {
-        const off = Math.hypot(L.foot[0] - home[0], L.foot[2] - home[2]);
-        const g = LEG_GROUP[i];
-        if (off > G.stride * d.scale * 0.5 && busy[1 - g] === 0) {
+        // Idle: planted; a foot left far from home steps back under the body.
+        if (L.swinging) { L.swinging = false; L.foot[0] = L.to[0]; L.foot[1] = L.to[1]; L.foot[2] = L.to[2]; }
+        if (L.t >= 0) {
+          L.t += dt / L.dur;
+          const u = Math.min(1, L.t), e = u * u * (3 - 2 * u);
+          L.foot[0] = L.from[0] + (L.to[0] - L.from[0]) * e;
+          L.foot[1] = L.from[1] + (L.to[1] - L.from[1]) * e + Math.sin(Math.PI * u) * G.lift * S * 0.6;
+          L.foot[2] = L.from[2] + (L.to[2] - L.from[2]) * e;
+          if (L.t >= 1) L.t = -1;
+        } else if (Math.hypot(L.foot[0] - home[0], L.foot[2] - home[2]) > stride * 0.3 && !this.legs.some((o, j) => o.t >= 0 && LEG_GROUP[j] !== LEG_GROUP[i])) {
           L.t = 0;
-          L.dur = stepDur * (0.9 + this.rand() * 0.2);
+          L.dur = 0.16;
           L.from[0] = L.foot[0]; L.from[1] = L.foot[1]; L.from[2] = L.foot[2];
-          L.to[0] = home[0] + vx * L.dur * 0.5; L.to[1] = home[1]; L.to[2] = home[2] + vz * L.dur * 0.5;
-          busy[g]++;
+          L.to[0] = home[0]; L.to[1] = home[1]; L.to[2] = home[2];
         } else if (Math.abs(L.foot[1] - home[1]) > 0.02) {
           L.foot[1] += (home[1] - L.foot[1]) * Math.min(1, dt * 10);
         }

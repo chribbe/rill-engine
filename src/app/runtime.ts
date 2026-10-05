@@ -116,7 +116,7 @@ export async function createRuntime(canvas: HTMLCanvasElement, opts: { onProgres
   // Global engine textures.
   renderer.textures.load('/textures/cloud_noise.png', 'linear').then((t) => renderer.setCloudNoise(t.view)).catch(() => {});
   renderer.textures.load('/textures/debug_grid_albedo.png', 'color').then((t) => renderer.setDebugGrid(t.view)).catch(() => {});
-  renderer.textures.load('/textures/fx/muzzle_flash.png', 'color', { wrap: false }).then((t) => renderer.setParticleAtlas(t.view)).catch(() => {});
+  renderer.textures.load('/textures/fx/effects.png', 'color', { wrap: false }).then((t) => renderer.setParticleAtlas(t.view)).catch(() => {});
   // Weather snow layer (same maps as the 'snow' material).
   Promise.all([
     renderer.textures.load('/textures/snow_albedo.png', 'color'),

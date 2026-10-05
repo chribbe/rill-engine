@@ -23,16 +23,15 @@ export interface TomatoDef {
     speedJitter: number;
   };
   gait: {
-    /** Foot travel per step (m), lift height, step time at full speed (s, shorter when fast). */
+    /** Foot travel per step (m, at scale 1), lift height, share of the cycle a foot is planted. */
     stride: number;
     lift: number;
-    stepTime: number;
-    /** Body bob (m), lean into acceleration (degrees per m/s²), roll in turns. */
+    duty: number;
+    /** Body bob (m), side sway as the tripods alternate (degrees), lean into acceleration (degrees per m/s²), roll in turns. */
     bob: number;
+    sway: number;
     lean: number;
     roll: number;
-    /** How far ahead (s of velocity) feet are placed. */
-    lead: number;
   };
   attack: {
     /** Bite range (m from the body centre to the player's eye axis), windup, snap, recover, cooldown. */
@@ -72,9 +71,26 @@ export interface TomatoDef {
     gibScale: [number, number];
     gibLife: number;
     legsOff: number;
-    /** Droplets in the burst, splats painted around (count, size range, radius), on walls nearby. */
-    spray: number;
+    /** The pop: liquid burst sprites (count; size m at scale 1, start / end; life s). */
+    pops: number;
+    popSize: [number, number];
+    popLife: [number, number];
+    /** Sprays of liquid flung outward (count, length m at scale 1, life s). */
+    sprays: number;
+    sprayLength: [number, number];
+    sprayLife: [number, number];
+    /** Liquid droplets (count, size m at scale 1, speed m/s), chunky pulp blobs, seeds. */
+    drops: number;
+    dropSize: [number, number];
+    dropSpeed: [number, number];
+    blobs: number;
+    blobSize: [number, number];
+    seeds: number;
+    /** Liquid red of drops and sprites (linear albedo). */
+    red: [number, number, number];
+    /** Splats painted around (count, size range, radius), streaks flung across the ground, on walls nearby. */
     splats: number;
+    streaks: number;
     splatSize: [number, number];
     splatRadius: number;
     wallSplats: number;
@@ -93,6 +109,8 @@ export interface TomatoDef {
     /** Burst light (cd) and the camera shake when it bursts near the player (degrees at 1 m). */
     light: number;
     shake: number;
+    /** Screen splatter when one bursts within this distance in front of the camera (m). */
+    screenDistance: number;
   };
 }
 
@@ -104,17 +122,20 @@ export const TOMATO_DEFAULTS: TomatoDef = {
   radius: 0.42,
   rideHeight: 0.56,
   health: 70,
-  move: { speed: 4.2, sprint: 6.5, sprintDistance: 14, accel: 14, turnRate: 300, speedJitter: 0.18 },
-  gait: { stride: 0.42, lift: 0.14, stepTime: 0.13, bob: 0.035, lean: 1.4, roll: 10, lead: 0.12 },
+  move: { speed: 3.0, sprint: 4.6, sprintDistance: 18, accel: 10, turnRate: 240, speedJitter: 0.2 },
+  gait: { stride: 0.62, lift: 0.12, duty: 0.56, bob: 0.018, sway: 2.5, lean: 1.2, roll: 8 },
   attack: {
     range: 1.25, windup: 0.18, bite: 0.08, recover: 0.35, cooldown: 0.5, damage: 12,
-    lungeRange: [2.4, 5.5], lungeSpeed: 7.5, lungeUp: 3.4, lungeChance: 1.2, jawChase: 14, jawOpen: 52,
+    lungeRange: [2.4, 5.5], lungeSpeed: 6.5, lungeUp: 3.2, lungeChance: 1.0, jawChase: 14, jawOpen: 52,
   },
   reactions: { knock: 0.09, squash: 0.18, springHz: 5, springDamping: 0.32, staggerThreshold: 40, staggerTime: 0.35, flinch: 0.5 },
   gore: {
     shells: [5, 7], chunks: [1, 2], pulp: [3, 5], gibSpeed: [2.5, 8], gibSpin: 16, gibScale: [1.0, 1.5], gibLife: 60, legsOff: 3,
-    spray: 120, splats: 10, splatSize: [0.6, 1.4], splatRadius: 3.6, wallSplats: 5, poolSize: [2.2, 3.2], mist: 0.35,
-    juice: [0.05, 0.0022, 0.0015], flesh: [0.2, 0.018, 0.007], seed: [0.42, 0.33, 0.15],
-    hitSpray: 12, hitSplatChance: 0.45, hitSplatReach: 2.5, light: 120, shake: 2.2,
+    pops: 6, popSize: [0.35, 1.25], popLife: [0.22, 0.42], sprays: 9, sprayLength: [0.9, 2.0], sprayLife: [0.16, 0.3],
+    drops: 220, dropSize: [0.018, 0.055], dropSpeed: [2.5, 11], blobs: 45, blobSize: [0.025, 0.075], seeds: 30,
+    red: [0.2, 0.006, 0.004],
+    splats: 12, streaks: 8, splatSize: [0.6, 1.4], splatRadius: 3.8, wallSplats: 6, poolSize: [2.4, 3.4], mist: 0.3,
+    juice: [0.09, 0.003, 0.002], flesh: [0.32, 0.022, 0.009], seed: [0.42, 0.33, 0.15],
+    hitSpray: 16, hitSplatChance: 0.55, hitSplatReach: 2.5, light: 0, shake: 2.4, screenDistance: 3.2,
   },
 };

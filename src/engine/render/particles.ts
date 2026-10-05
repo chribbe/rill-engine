@@ -12,8 +12,13 @@ const UP = [0, 1, 0];
 const GREY: [number, number, number] = [0.5, 0.5, 0.5];
 const FLOATS = 16; // per GPU particle: pos.xyz size | rot alpha kind seed | rgb emissive | vel.xyz -
 
-/** `tracer`: a bright streak along its velocity like a spark, at constant brightness (a round in flight). */
-export type ParticleKind = 'smoke' | 'flash' | 'spark' | 'dust' | 'debris' | 'tracer';
+/**
+ * `tracer`: a bright streak along its velocity like a spark, at constant brightness (a round in flight).
+ * `drop`: a glossy liquid droplet (lit, alpha), usually stretched along its velocity.
+ * `splash`: a lit liquid sprite from the effects atlas, a burst (random roll) or, stretched, a spray
+ * flung along its velocity; it expands fast and fades.
+ */
+export type ParticleKind = 'smoke' | 'flash' | 'spark' | 'dust' | 'debris' | 'tracer' | 'drop' | 'splash';
 
 interface P {
   kind: ParticleKind;
@@ -185,7 +190,7 @@ export class ParticleSystem {
     const alpha = this.alphaList, add = this.addList;
     alpha.length = 0;
     add.length = 0;
-    for (const p of this.list) (p.kind === 'smoke' || p.kind === 'dust' || p.kind === 'debris' ? alpha : add).push(p);
+    for (const p of this.list) (p.kind === 'smoke' || p.kind === 'dust' || p.kind === 'debris' || p.kind === 'drop' || p.kind === 'splash' ? alpha : add).push(p);
     this.eye[0] = eye[0]; this.eye[1] = eye[1]; this.eye[2] = eye[2];
     alpha.sort(this.byDistance);
     for (let i = 0; i < alpha.length; i++) this.write(alpha[i], i);
@@ -196,14 +201,16 @@ export class ParticleSystem {
   private write(p: P, i: number) {
     const t = p.age / p.life;
     const o = i * FLOATS;
-    const size = p.kind === 'debris' ? p.size0 * Math.min(1, (1 - t) * 6) : p.size0 + (p.size1 - p.size0) * Math.sqrt(t);
+    const size = p.kind === 'debris' || p.kind === 'drop' ? p.size0 * Math.min(1, (1 - t) * 6)
+      : p.kind === 'splash' ? p.size0 + (p.size1 - p.size0) * (1 - (1 - t) ** 3)
+      : p.size0 + (p.size1 - p.size0) * Math.sqrt(t);
     // Soot fades in over a few frames, holds its body and thins out over the back
     // of its life (a lingering haze, not a pop); flashes and sparks start at full strength.
     const lit = p.kind === 'smoke' || p.kind === 'dust';
     const s = Math.max(0, (t - 0.08) / 0.92);
     // Debris stays solid and only shrinks away at the end of its life.
-    const fade = p.kind === 'debris' || p.kind === 'tracer' ? 1 : lit ? Math.min(1, 0.2 + p.age / 0.08) * (1 - s * s * (3 - 2 * s)) * (1 - 0.35 * t) : 1 - t;
-    const kind = p.kind === 'smoke' ? 0 : p.kind === 'dust' ? 1 : p.kind === 'flash' ? 2 : p.kind === 'spark' ? 3 : p.kind === 'debris' ? 4 : 5;
+    const fade = p.kind === 'debris' || p.kind === 'tracer' || p.kind === 'drop' ? 1 : p.kind === 'splash' ? (1 - t) ** 1.4 : lit ? Math.min(1, 0.2 + p.age / 0.08) * (1 - s * s * (3 - 2 * s)) * (1 - 0.35 * t) : 1 - t;
+    const kind = p.kind === 'smoke' ? 0 : p.kind === 'dust' ? 1 : p.kind === 'flash' ? 2 : p.kind === 'spark' ? 3 : p.kind === 'debris' ? 4 : p.kind === 'tracer' ? 5 : p.kind === 'drop' ? 6 : 7;
     const a = p.anchor >= 0 ? this.anchors.get(p.anchor) : undefined;
     const C = this.cpu;
     C[o] = p.pos[0] + (a ? a[0] : 0); C[o + 1] = p.pos[1] + (a ? a[1] : 0); C[o + 2] = p.pos[2] + (a ? a[2] : 0); C[o + 3] = size;

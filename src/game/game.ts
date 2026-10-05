@@ -20,6 +20,7 @@ import { Horde } from './horde/horde';
 import { TomatoGore, GORE_DECALS } from './horde/gore';
 import type { Tomato } from './horde/tomato';
 import { DamageFlash } from './ui/damage';
+import { ScreenGore } from './ui/screengore';
 import { TuningPanel } from './ui/panel';
 import { DebugHud } from './ui/hud';
 import { Crosshair } from './ui/crosshair';
@@ -64,6 +65,7 @@ export class Game {
   /** Seconds until the next respawn while below `horde.maxAlive`. */
   private respawnT = 1;
   damage: DamageFlash | null = null;
+  screenGore: ScreenGore | null = null;
   impacts!: ImpactFx;
   private impactTable: ImpactTable = { fallback: 'concrete', surfaces: {} };
   panel: TuningPanel | null = null;
@@ -150,6 +152,7 @@ export class Game {
     this.recoilPlot = new RecoilPlot(overlay);
     this.ammo = new AmmoIndicator(overlay);
     this.damage = new DamageFlash(overlay);
+    this.screenGore = new ScreenGore(overlay);
     document.getElementById('crosshair')?.remove();
     this.ready = true;
   }
@@ -237,13 +240,45 @@ export class Game {
     }
   }
 
+  private hissT = new Float32Array(64);
+
+  /** Thorn feet ticking on the ground near the player, and the odd hiss from the ones closing in. */
+  private hordeSounds(dt: number) {
+    const cam = this.rt.camera.position;
+    for (const t of this.horde.list) {
+      if (!t.alive) { t.planted = 0; continue; }
+      const d = Math.hypot(t.shown[0] - cam[0], t.shown[1] - cam[1], t.shown[2] - cam[2]);
+      if (t.planted > 0) {
+        if (d < 14) this.audio.play('tomato_step', { pos: t.shown });
+        t.planted = 0;
+      }
+      const i = t.index % this.hissT.length;
+      this.hissT[i] -= dt;
+      if (d < 12 && this.hissT[i] <= 0 && t.state === 'chase') {
+        this.hissT[i] = 2.5 + Math.random() * 4;
+        if (Math.random() < 0.6) this.audio.play('tomato_hiss', { pos: t.shown });
+      }
+    }
+  }
+
   /** A tomato burst: gore, a shake when it is close, the kill confirm on the crosshair. */
   private onTomatoKill(t: Tomato, point: ArrayLike<number> | null, dir: ArrayLike<number> | null, impulse: number) {
     this.gore.burst(t, point, dir, impulse);
     const { camera } = this.rt;
     const d = Math.hypot(t.shown[0] - camera.position[0], t.shown[1] - camera.position[1], t.shown[2] - camera.position[2]);
-    const k = this.hordeConfig.data.gore.shake / Math.max(1, d);
+    const G = this.hordeConfig.data.gore;
+    const k = G.shake / Math.max(1, d);
     if (k > 0.05) this.recoil.kickView(k * (Math.random() - 0.3), k * (Math.random() - 0.5), k * (Math.random() - 0.5) * 1.5);
+    // Close and in front: it splatters the screen.
+    if (d < G.screenDistance && this.screenGore) {
+      const m = camera.viewProj, p = t.shown;
+      const cw = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+      if (cw > 0.1) {
+        const sx = ((m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12]) / cw) * 0.5 + 0.5;
+        const sy = 0.5 - ((m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13]) / cw) * 0.5;
+        if (sx > -0.3 && sx < 1.3 && sy > -0.3 && sy < 1.3) this.screenGore.splash(1 - d / G.screenDistance, Math.min(0.95, Math.max(0.05, sx)), Math.min(0.9, Math.max(0.1, sy)));
+      }
+    }
   }
 
   /** A bite connected: the view is knocked away from it, the player shoved, a red flash, a crunch. */
@@ -354,6 +389,7 @@ export class Game {
     const now = this.clock.time + alpha * this.clock.step;
     player.frame(sdt, alpha);
     this.horde.pose(sdt, alpha);
+    this.hordeSounds(sdt);
     this.respawn(sdt);
     if (this.showHitboxes) this.drawHitboxes();
     this.recoil.frame(sdt, alpha, camera);
@@ -373,6 +409,7 @@ export class Game {
     this.debris.update(sdt);
     this.gore.update(sdt);
     this.damage?.update(sdt);
+    this.screenGore?.update(dt);
     this.impacts.update(sdt);
     this.audio.frame(dt, camera, world.collision);
     // Exact burst cadence: the next shot's sound is scheduled ~a frame ahead and the shot committed
@@ -414,6 +451,7 @@ export class Game {
     this.shells.clear();
     this.debris?.clear();
     this.gore?.clear();
+    this.screenGore?.clear();
     this.debug.clear();
     this.pulses.clear();
   }

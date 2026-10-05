@@ -378,7 +378,7 @@ def pulp(name, size, seed, at):
         v.co = Vector((q.x * size * k * 1.2, q.y * size * k * 0.95, q.z * size * k * 0.8))
     for f in [f for f in p.bm.faces if f not in before]:
         c = f.calc_center_median()
-        f.material_index = IDS.index('flesh' if math.sin(c.x * 25 + ph[3]) * math.sin(c.y * 22) > 0.35 else 'gel')
+        f.material_index = IDS.index('gel' if math.sin(c.x * 25 + ph[3]) * math.sin(c.y * 22) > 0.55 else 'flesh')
     for k in range(4):
         a, b = rr.random() * 6.28, rr.random() * 3.14
         d = Vector((math.cos(a) * math.sin(b), math.sin(a) * math.sin(b), math.cos(b)))
@@ -423,7 +423,7 @@ def compose(ao, idm, hgt):
     n_fine, n_mid, n_low, n_xl = nz(1), nz(4), nz(16), nz(48)
     srgb = lambda c: (np.array(c, np.float32) / 255.0) ** 2.2
     M = {k: ids == IDS.index(k) for k in IDS}
-    base = {'skin': ((158, 12, 7), 0.26), 'flesh': ((226, 58, 36), 0.3), 'gel': ((188, 112, 44), 0.05), 'seed': ((236, 218, 150), 0.34),
+    base = {'skin': ((158, 12, 7), 0.26), 'flesh': ((196, 26, 16), 0.28), 'gel': ((188, 112, 44), 0.05), 'seed': ((236, 218, 150), 0.34),
             'core': ((238, 136, 104), 0.32), 'dark': ((40, 3, 5), 0.1), 'vine': ((44, 74, 26), 0.6), 'thorn': ((104, 80, 44), 0.45), 'sepal': ((50, 104, 36), 0.5)}
     alb = np.zeros((ATLAS, ATLAS, 3), np.float32)
     rough = np.zeros((ATLAS, ATLAS), np.float32)

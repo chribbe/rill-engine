@@ -661,7 +661,7 @@ export class Renderer {
     return this.device.createBindGroup({ layout: this.particleLayout, entries: [{ binding: 0, resource: { buffer: this.particles.buffer } }, { binding: 1, resource: atlas }] });
   }
 
-  /** Sprite atlas for additive effect particles (muzzle flash variants; see particles.wgsl). */
+  /** Effects sprite atlas for particles (muzzle flash, liquid splashes; layout in particles.wgsl). */
   setParticleAtlas(view: GPUTextureView) {
     this.particleBG = this.makeParticleBG(view);
   }

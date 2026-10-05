@@ -15,14 +15,15 @@
 
 struct Particle {
   posSize: vec4f,   // xyz centre, w half size (m)
-  misc: vec4f,      // x rotation (tracer: streak half length), y opacity, z kind (0 smoke, 1 dust, 2 flash, 3 spark, 4 debris, 5 tracer), w seed
+  misc: vec4f,      // x rotation (tracer: streak half length), y opacity, z kind (0 smoke, 1 dust, 2 flash, 3 spark, 4 debris, 5 tracer, 6 drop, 7 splash), w seed
   color: vec4f,     // rgb albedo (lit kinds) or emission colour, w emissive (nits)
   vel: vec4f,       // xyz velocity (sparks stretch along it), w flags (1 viewmodel space, 2 stretch along velocity)
 };
 
 @group(1) @binding(0) var<storage, read> particles: array<Particle>;
-// Effects sprite atlas (additive, premultiplied colour): row 0 = muzzle flash seen from behind
-// (4 variants), row 1 = muzzle flash plume from the side, root at the left (4 variants).
+// Effects sprite atlas, 4 x 4 tiles: row 0 = muzzle flash seen from behind, row 1 = muzzle flash
+// plume from the side, root at the left (additive, premultiplied colour); row 2 = liquid bursts,
+// row 3 = liquid sprays along +u (alpha-blended and lit: rgb shading, a coverage). 4 variants each.
 @group(1) @binding(1) var fxAtlas: texture_2d<f32>;
 
 struct VOut {
@@ -124,7 +125,7 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
   // Soot billboards slide towards the eye by part of their radius so a big puff
   // next to a wall does not slice through it with a hard edge (no depth read here).
   let eyeDist = length(cam - p.posSize.xyz);
-  let pull = select(0.0, min(p.posSize.w * 0.6, max(eyeDist - 0.4, 0.0)), k <= 1u && !vm);
+  let pull = select(0.0, min(p.posSize.w * 0.6, max(eyeDist - 0.4, 0.0)), (k <= 1u || k == 7u) && !vm);
   let along = p.posSize.xyz + toCam * pull + ax * corner.x * ext.x;
   // Tracers keep at least ~4 px of width at each end, however far away.
   let minHalf = select(0.0, length(along - cam) * 2.0 / (frame.proj[1][1] * frame.viewport.y), k == 5u);
@@ -151,7 +152,7 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
     T = fog.transmittance;
     o.inscatter = fog.inscatter * frame.exposure.x;
   }
-  if (k <= 1u || k == 4u) {
+  if (k <= 1u || k == 4u || k >= 6u) {
     // Fake sphere normal across the puff for some volume in the shading.
     let n = normalize(toCam + (ax * corner.x + ay * corner.y) * 0.8);
     let viewDepth = -(frame.view * vec4f(wp, 1.0)).z;
@@ -181,14 +182,44 @@ fn chunkShape(in: VOut) -> vec2f {
   return vec2f(1.0 - smoothstep(edge - w, edge + w, r2), 0.7 + 0.3 * (1.0 - r2 / max(edge, 0.05)));
 }
 
+/** Liquid droplet: a smooth ellipse, darker at the rim, a glossy highlight up-left. */
+fn dropShape(in: VOut) -> vec2f {
+  let r2 = dot(in.uv, in.uv);
+  let w = fwidth(r2) * 1.5;
+  let a = 1.0 - smoothstep(0.82 - w, 0.82 + w, r2);
+  let hl = exp(-dot(in.uv - vec2f(-0.28, 0.32), in.uv - vec2f(-0.28, 0.32)) * 9.0);
+  return vec2f(a, 0.7 + 0.25 * (1.0 - r2) + 1.6 * hl * hl);
+}
+
+/** Liquid sprite from atlas rows 2 (burst, rolled) / 3 (spray along the stretch axis). */
+fn splashShape(in: VOut) -> vec2f {
+  let variant = floor(fract(in.params.z * 7.13) * 4.0);
+  let stretched = (u32(in.params.w + 0.5) & 2u) != 0u;
+  let tuv = in.uv * 0.5 + 0.5;
+  let row = select(2.0, 3.0, stretched);
+  let suv = vec2f((variant + clamp(tuv.x, 0.002, 0.998)) * 0.25, (row + clamp(1.0 - tuv.y, 0.002, 0.998)) * 0.25);
+  let c = textureSample(fxAtlas, sampClamp, suv);
+  return vec2f(c.a, c.r);
+}
+
 @fragment
 fn fsAlpha(in: VOut) -> @location(0) vec4f {
-  // Both shapes in uniform control flow (texture samples, derivatives), then pick.
+  // Every shape in uniform control flow (texture samples, derivatives), then pick by kind.
   let soot = sootShape(in);
   let chunk = chunkShape(in);
-  let isChunk = in.params.y > 3.5;
-  let a = select(soot, chunk.x, isChunk) * in.params.x;
-  let shade = select(1.0, chunk.y, isChunk);
+  let drop = dropShape(in);
+  let splash = splashShape(in);
+  let k = in.params.y;
+  let isChunk = k > 3.5 && k < 4.5;
+  let isDrop = k > 5.5 && k < 6.5;
+  let isSplash = k > 6.5;
+  var a = select(soot, chunk.x, isChunk);
+  var shade = select(1.0, chunk.y, isChunk);
+  a = select(a, drop.x, isDrop);
+  shade = select(shade, drop.y, isDrop);
+  a = select(a, splash.x, isSplash);
+  shade = select(shade, splash.y, isSplash);
+  a *= in.params.x;
   return vec4f((in.color * shade + in.inscatter) * a, a);
 }
 
@@ -198,7 +229,7 @@ fn fsAdditive(in: VOut) -> @location(0) vec4f {
   let variant = floor(fract(in.params.z * 7.13) * 4.0);
   let stretched = (u32(in.params.w + 0.5) & 2u) != 0u;
   let tuv = in.uv * 0.5 + 0.5;
-  let auv = vec2f((variant + clamp(tuv.x, 0.002, 0.998)) * 0.25, (select(0.0, 1.0, stretched) + clamp(1.0 - tuv.y, 0.002, 0.998)) * 0.5);
+  let auv = vec2f((variant + clamp(tuv.x, 0.002, 0.998)) * 0.25, (select(0.0, 1.0, stretched) + clamp(1.0 - tuv.y, 0.002, 0.998)) * 0.25);
   let flash = textureSample(fxAtlas, sampClamp, auv).rgb;
   // Spark streak: bright line fading towards both ends. Tracer: hot head (+x, the direction
   // of travel) with a rounded tip, fading along the tail.
