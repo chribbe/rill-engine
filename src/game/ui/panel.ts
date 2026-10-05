@@ -16,6 +16,7 @@ export class TuningPanel {
     this.gui = new GUI({ title: 'Gameplay tuning', width: 300, container });
     this.buildPlayer();
     this.buildWeapon();
+    this.buildAudio();
     this.buildDebug();
   }
 
@@ -191,6 +192,26 @@ export class TuningPanel {
       ['boltTravel', 'Bolt travel (m)', 0, 0.15, 0.001], ['boltBack', 'Bolt back share', 0.05, 0.95, 0.01], ['triggerPull', 'Trigger pull (°)', 0, 30, 0.5],
     ]);
     this.fileButtons(f, cfg);
+  }
+
+  private buildAudio() {
+    const A = this.game.audio, E = A.engine;
+    const f = this.gui.addFolder('Audio');
+    const o = {
+      get master() { return Math.round(20 * Math.log10(Math.max(1e-4, E.master.gain.value)) * 10) / 10; },
+      set master(v: number) { E.master.gain.value = Math.pow(10, v / 20); },
+      get reverb() { return E.reverbGain; },
+      set reverb(v: number) { E.reverbGain = v; },
+      get sound() { return E.speedOfSound; },
+      set sound(v: number) { E.speedOfSound = v; },
+      get on() { return A.enabled; },
+      set on(v: boolean) { A.enabled = v; },
+    };
+    f.add(o, 'on').name('Sound on');
+    f.add(o, 'master', -40, 6, 0.5).name('Master (dB)');
+    f.add(o, 'reverb', 0, 2, 0.01).name('Reverb ×');
+    f.add(o, 'sound', 0, 400, 1).name('Speed of sound (m/s, 0 off)');
+    f.close();
   }
 
   private buildDebug() {

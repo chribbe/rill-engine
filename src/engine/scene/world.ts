@@ -22,6 +22,7 @@ import { SceneStore, type SceneChange } from './scene';
 import { buildSigns } from '../render/signs';
 
 /** Decal materials always present in the atlas for gameplay-spawned decals. */
+/** Decal materials always kept in the atlas for runtime decals (more via `addRuntimeDecalMaterials`). */
 const RUNTIME_DECALS = ['decal_bullet', 'decal_bullet_metal'];
 
 /**
@@ -540,6 +541,17 @@ export class World {
   }
 
   /** Static decals from the decal entities; the atlas is rebuilt only when a new material appears. */
+  /** Decal materials gameplay may place at runtime (they stay in the decal atlas). */
+  readonly runtimeDecalMaterials = new Set<string>(RUNTIME_DECALS);
+
+  /** Registers more runtime decal materials (rebuilds the atlas once if any is new). */
+  async addRuntimeDecalMaterials(names: string[]) {
+    const fresh = names.filter((n) => !this.runtimeDecalMaterials.has(n));
+    if (!fresh.length) return;
+    for (const n of fresh) this.runtimeDecalMaterials.add(n);
+    await this.rebuildDecals();
+  }
+
   async rebuildDecals() {
     if (this.decalBuild) {
       // Coalesce: one rebuild after the running one, with the latest document.
@@ -548,13 +560,13 @@ export class World {
       return;
     }
     const decals = this.visibleOfType('decal');
-    if (this.decals && this.decals.covers(decals)) {
+    if (this.decals && this.decals.covers(decals) && [...this.runtimeDecalMaterials].every((m) => this.decals!.has(m))) {
       this.decals.setStatic(decals);
       this.uploadDecals();
       return;
     }
     this.decalBuild = (async () => {
-      const set = await buildDecals(this.renderer.device, this.renderer.textures, decals, RUNTIME_DECALS);
+      const set = await buildDecals(this.renderer.device, this.renderer.textures, decals, [...this.runtimeDecalMaterials]);
       this.decals = set;
       if (set) {
         set.setStatic(this.visibleOfType('decal'));

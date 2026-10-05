@@ -60,9 +60,17 @@ export class Viewmodel {
   private trig = 0;
   private pending: { time: number; burst: number }[] = [];
   private flashQueue = 0;
+  /** Barrel heat (shots, decaying): wisps of smoke after sustained fire. */
+  private heat = 0;
+  private wispT = 0;
   private tmp: [number, number, number] = [0, 0, 0];
   private tmp2: [number, number, number] = [0, 0, 0];
   private seed = 0x1234567;
+  /**
+   * Per shot, once the gun is posed: ejection port (world point lined up with the
+   * rendered port), the gun's right / up / forward axes in world space.
+   */
+  onEject: ((port: [number, number, number], right: [number, number, number], up: [number, number, number], fwd: [number, number, number]) => void)[] = [];
 
   constructor(private renderer: Renderer, private world: World, private camera: Camera, private pulses: LightPulses, public def: WeaponDef) {
     this.rig = new Rig(renderer, 'viewmodel', { viewmodel: true });
@@ -261,7 +269,23 @@ export class Viewmodel {
     // ---- flashes for this frame's shots, on the posed muzzle
     const mz = this.muzzle(this.tmp);
     this.renderer.particles.setAnchor(MUZZLE_ANCHOR, mz);
-    if (this.flashQueue > 0 && this.visible) this.emitFlash(mz);
+    // Barrel heat: wisps rise from the muzzle once a long burst stops.
+    this.heat = Math.max(0, this.heat - dt * 0.9);
+    this.wispT -= dt;
+    if (this.heat > 4 && now - this.lastShotTime > 0.15 && this.wispT <= 0 && this.visible) {
+      this.wispT = 0.05 + this.rand() * 0.04;
+      const k = Math.min(1, (this.heat - 4) / 10);
+      this.renderer.particles.emit('smoke', { pos: this.worldEquivalent(mz), dir: [0, 1, 0], spread: 0.25, speed: [0.08, 0.25], life: [1.0, 1.8], size: [0.008, 0.09], color: [0.6, 0.6, 0.62], alpha: 0.05 + 0.07 * k, drag: 2, gravity: -0.3 });
+    }
+    if (this.flashQueue > 0 && this.visible) {
+      this.heat += this.flashQueue;
+      this.emitFlash(mz);
+      const R = this.receiver!;
+      const norm = (v: [number, number, number]) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; v[0] /= l; v[1] /= l; v[2] /= l; return v; };
+      const right = norm(this.rig.dir(R, [1, 0, 0], [0, 0, 0])), up = norm(this.rig.dir(R, [0, 1, 0], [0, 0, 0])), fwd = norm(this.rig.dir(R, [0, 0, -1], [0, 0, 0]));
+      const port = this.worldEquivalent(this.eject([0, 0, 0]));
+      for (let i = 0; i < this.flashQueue; i++) for (const g of this.onEject) g(port, right, up, fwd);
+    }
     this.flashQueue = 0;
   }
 

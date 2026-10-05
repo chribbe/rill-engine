@@ -1,0 +1,1 @@
+{ "texture": "decals/bullet_hole.png", "tint": [1.75, 1.0, 0.82], "roughness": 0.92, "opacity": 1, "crater": 0.12, "angleFade": 0.2, "notes": "Bullet hole in brick: the concrete chip texture tinted to fresh brick." }

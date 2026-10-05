@@ -1,0 +1,1 @@
+{ "texture": "decals/bullet_hole.png", "tint": [0.55, 0.5, 0.45], "roughness": 0.95, "opacity": 0.9, "crater": 0.08, "angleFade": 0.2, "notes": "Bullet hole in soil / asphalt / rubber: dark, no bright chips." }

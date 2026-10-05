@@ -43,7 +43,13 @@ export class Firearm {
   onDryFire: (() => void)[] = [];
   onReload: ((phase: 'start' | 'end') => void)[] = [];
   lastLatencyMs = -1;
-  private nextShot = -Infinity;
+  /** Simulated time of the next possible shot. */
+  nextShot = -Infinity;
+  /**
+   * Shots up to this time are committed (their sound is already scheduled):
+   * they fire even if the trigger is released in the last frame before them.
+   */
+  committedUntil = -Infinity;
   private lastShot = -Infinity;
   private sinceShot = Infinity;
   private semiQueued = false;
@@ -58,6 +64,11 @@ export class Firearm {
 
   get interval() {
     return 60 / Math.max(1, this.def.fire.rpm);
+  }
+
+  /** Whether held fire will produce the shot at `nextShot` (auto, rounds left, not reloading). */
+  willContinue(held: boolean) {
+    return held && this.def.fire.mode === 'auto' && this.reloading === 0 && (this.ammo > 0 || this.def.fire.infiniteAmmo) && this.burst > 0;
   }
 
   /** Current cone half-angle (degrees) for the player's state. */
@@ -118,7 +129,8 @@ export class Firearm {
     }
     if (!held && !pressed && t - this.lastShot > this.interval * 1.5) this.burst = 0;
 
-    const wants = f.mode === 'auto' ? held || pressed : this.semiQueued;
+    const committed = f.mode === 'auto' && this.committedUntil > -Infinity && this.nextShot <= this.committedUntil && this.nextShot < t + h;
+    const wants = f.mode === 'auto' ? held || pressed || committed : this.semiQueued;
     if (wants && this.reloading === 0) {
       if (this.ammo <= 0 && !f.infiniteAmmo) {
         if (pressed) for (const g of this.onDryFire) g();
@@ -130,7 +142,8 @@ export class Firearm {
           this.nextShot = shotT + this.interval;
           this.semiQueued = false;
           // A tap shorter than a tick fires exactly one round.
-          if (f.mode === 'semi' || !held) break;
+          if (this.nextShot > this.committedUntil) this.committedUntil = -Infinity;
+          if (f.mode === 'semi' || (!held && this.committedUntil === -Infinity)) break;
           shotT = this.nextShot;
         }
       }
@@ -189,7 +202,7 @@ export class Firearm {
     this.reloading = 0;
     this.bloom = 0;
     this.burst = 0;
-    this.nextShot = this.lastShot = -Infinity;
+    this.nextShot = this.lastShot = this.committedUntil = -Infinity;
     this.sinceShot = Infinity;
     this.semiQueued = false;
   }

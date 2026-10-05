@@ -11,6 +11,8 @@ import { Firearm, type ShotEvent } from './weapon/firearm';
 import { Viewmodel } from './weapon/viewmodel';
 import { Recoil } from './weapon/recoil';
 import { ImpactFx, type ImpactTable } from './fx/impacts';
+import { Shells } from './fx/shells';
+import { GameAudio } from './audio/gameaudio';
 import { TuningPanel } from './ui/panel';
 import { DebugHud } from './ui/hud';
 import { Crosshair } from './ui/crosshair';
@@ -42,7 +44,10 @@ export class Game {
   readonly weapon: Firearm;
   readonly viewmodel: Viewmodel;
   readonly recoil: Recoil;
+  readonly shells: Shells;
+  readonly audio: GameAudio;
   impacts!: ImpactFx;
+  private impactTable: ImpactTable = { fallback: 'concrete', surfaces: {} };
   panel: TuningPanel | null = null;
   hud: DebugHud | null = null;
   crosshair: Crosshair | null = null;
@@ -53,6 +58,8 @@ export class Game {
   beforeTick: ((t: number) => void) | null = null;
   /** Real-time duration of the last frame's simulation work (ms). */
   simMs = 0;
+  /** Frame-independent mode for tests (no frame-length-dependent scheduling). */
+  deterministic = false;
   private muzzle: [number, number, number] = [0, 0, 0];
 
   constructor(readonly rt: Runtime) {
@@ -61,18 +68,36 @@ export class Game {
     this.weapon = new Firearm(this.weaponConfig.data, this.hitscan);
     this.viewmodel = new Viewmodel(rt.renderer, rt.world, rt.camera, this.pulses, this.weaponConfig.data);
     this.recoil = new Recoil(this.weaponConfig.data);
+    this.shells = new Shells(rt.renderer, rt.world, () => rt.world.collision);
+    this.audio = new GameAudio(() => this.impactTable);
   }
 
   async init(opts: { panel?: HTMLElement } = {}) {
     const { rt } = this;
     const impacts = fetch('/game/impacts.json', { cache: 'no-store' }).then((r) => r.json() as Promise<ImpactTable>);
-    await Promise.all([this.playerConfig.load(), this.weaponConfig.load(), this.viewmodel.load()]);
-    this.impacts = new ImpactFx(await impacts, rt.world, rt.renderer.particles, this.pulses);
+    await Promise.all([this.playerConfig.load(), this.weaponConfig.load(), this.viewmodel.load(), this.shells.load(), this.audio.init(rt.gpu.canvas)]);
+    this.impactTable = await impacts;
+    this.impacts = new ImpactFx(this.impactTable, rt.world, rt.renderer.particles, this.pulses);
+    const decalMats = Object.values(this.impactTable.surfaces).map((e) => e.decal).filter((d): d is string => !!d);
+    await rt.world.addRuntimeDecalMaterials(decalMats);
     rt.player.tuning = this.playerConfig.data;
     rt.sandbox.ownsParticles = false;
     rt.world.ensureCollision();
     this.weapon.onShot.push((e) => this.onShot(e));
-    rt.player.onLand.push((speed) => this.viewmodel.land(speed));
+    this.weapon.onDryFire.push(() => this.audio.play('carbine_dry'));
+    rt.player.onLand.push((speed, surface) => {
+      this.viewmodel.land(speed);
+      this.audio.land(surface, rt.player.feet, speed);
+    });
+    rt.player.onStep.push((surface, speed) => this.audio.step(surface, rt.player.feet, speed, rt.player.tuning.runSpeed, rt.player.stance === 'crouch'));
+    this.viewmodel.onEject.push((port, right, up, fwd) => {
+      const v = rt.player.velocity, j = () => Math.random() * 2 - 1;
+      const sr = 2.4 + Math.random() * 0.9, su = 1.3 + Math.random() * 0.7, sb = 0.4 + Math.random() * 0.4;
+      this.shells.eject(port,
+        [right[0] * sr + up[0] * su - fwd[0] * sb + v[0], right[1] * sr + up[1] * su - fwd[1] * sb + v[1], right[2] * sr + up[2] * su - fwd[2] * sb + v[2]],
+        fwd, [up[0] * 25 + j() * 6, up[1] * 25 + j() * 6, up[2] * 25 + j() * 6]);
+    });
+    this.shells.onBounce.push((pos, speed, surface, bounce) => this.audio.brass(surface, pos, speed, bounce));
     if (opts.panel) {
       this.panel = new TuningPanel(this, opts.panel);
       this.hud = new DebugHud(this);
@@ -86,11 +111,18 @@ export class Game {
   private onShot(e: ShotEvent) {
     this.recoil.onShot(e.burstIndex);
     this.viewmodel.onShot(e);
+    const st = this.audio.shotTime(e.time, this.weapon.interval);
+    const at = st.at;
+    if (!st.scheduled) this.audio.play('carbine_shot', { at });
     const muzzle = this.viewmodel.muzzle(this.muzzle);
     let end: number[] = [e.origin[0] + e.dir[0] * 300, e.origin[1] + e.dir[1] * 300, e.origin[2] + e.dir[2] * 300];
     for (let i = 0; i < e.hitCount; i++) {
       const h = e.hits[i];
-      if (h.kind === 'world') this.impacts.play(h, e.dir);
+      if (h.kind === 'world') {
+        this.impacts.play(h, e.dir);
+        // Bullet flight (~900 m/s) before the impact is heard.
+        this.audio.impact(h.surface, h.point, at + h.t / 900);
+      }
       if (this.showTraces) {
         this.debug.cross(h.point, 0.08, h.pierced ? [0.6, 0.9, 1, 1] : [1, 0.9, 0.2, 1], 4);
         this.debug.line(h.point, [h.point[0] + h.normal[0] * 0.3, h.point[1] + h.normal[1] * 0.3, h.point[2] + h.normal[2] * 0.3], [0.3, 0.5, 1, 1], 4);
@@ -136,6 +168,12 @@ export class Game {
     world.update(sdt, player.feet);
     sandbox.update(sdt);
     this.viewmodel.update(sdt, now, look, player, armed && input.buttonDown(0), this.weapon.interval);
+    this.shells.update(sdt);
+    this.audio.frame(dt, camera, world.collision);
+    // Exact burst cadence: the next shot's sound is scheduled ~a frame ahead and the shot committed
+    // (off in the deterministic frame-rate test, where release timing must not depend on frame length).
+    const c = this.deterministic ? null : this.audio.scheduleAhead(this.weapon.willContinue(armed && input.buttonDown(0)), this.weapon.nextShot, now);
+    if (c !== null) this.weapon.committedUntil = c;
     renderer.particles.update(sdt);
     this.pulses.update(sdt, renderer.dynamicLights);
     world.flushRuntimeDecals(camera.position);
@@ -148,6 +186,7 @@ export class Game {
   /** Clears runtime effects (decals, traces, lights). */
   resetEffects() {
     this.rt.world.clearRuntimeDecals();
+    this.shells.clear();
     this.debug.clear();
     this.pulses.clear();
   }
@@ -171,6 +210,7 @@ export class Game {
     };
     const runs: Record<number, { samples: { t: number; p: number[] }[]; shots: number[] }> = {};
     input.scripted = true;
+    this.deterministic = true;
     const decals = this.impacts.decals;
     this.impacts.decals = false;
     const onShot = (e: ShotEvent) => run.shots.push(e.time);
@@ -199,6 +239,7 @@ export class Game {
         runs[fps] = run;
       }
     } finally {
+      this.deterministic = false;
       this.beforeTick = null;
       this.weapon.onShot.splice(this.weapon.onShot.indexOf(onShot), 1);
       this.impacts.decals = decals;

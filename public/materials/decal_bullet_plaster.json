@@ -1,0 +1,1 @@
+{ "texture": "decals/bullet_hole.png", "tint": [1.45, 1.43, 1.38], "roughness": 0.95, "opacity": 1, "crater": 0.12, "angleFade": 0.2, "notes": "Bullet hole in plaster / render: bright chipped render." }

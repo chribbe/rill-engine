@@ -192,6 +192,35 @@ Viewmodel (`weapon/viewmodel.ts`):
 
 Latency: a trigger press is fired at frame start (`Firearm.pressNow`) instead of waiting for the next tick. The shot lands on the first frame after the press at 60 and 240 fps. Held fire keeps the exact tick cadence, and the frame-rate test stays identical (≤ 14 µm).
 
+**Step 4 — sound, brass, impacts (done, 2026-10-05).**
+
+Engine:
+- `audio/audio.ts`:
+  - Web Audio buses into a master compressor.
+  - Convolution reverbs per acoustic environment, with synthesised IRs (`audio/reverb.ts`: outdoor / room / tunnel).
+  - Layered events from `public/audio/sounds.json`: variations, gain / pitch jitter, delay, per-environment layers, lowpass, chance.
+  - Positional voices with distance rolloff, air-absorption lowpass and speed-of-sound delay (beyond 12 m).
+  - Per-event voice caps that fade out the oldest instance.
+  - Sample-accurate `at` scheduling; cancellable handles.
+- Runtime decal materials can be registered (`World.addRuntimeDecalMaterials`).
+- The particle system no longer allocates per particle or per frame: pooled records, in-place compaction, reused upload arrays.
+
+Game:
+- `tools/audio/generate.ts` synthesises 58 placeholder WAVs (`npm`-free: `node tools/audio/generate.ts`):
+  - carbine blast ×4, mechanism ×3, outdoor tails ×2, room tail, dry fire;
+  - brass;
+  - impacts for concrete, metal (+ ricochet), wood, glass, soil, flesh;
+  - hard / soft / gravel / metal footsteps and landings.
+- `audio/gameaudio.ts`:
+  - The first shot of a pull plays immediately.
+  - While the trigger is held, the next shot's sound is scheduled about a frame ahead at its exact cadence slot, and the shot is committed (`Firearm.committedUntil`). Measured gaps are exactly 85.7 ms at a steady 60 fps, at 4–24 ms random frame times and at 30 fps. A tap gives one shot and one sound.
+  - An acoustic probe (13 rays every 0.2 s) blends outdoor / room reverb.
+  - Footsteps and landings per surface (`impacts.json` `step`), impacts per surface (`sound`, delayed by bullet flight), brass per surface.
+- `fx/shells.ts`: pooled casings ejected from the rendered port (world-equivalent point, the gun's axes, plus the player's velocity). They spin, bounce with restitution and friction, settle flat and play tinkles.
+- Barrel smoke wisps after sustained fire.
+- Tinted per-surface bullet holes: brick, wood, plaster, and a dark one for soil / asphalt.
+- Panel Audio folder; audio readout (state, output latency, voices, room share).
+
 ## 7. Known limits to carry into G2
 
 Written up as G1 progresses: skinning and clips, navigation, enemy broadphase (spatial hash),
