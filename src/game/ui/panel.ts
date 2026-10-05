@@ -254,6 +254,7 @@ export class TuningPanel {
     f.add(dir, 'far', 7, 110, 1).name('Spawn path to (m)');
     const ho = f.addFolder('Bug holes');
     ho.add({ open: () => { const p = g.rt.player, a = g.rt.camera.yaw; g.openHole([p.feet[0] + Math.sin(a) * 16, p.feet[1], p.feet[2] - Math.cos(a) * 16]); } }, 'open').name('Open one ahead (16 m)');
+    ho.add(g, 'holeDelay', 0, 120, 1).name('No holes before (s)');
     ho.add(g, 'holeDirector').name('Holes open near you');
     ho.add(g, 'holeEvery', 2, 60, 1).name('New hole at most every (s)');
     ho.add(g, 'holeLow', 0, 60, 1).name('…when fewer than this alive');

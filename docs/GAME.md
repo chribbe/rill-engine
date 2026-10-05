@@ -675,3 +675,13 @@ performance) will need:
   - Up to 4 holes; the one furthest away (past 35 m) closes to make room.
   - Holes refill only while fewer than "alive at once" are up.
 - Panel → Bug holes: holes open near you, at most every (s), when fewer than (n) alive.
+
+**Off the train (2026-10-05).** Your ask: start on the platform (as later, getting off the train); 30 s before the statue hole or any other hole.
+- Player start moved onto the platform (-25.6, 8.26, -8.1), by the track under the canopy, facing the stairwell. Pending in the editor as a changeset, next to the statue hole one.
+- `holeDelay` 30 s: no marker or director hole opens before that (panel: "No holes before (s)").
+- **Director holes are on the ground itself:**
+  - A column's lowest floor, with 6 m of sky and level for the crater's radius. Never a platform or deck.
+  - Picked by straight-line distance (14–45 m) with at most 90 m of walking, so from the platform they open below it.
+  - "In view" now means in sight (a ray from the eye), not just ahead.
+- From the platform start nothing at ground level is in sight (the stairwell and platform end hide the square; the open grey area on the right is a flat roof). So after 2 s the first hole bursts in the square in front of the station, heard and not seen, and the horde comes up the stairs after you.
+- Test: 30 s of quiet, the hole at 30–32 s 40 m away, 18 tomatoes on the platform within 20 s.

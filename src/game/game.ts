@@ -20,6 +20,7 @@ import { Horde } from './horde/horde';
 import { TomatoGore, GORE_DECALS } from './horde/gore';
 import { Vitals } from './player/vitals';
 import { HoleField, type BugHole } from './horde/hole';
+import { NAV_MAXL } from '../engine/nav/navgrid';
 import { HealthIndicator } from './ui/health';
 import type { Tomato } from './horde/tomato';
 import { DamageFlash } from './ui/damage';
@@ -69,18 +70,23 @@ export class Game {
   holeRefill: [number, number] = [25, 12];
   /** A `bug_hole` marker bursts when you come within this distance (m), after this long into the run (s). */
   holeTrigger = 45;
-  holeDelay = 6;
+  /** No hole (marker or director) opens before this long into a run (s): a quiet start off the train. */
+  holeDelay = 30;
   /**
-   * The director opens holes near you (in view when it can) whenever the horde runs low: this far
-   * away (m of path), at least this often (s), when fewer than `holeLow` are alive.
+   * The director opens holes near you (in view when it can) whenever the horde runs low: on the
+   * ground `holeRange` metres from you (straight line; at most `holePathMax` m of walking), at
+   * most every `holeEvery` s, when fewer than `holeLow` are alive.
    */
   holeDirector = true;
-  holePath: [number, number] = [20, 38];
+  holeRange: [number, number] = [14, 45];
+  holePathMax = 90;
   holeEvery = 10;
   holeLow = 8;
   /** The old way: packs brought in out of sight (off: everything comes out of holes). */
   packs = false;
   private holeT = 0;
+  /** Seconds the director has been looking for a spot (the first few: only in view). */
+  private holeSearchT = 0;
   private holeMarkers: { pos: [number, number, number]; opened: boolean }[] = [];
   /** Draw tomato hit shapes. */
   showHitboxes = false;
@@ -227,7 +233,8 @@ export class Game {
     this.horde.begin(rt.player.feet, this.navKeep());
     this.respawnT = 1;
     this.group.left = 0;
-    this.holeT = this.holeEvery - 3;
+    this.holeT = this.holeEvery;
+    this.holeSearchT = 0;
     this.vitals.reset();
     this.kills = 0;
     this.runTime = 0;
@@ -336,9 +343,10 @@ export class Game {
     // Running low and nothing coming: a new hole opens nearby.
     this.holeT += dt;
     const pouring = this.holes.holes.some((h) => h.active && (!h.open || h.pending > 0));
-    if (this.holeDirector && this.runTime > 3 && !pouring && H.alive < this.holeLow && this.holeT >= this.holeEvery) {
-      // In view if it can (the burst is the show): for a few seconds only spots you are looking at.
-      if (this.findHoleSpot(this.spawnAt, this.holeT < this.holeEvery + 4)) { this.openHole(this.spawnAt); this.holeT = 0; }
+    if (this.holeDirector && this.runTime > this.holeDelay && !pouring && H.alive < this.holeLow && this.holeT >= this.holeEvery) {
+      // In view if it can (the burst is the show): for two seconds only spots you can see.
+      this.holeSearchT += dt;
+      if (this.findHoleSpot(this.spawnAt, this.holeSearchT < 2)) { this.openHole(this.spawnAt); this.holeT = 0; this.holeSearchT = 0; }
     }
     for (const h of this.holes.holes) {
       if (!h.active || !h.open) continue;
@@ -358,28 +366,36 @@ export class Game {
   }
 
   /**
-   * Somewhere for the director's next hole: on open, level ground with sky above (room for the
-   * crater), `holePath` metres of path from you (from 12 m when in view), clear of other holes.
-   * `inView`: only within the view (±45°); otherwise the sides, then anywhere.
+   * Somewhere for the director's next hole: on the ground itself (the lowest floor, never a deck or
+   * platform), open and level with sky above (room for the crater), `holeRange` metres from you and
+   * reachable within `holePathMax` m of walking, clear of other holes. From the platform that is the
+   * ground below it, so you watch it burst and the horde come up the stairs.
+   * `inView`: only within the view (±45°) and in sight; otherwise the sides, then anywhere.
    */
   private findHoleSpot(out: [number, number, number], inView: boolean): boolean {
     const nav = this.horde.nav, { player, camera } = this.rt, f = player.feet;
     if (!nav || nav.target < 0) return false;
-    const D = this.holes.def, [p0, p1] = this.holePath, base = Math.atan2(camera.forward[2], camera.forward[0]);
-    for (let attempt = 0; attempt < 60; attempt++) {
-      const spread = inView || attempt < 25 ? 1.55 : attempt < 45 ? 3.5 : Math.PI * 2;
+    const D = this.holes.def, [r0, r1] = this.holeRange, base = Math.atan2(camera.forward[2], camera.forward[0]);
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const spread = inView || attempt < 30 ? 1.55 : attempt < 55 ? 3.5 : Math.PI * 2;
       const a = base + (Math.random() - 0.5) * spread;
-      const near = spread < 2 ? Math.min(p0, 12) : p0;
-      const r = near + Math.random() * (p1 - near);
-      const x = f[0] + Math.cos(a) * r, z = f[2] + Math.sin(a) * r;
-      const node = nav.nearestNode(x, f[1] + 0.5, z, 2, true);
-      if (node < 0) continue;
-      const cost = nav.dist[node] / 20;
-      if (cost < near * 0.8 || cost > p1 * 1.6) continue;
+      const r = r0 + Math.random() * (r1 - r0);
+      const ix = Math.floor((f[0] + Math.cos(a) * r - nav.x0) / nav.cell), iz = Math.floor((f[2] + Math.sin(a) * r - nav.z0) / nav.cell);
+      if (ix < 0 || iz < 0 || ix >= nav.nx || iz >= nav.nz) continue;
+      const c = iz * nav.nx + ix;
+      if (!nav.layerN[c]) continue;
+      const node = c * NAV_MAXL, cost = nav.dist[node] / 20;
+      if (nav.dist[node] === 0xffffffff || cost < r0 * 0.8 || cost > this.holePathMax) continue;
       nav.nodeCentre(node, out);
       if (this.holes.holes.some((h) => h.active && Math.hypot(h.centre[0] - out[0], h.centre[2] - out[2]) < D.outer * 2.5)) continue;
       if (this.holeMarkers.some((m) => !m.opened && Math.hypot(m.pos[0] - out[0], m.pos[2] - out[2]) < D.outer * 2.5)) continue;
-      if (!nav.openArea(out[0], out[1], out[2], D.crest + 1, 0.4, 5)) continue;
+      if (!nav.openArea(out[0], out[1], out[2], D.crest + 1, 0.4, 6, true)) continue;
+      // In view means you can actually see it (not just that it is ahead, behind the stairwell).
+      if (inView) {
+        const e = camera.position, dx = out[0] - e[0], dy = out[1] + 0.6 - e[1], dz = out[2] - e[2], len = Math.hypot(dx, dy, dz);
+        const hit = this.rt.world.collision.raycast(e, [dx / len, dy / len, dz / len], len);
+        if (hit && hit.t < len - 1.5) continue;
+      }
       return true;
     }
     return false;
@@ -523,7 +539,8 @@ export class Game {
     this.horde.begin(rt.player.feet, this.navKeep());
     this.respawnT = 1;
     this.group.left = 0;
-    this.holeT = this.holeEvery - 3;
+    this.holeT = this.holeEvery;
+    this.holeSearchT = 0;
     this.vitals.reset();
     this.kills = 0;
     this.runTime = 0;

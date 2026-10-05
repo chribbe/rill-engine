@@ -561,8 +561,9 @@ export class NavGrid {
   /**
    * Is the ground around (x, y, z) open: within `r` every column has walkable floor within `dh` of
    * y, on the flow field, with at least `sky` metres free above it? (Room for a crater, say.)
+   * `lowest`: only each column's lowest floor counts (the ground, not a deck over it).
    */
-  openArea(x: number, y: number, z: number, r: number, dh: number, sky: number): boolean {
+  openArea(x: number, y: number, z: number, r: number, dh: number, sky: number, lowest = false): boolean {
     const cr = Math.ceil(r / this.cell);
     const cx = Math.floor((x - this.x0) / this.cell), cz = Math.floor((z - this.z0) / this.cell);
     for (let iz = cz - cr; iz <= cz + cr; iz++) {
@@ -572,7 +573,7 @@ export class NavGrid {
         if (ix < 0 || iz < 0 || ix >= this.nx || iz >= this.nz) return false;
         const c = iz * this.nx + ix;
         let ok = false;
-        for (let l = 0; l < this.layerN[c] && !ok; l++) {
+        for (let l = 0; l < (lowest ? Math.min(1, this.layerN[c]) : this.layerN[c]) && !ok; l++) {
           const node = c * MAXL + l, h = this.layerH[node];
           ok = Math.abs(h - y) <= dh && this.dist[node] !== UNREACHED && this.layerTop[node] - h >= sky;
         }
