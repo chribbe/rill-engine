@@ -4,6 +4,7 @@ import { Camera } from '../engine/scene/camera';
 import { Environment, type EnvironmentState } from '../engine/scene/environment';
 import { World } from '../engine/scene/world';
 import { FirstPersonController } from '../engine/player/controller';
+import { Input } from '../engine/input/input';
 import { StatsOverlay } from '../engine/ui/stats';
 import { tonemapperFromName } from '../engine/ui/playground';
 import { runStress, clearStress } from '../stress';
@@ -146,7 +147,8 @@ export async function createRuntime(canvas: HTMLCanvasElement, opts: { onProgres
     if (c.source === 'load' || c.patches.some((p) => p.kind === 'doc' && p.key === 'environment')) void applyEnvironment();
   });
 
-  const player = new FirstPersonController(camera, canvas, world.collision);
+  const input = new Input(canvas);
+  const player = new FirstPersonController(camera, input, world.collision);
   const sandbox = new Sandbox(renderer, camera, world);
   const sp = world.spawn();
   player.teleport(sp.position, sp.yaw, sp.pitch);
@@ -165,6 +167,8 @@ export async function createRuntime(canvas: HTMLCanvasElement, opts: { onProgres
   let last = performance.now();
   let lastFrameMs = 16;
   let running = false;
+  /** Debug frame-rate cap (frames per second, 0 = display rate): tests frame-rate independence. */
+  let fpsCap = params.has('fps') ? Math.max(0, +params.get('fps')! || 0) : 0;
 
   function defaultUpdate(dt: number) {
     player.update(dt);
@@ -220,7 +224,7 @@ export async function createRuntime(canvas: HTMLCanvasElement, opts: { onProgres
 
   // Automation / tooling API: structured operations, no screen clicking.
   const api = {
-    renderer, world, env, camera, player, sandbox,
+    renderer, world, env, camera, player, sandbox, input,
     setPreset,
     /** Advances `n` manual frames (1/60 s each), e.g. to simulate held fire before a shot. */
     step: async (n = 1) => {
@@ -294,10 +298,12 @@ export async function createRuntime(canvas: HTMLCanvasElement, opts: { onProgres
   };
 
   const rt = {
-    mapName, params, gpu, renderer, camera, world, env, player, sandbox, stats, renderables, stressList, api, hooks,
+    mapName, params, gpu, renderer, camera, world, env, player, sandbox, input, stats, renderables, stressList, api, hooks,
     setPreset, applyEnvironment, renderImage, saveImage, frame,
     onEnvironment: null as null | (() => void),
     get lastFrameMs() { return lastFrameMs; },
+    get fpsCap() { return fpsCap; },
+    set fpsCap(v: number) { fpsCap = Math.max(0, v); },
     /** Compiles what the first view needs, then every other variant in the background. */
     async prewarm() {
       progress('Compiling shaders…');
@@ -313,8 +319,10 @@ export async function createRuntime(canvas: HTMLCanvasElement, opts: { onProgres
       running = true;
       last = performance.now();
       const loop = (now: number) => {
-        frame(now);
         requestAnimationFrame(loop);
+        // Skip display frames to emulate a slower machine (within ~1 ms of the target interval).
+        if (fpsCap > 0 && now - last < 1000 / fpsCap - 1) return;
+        frame(now);
       };
       requestAnimationFrame(loop);
     },

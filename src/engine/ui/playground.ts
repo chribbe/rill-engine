@@ -152,10 +152,9 @@ export function createPlayground(r: Renderer, env: Environment, player: FirstPer
 
   const ctl = gui.addFolder('Controller');
   ctl.add(player, 'fly').name('Fly (F)');
-  ctl.add(player, 'walkSpeed', 0.5, 10, 0.1).name('Walk speed (m/s)');
-  ctl.add(player, 'flySpeed', 1, 60, 0.5).name('Fly speed (m/s)');
-  const fovP = { fov: 62 };
-  ctl.add(fovP, 'fov', 40, 100, 1).name('Vertical FOV (°)').onChange((v: number) => ((player as unknown as { camera: { fovY: number } }).camera.fovY = (v * Math.PI) / 180));
+  ctl.add(player.tuning, 'runSpeed', 0.5, 10, 0.1).name('Run speed (m/s)');
+  ctl.add(player.tuning, 'flySpeed', 1, 60, 0.5).name('Fly speed (m/s)');
+  ctl.add(player.tuning, 'fov', 60, 130, 1).name('FOV (horizontal 16:9, °)');
 
   const stress = gui.addFolder('Stress tests');
   const st = { kind: 'trees', count: 5000 };

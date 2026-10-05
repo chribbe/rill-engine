@@ -15,12 +15,13 @@
       #fatal { display: none; position: fixed; inset: 0; padding: 40px; background: #1a0c0c; color: #ffb4b4; white-space: pre-wrap; font-size: 14px; }
       #crosshair { position: fixed; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 2px; background: rgba(255,255,255,0.55); pointer-events: none; }
       .lil-gui { --font-size: 11px; --widget-height: 18px; }
+      #panels { position: fixed; top: 0; right: 0; max-height: 100vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; z-index: 10; }
     </style>
   </head>
   <body>
     <canvas id="view"></canvas>
     <div id="crosshair"></div>
-    <div id="hint">Click to look · WASD move · Shift run · Space jump · F fly (Q/E) · 1–4 weather · V view · Tab stats · H UI · P screenshot</div>
+    <div id="hint">Click to look · WASD move · Shift sprint · Alt walk · C / Ctrl crouch · Space jump · F fly (Q/E) · 1–8 weather · Tab stats · H UI · P screenshot</div>
     <div id="loading">Loading…</div>
     <div id="fatal"></div>
     <script type="module" src="/src/main.ts"></script>

@@ -1,6 +1,7 @@
 import { DEBUG_VIEWS } from './engine/render/renderer';
 import { createPlayground } from './engine/ui/playground';
 import { createRuntime, PRESETS } from './app/runtime';
+import { Game } from './game/game';
 
 /**
  * Standalone game view (play.html): the runtime with the renderer playground,
@@ -29,13 +30,26 @@ async function main() {
       player.teleport([q.position[0], q.position[1], q.position[2]], o.yaw ?? 0, o.pitch ?? 0);
     };
   }
+  // Right-hand panel column: gameplay tuning on top, the renderer playground (collapsed) below.
+  const column = document.createElement('div');
+  column.id = 'panels';
+  document.body.append(column);
   const gui = createPlayground(renderer, rt.env, player, {
     setPreset: rt.setPreset,
     stress: api.stress,
     clearStress: api.clearStress,
     capture,
     bookmarks,
-  });
+  }, { container: column });
+  // The game layer (?game=0: the plain viewer with the sandbox weapon).
+  let game: Game | null = null;
+  if (rt.params.get('game') !== '0') {
+    game = new Game(rt);
+    await game.init({ panel: column });
+    column.prepend(game.panel!.gui.domElement);
+    gui.close();
+    rt.hooks.update = game.update;
+  }
 
   // Fire (sandbox weapon) while the mouse is captured.
   canvas.addEventListener('mousedown', (e) => {
@@ -64,7 +78,10 @@ async function main() {
       e.preventDefault();
       stats.toggle();
     }
-    if (e.code === 'KeyH') gui.show(gui._hidden);
+    if (e.code === 'KeyH') {
+      gui.show(gui._hidden);
+      game?.panel?.gui.show(gui._hidden === false);
+    }
     if (e.code === 'KeyP') capture();
     if (e.code === 'KeyB') renderer.settings.bounds = !renderer.settings.bounds;
     if (e.code === 'KeyL') sandbox.toggleFlashlight();
@@ -84,7 +101,7 @@ async function main() {
   };
   setTimeout(() => (hint.style.opacity = '0'), 8000);
 
-  (window as unknown as { rill: typeof api }).rill = api;
+  (window as unknown as { rill: typeof api & { game: Game | null } }).rill = Object.assign(api, { game });
   await rt.prewarm();
   loading.remove();
   rt.start();

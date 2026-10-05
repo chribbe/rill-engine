@@ -1,0 +1,146 @@
+# Rill — game document
+
+Living document for the gameplay phase. The renderer ([ENGINE.md](ENGINE.md)) and the editor
+([EDITOR.md](EDITOR.md)) are stable subsystems; gameplay adds to them, it doesn't rewrite them.
+
+**Current milestone: G1 — movement + one gun + one enemy that feel exceptional.**
+Not in G1: subway, narration, radio, missions, inventory, more weapons or enemy types, hordes,
+holes, bosses, cinematics, saves, destruction (see the brief; G2–G5 come later, in order).
+
+---
+
+## 1. What exists (inspection, 2026-10-05)
+
+| Area | State | Gap for G1 |
+|---|---|---|
+| Player | `engine/player/controller.ts`: raw pointer-lock look (`unadjustedMovement`), velocity walk/run/fly, wall push by 3 stacked spheres, 5 ground rays, 0.45 m step, smoothed step camera | no capsule or velocity clipping (corner jitter, sticky walls), no slope limit, no crouch, variable-dt integration, no landing / footsteps |
+| Collision | `scene/collision.ts`: static triangle soup, 4 m XZ grid. Hässelby: 350k tris, raycast ≈ 30 µs, sphere push ≈ 2.7 µs | 2 surface classes (Default / Metal from `metallic`); each ray allocates a `Set`; no dynamic shapes |
+| Weapon | `src/sandbox.ts` test harness: box-built carbine, hitscan, flash sprites + point light, smoke, sparks / dust, 2 bullet decals, sway / bob / kick spring | it's a proof of rendering, not a weapon: fire timing is frame-quantised, no recoil model, no audio, no data |
+| Particles | `render/particles.ts`: CPU, 4 kinds (smoke, dust, flash, spark), cap 4096, lit per vertex | allocates per particle and per frame; no hard-edged debris kind; muzzle sprite is occluded by the barrel (viewmodel depth range) |
+| Decals | `render/decals.ts`: 192-entry ring of runtime decals sharing the static grid | grid rebuilt and uploaded on every `addDecal` (needs one flush per frame); only concrete and metal holes |
+| Viewmodel | instance flag: same projection as the world, depth squeezed into [0.75, 1] | no own FOV, so the gun stretches when FOV changes |
+| Audio | none | everything |
+| Animation | none: no skinning, glTF loader flattens nodes; per-frame instance transforms work (viewmodel, turnstiles) | multi-part rigs from GLB nodes |
+| Physics | none beyond collision queries | ragdoll / impulses |
+| Debug | lil-gui playground, stats overlay, `rill.step` / `shot` / `bench`, internal line renderer | public debug-line API, gameplay panel |
+| Editor | play mode shares the runtime (`rt.hooks.update`), markers `viewpoint` / `spawn` | an `enemy_spawn` marker |
+| Blender | installed; assets go out as GLB (`tools/blender/`) | weapon + enemy build scripts |
+
+**Test area:** the Hässelby station forecourt at `player_start` (−67, 0, 10). Within 35 m:
+brick facade, concrete viaduct bents, the glass station front, parked cars (paint, chrome,
+glass, tyres), lamp posts and railings, kiosk panels, wood doors, tree beds (dirt), granite kerbs,
+open paving to move around on, and the walkable station stair (17 cm risers) up to the platform.
+The only map changes are gameplay markers (no geometry, so the bake stays valid).
+
+## 2. Engine vs game
+
+```
+src/engine/…   generic: clock, input, collision + surfaces, audio, rigs, ragdoll, particles,
+               decals, debug draw. No game rules.
+src/game/…     G1: Game (wires systems into the runtime hooks), player feel, firearm,
+               recoil, viewmodel, impacts, enemy, tuning panel, crosshair.
+public/game/   data: player.json, weapons/carbine.json, enemies/<type>.json, impacts.json
+public/audio/  sounds.json (sound events) + samples
+```
+
+The game is plugged in from `play.html` and from the editor's play mode, using the same hooks.
+`src/sandbox.ts` is retired once the carbine replaces it (the flashlight moves to the player).
+
+## 3. Missing generic capabilities (minimum for G1)
+
+1. **Game clock:** fixed 120 Hz tick for movement, weapon and enemies, interpolated camera
+   position, time scale (slow motion) and a debug FPS cap. Mouse look stays per frame: it is
+   never ticked or smoothed.
+2. **Character collision:** capsule-vs-triangle depenetration with velocity clipping, a slope
+   limit, ground normal, ceiling test (uncrouch / jump). Allocation-free raycasts that can pierce
+   (bullets through glass).
+3. **Physical surfaces:** `"surface"` in material JSON (inherited; a name-based fallback for the
+   162 existing materials): concrete, brick, stone, asphalt, plaster, metal, wood, glass, soil,
+   grass, flesh. Stored per triangle and returned by every query, like Source's surfaceprop.
+4. **Audio (Web Audio):** buses (master → sfx / ambience / music / voice), sound events in
+   JSON (layers, variations, pitch / gain jitter, per-layer delay, 2D or positional, distance
+   low-pass), voice limits and priorities, environment reverb sends (impulse responses generated
+   for outdoor / room / tunnel), sample-accurate scheduling.
+5. **Rigs:** a GLB loaded as named parts with a transform hierarchy, posed per frame into
+   instance slots. Used by the gun (bolt, magazine, trigger) and the enemy (body parts).
+6. **Ragdoll:** Verlet particles with distance constraints, colliding through `pushSphere` and
+   ground queries. Roughly 300 lines; cheap enough for hordes later.
+7. **Small renderer additions, each regression-tested** (`rill.shotViews` + `tools/regress.mjs`):
+   viewmodel projection with its own FOV, viewmodel-space particles (fixes the flash occlusion),
+   a debug-line API with lifetimes, a `debris` particle kind, pooled particles, and decal
+   uploads batched once per frame.
+
+## 4. Decisions
+
+- **No physics library in G1.** Rapier would bring a character controller and ragdolls, but it
+  duplicates the 350k-triangle world in WASM (~2–3 MB), and that copy must be rebuilt in step
+  with editor edits. G1 needs one capsule, rays and one ragdoll, all of which the existing
+  collision handles. Evaluate Rapier against Jolt at G2/G3, when physics props and many ragdolls
+  matter.
+- **Procedural rigid-part animation in G1.** The bolt cycle is derived from the fire rate, so it
+  always matches the tuned RPM. Hit reactions are springs per joint, which respond faster and
+  more directly than canned clips. Skinned meshes and clips (and GPU skinning or vertex-animation
+  textures for hordes) are G2's first engine item.
+- **Hands:** rigid gloved hands only if they look right. Otherwise the gun stays alone for now.
+- **Firing:** hitscan from the eye. Shots fire at exact sub-tick times (accumulator), so 700 RPM
+  stays 700 RPM at 30 or 240 fps. Audio is scheduled with a constant offset, which keeps the
+  full-auto rhythm even. Nothing waits for an animation.
+- **Recoil in three channels:**
+  - **Aim kick:** moves where bullets go. It follows a learnable per-shot pattern plus a little
+    noise, and recovers, but never undoes the player's own pull-down.
+  - **View punch:** a visual-only camera spring.
+  - **Weapon kick:** springs in weapon space (kickback, muzzle rise, roll).
+  All channels use exact damped-spring steps, so they behave the same at any frame rate.
+- **Camera:** no head bob by default (the gun carries the walk cycle), a landing dip, a smooth
+  crouch transition, separate world and viewmodel FOVs.
+- **Weapon:** a compact 5.56 carbine with a Swedish flavour (Ak 5-like, which fits 1993
+  Stockholm). Full auto at ~700 RPM, 30-round magazine. Reload comes after firing feels right.
+  ADS is postponed.
+- **Enemy:** one root-vegetable walker (bulb body, head with leaf tuft, root arms and legs),
+  built in Blender. Each part has a capsule hitbox, giving head / torso / arm / leg regions. It
+  pursues in a straight line (navigation is G2). Impact feedback is a per-enemy profile:
+  particles, colours, sounds and splat decals.
+- **Sound assets:** none exist. Placeholder layers are synthesised offline (a node script writes
+  WAVs to `public/audio`; they are ours and committed). The repo is public, so licensed libraries
+  go into a gitignored `public/audio/local/` that overrides placeholders by name.
+
+## 5. Plan (each step ends with: run it, test it, look at it, fix the obvious)
+
+| Step | Deliverable | Checks |
+|---|---|---|
+| 1 Player | game clock; capsule controller with run / sprint / crouch / jump, slope and stair handling; landing response; FOV and sensitivity settings; gameplay panel skeleton + `player.json` | scripted inputs replayed at 30 / 60 / 120 / 240 fps give matching paths; corners, kerbs, station stair, slopes, ceilings |
+| 2 Fire | carbine state machine (semi / auto, sub-tick timing, spread); surfaces in materials; per-surface decals; trace debug lines; hit readout (object, point, normal, surface, region, damage); input→fire latency readout | shot count and spacing identical across frame rates; every surface class hit on the forecourt |
+| 3 Gun | Blender carbine with moving parts; viewmodel FOV; motion layers (look inertia, move sway, bob, landing, sprint pose, idle breathing); the recoil model | frame-stepped captures of a burst; recoil pattern plot |
+| 4 Feedback | audio engine; layered gun sound (mechanics, blast, tail, distant) with reverb sends; muzzle flash (viewmodel-space sprite, light, smoke); impacts per surface; shell casings; footsteps per surface | flash on the exact shot frame; audio vs frame timestamps logged |
+| 5 Enemy | Blender model, rig, pursuit, part hitboxes, health, `enemy_spawn` marker at the forecourt, respawn | hits register on every part; collides with player and world |
+| 6 Reactions | directional per-part flinch, stagger meter, squash, juice / chunk particles and splat decals; Verlet ragdoll death carrying the killing impulse | slow-motion review; reactions never stop pursuit for long |
+| 7 Tuning | panel complete: live values, reset to defaults, save to `public/game/*.json`, slow motion, FPS cap, debug toggles | save round-trip |
+| 8 Iterate | playtest passes with you, then a basic reload; list of G2 engine gaps | the brief's 18 success criteria |
+
+Throughout: the editor's play mode keeps working, renderer regression shots stay unchanged
+except for the viewmodel, and performance is benched before and after (no per-shot or
+per-frame allocations, bounded effects).
+
+## 6. Status
+
+**Step 1 — player (done, 2026-10-05).**
+- `engine/core/clock.ts`: fixed 120 Hz clock with exact tick times.
+- `engine/core/spring.ts`: closed-form damped springs.
+- `engine/input/input.ts`: one listener set, tick-consumed press edges with timestamps, per-frame mouse counts, scriptable.
+- `engine/physics/character.ts`: floating-capsule motor. Exact capsule-vs-triangle contacts (`CollisionWorld.pushCapsule`), velocity clipping, skin contacts, 9-point walkable ground probe, step reporting.
+- `engine/player/controller.ts`: rewritten on top of the motor.
+- Game layer: `src/game/game.ts` (clock owner, frame-rate test), `config.ts` (public/game/*.json, save through `/__game/save`), `ui/panel.ts` (tuning panel with changed-value marks), `ui/hud.ts` (readout).
+
+Measured on Hässelby:
+- The scripted input run gives bit-identical positions at 30 / 60 / 120 / 144 / 240 fps (`rill.game.testFrameRates()`).
+- The station stair climbs at a constant 4.6 m/s.
+- Wall slides run at the exact projected speed (2.96 m/s at 40°) with no grinding. The player stops dead in corners, with no jitter.
+- Jump peak 0.58 m (target 0.6). Crouch speed reached within 0.1 s.
+- One tick costs ≈ 0.05 ms.
+
+Raycasts no longer allocate (per-triangle stamps instead of a Set). The editor's play mode uses the same controller through `update(dt)`, which runs its own clock.
+
+## 7. Known limits to carry into G2
+
+Written up as G1 progresses: skinning and clips, navigation, enemy broadphase (spatial hash),
+physics library choice, particle GPU simulation, the decal grid under many impacts.
