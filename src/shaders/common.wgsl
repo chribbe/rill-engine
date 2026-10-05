@@ -40,6 +40,8 @@ struct Frame {
   lightGrid2: vec4u,     // x cells x, y cells z, z max lights per cell, w word offset of the cells in lightCells
   wind: vec4f,           // xy direction (world xz, unit), z strength (0..1), w time (s)
   wind2: vec4f,          // x gustiness, y gust scale (1/m), z gust speed (m/s), w twig flutter
+  decalDyn: vec4f,       // runtime decal grid: x origin x, y origin z, z inv cell size, w cells per side
+  decalDyn2: vec4u,      // x slots per cell, y word offset of its cells in decalCells
 };
 
 // debug.y flags

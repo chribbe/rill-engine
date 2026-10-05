@@ -24,6 +24,8 @@ export class Sandbox {
   flashlight = false;
   weapon = false;
   trigger = false;
+  /** The sandbox advances the shared particle system (off when the game layer owns it). */
+  ownsParticles = true;
   /** Smoothed beam direction (hand-held lag). */
   private aim = vec3.fromValues(0, 0, -1);
   private flashes: { light: LightData; t: number; life: number; peak: number }[] = [];
@@ -178,8 +180,7 @@ export class Sandbox {
   }
 
   update(dt: number) {
-    const P = this.renderer.particles;
-    P.update(dt);
+    if (this.ownsParticles) this.renderer.particles.update(dt);
     this.updateViewmodel(dt);
     this.cooldown = Math.max(0, this.cooldown - dt);
     if (this.weapon && this.viewmodel && this.trigger && this.cooldown <= 0) {

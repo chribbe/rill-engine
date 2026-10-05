@@ -1,4 +1,5 @@
 {
+ "surface": "snow",
  "baseColor": "snow_albedo.png",
  "normal": "snow_normal.png",
  "orm": "snow_orm.png",

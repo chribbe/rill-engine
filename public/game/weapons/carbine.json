@@ -1,0 +1,28 @@
+{
+  "name": "Carbine",
+  "fire": {
+    "rpm": 700,
+    "mode": "auto",
+    "magazine": 30,
+    "reloadTime": 2.1,
+    "infiniteAmmo": true,
+    "damage": 24,
+    "range": 300,
+    "falloffStart": 40,
+    "falloffEnd": 120,
+    "falloffMin": 0.6,
+    "impactForce": 8,
+    "pierceGlass": true,
+    "sprintBlock": 0.35
+  },
+  "spread": {
+    "base": 0.1,
+    "perShot": 0.07,
+    "max": 1.4,
+    "recovery": 4,
+    "recoveryDelay": 0.08,
+    "moving": 0.6,
+    "air": 2.5,
+    "crouch": 0.75
+  }
+}

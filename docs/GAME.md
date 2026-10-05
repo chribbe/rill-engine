@@ -140,6 +140,30 @@ Measured on Hässelby:
 
 Raycasts no longer allocate (per-triangle stamps instead of a Set). The editor's play mode uses the same controller through `update(dt)`, which runs its own clock.
 
+**Step 2 — firing (done, 2026-10-05).**
+
+Generic engine pieces:
+- `scene/surfaces.ts`: surface classes. Materials declare `"surface"` (written into 72 material files, inherited by the rest; a name-based guess covers new ones), stored per collision triangle.
+- `debug/draw.ts`: timed debug lines through `Renderer.debugLines`.
+- `render/lightpulses.ts`: pooled flash lights, each shown for at least one frame.
+- Runtime decal grid: the ENGINE.md §9 item.
+
+Game:
+- `combat/hitscan.ts`: world + target hitscan with glass piercing. Pooled results, 8 µs per trace on Hässelby.
+- `weapon/def.ts`: data in `public/game/weapons/carbine.json`.
+- `weapon/firearm.ts`: trigger with semi / auto, exact sub-tick cadence, magazine and reload timer, bloom spread with movement / air / crouch terms, deterministic RNG, trigger→shot latency.
+- `fx/impacts.ts`: `public/game/impacts.json`, a per-surface decal, particles and flash, with `like` + tint inheritance.
+- `weapon/viewmodel.ts`: the box carbine, still a placeholder.
+- `ui/crosshair.ts`: spread ticks and an optional hit tick.
+- Panel: weapon folder and debug toggles (traces, decals, crosshair).
+
+Measured:
+- Held fire gives the same shot count and shot times at 30–240 fps (85.7 ms apart at 700 RPM).
+- Forecourt hits resolve to brick, concrete, metal, stone, tile, grass, asphalt and plaster; glass is pierced.
+- Renderer regression against `e3b`: views 0 and 4–9 sit at baseline noise. Hall views 1–3 vary as much between two runs of the same build.
+
+Note: the controller now sets the camera FOV from tuning (95° horizontal = 63.1° vertical). Captures that must match older baselines set `rill.player.tuning.fov = 93.78` (62° vertical).
+
 ## 7. Known limits to carry into G2
 
 Written up as G1 progresses: skinning and clips, navigation, enemy broadphase (spatial hash),

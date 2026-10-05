@@ -1,1 +1,1 @@
-{"baseColorFactor": "#1d1f21", "roughness": 0.4, "metallic": 0.4, "porosity": 0, "snow": 0, "notes": "Radiator grille."}
+{ "surface": "metal","baseColorFactor": "#1d1f21", "roughness": 0.4, "metallic": 0.4, "porosity": 0, "snow": 0, "notes": "Radiator grille."}

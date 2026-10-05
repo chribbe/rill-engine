@@ -1,4 +1,5 @@
 {
+ "surface": "wood",
  "baseColor": "bark_pine_albedo.png",
  "normal": "bark_pine_normal.png",
  "orm": "bark_pine_orm.png",

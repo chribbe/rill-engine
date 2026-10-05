@@ -1,4 +1,5 @@
 {
+ "surface": "plaster",
  "baseColor": "plaster_albedo.png",
  "normal": "plaster_normal.png",
  "orm": "plaster_orm.png",

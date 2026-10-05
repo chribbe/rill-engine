@@ -15,6 +15,7 @@ import { GpuTimer } from './timing';
 import { ExposureController } from './exposure';
 import { ReflectionProbes, faceView, CAPTURE_PRE_EXPOSURE, PROBE_SIZE } from './reflections';
 import type { LoadedProbeVolume } from './lightmaps';
+import type { DecalGrid } from './decals';
 import type { ReflectionProbeObject } from '../scene/mapformat';
 import type { EnvironmentState, DerivedEnvironment } from '../scene/environment';
 import { aabbVisible, extractPlanes, type Plane } from './culling';
@@ -426,6 +427,11 @@ export class Renderer {
   private time = 0;
   private captureRequest: ((b: ImageData) => void) | null = null;
   lineVerts: number[] = [];
+  /**
+   * Debug lines from tools / gameplay, drawn every frame until cleared by their owner:
+   * 14 floats per line (a.xyz, rgba, b.xyz, rgba), depth tested.
+   */
+  debugLines: number[] = [];
   lightmapLayers = 0;
 
   constructor(private gpu: GpuContext) {
@@ -767,7 +773,7 @@ export class Renderer {
   }
 
   /** Decals: packed decal structs + a world-space XZ grid of per-cell index lists. */
-  setDecals(packed: Float32Array, count: number, cells: Uint32Array, grid: { originX: number; originZ: number; cell: number; nx: number; nz: number; maxPer: number }, atlas: GPUTextureView) {
+  setDecals(packed: Float32Array, count: number, cells: Uint32Array, grid: DecalGrid, atlas: GPUTextureView) {
     // Buffers grow geometrically (runtime decals re-upload often); bindings only change on growth.
     if (packed.byteLength > this.decalBuffer.size) {
       this.decalBuffer.destroy();
@@ -786,7 +792,16 @@ export class Renderer {
     if (atlas !== this.decalAtlasView) this.bindingsDirty = true;
     this.decalAtlasView = atlas;
   }
-  private decalGrid = { originX: 0, originZ: 0, cell: 8, nx: 0, nz: 0, maxPer: 0 };
+  private decalGrid: DecalGrid = { originX: 0, originZ: 0, cell: 8, nx: 0, nz: 0, maxPer: 0, dynOriginX: 0, dynOriginZ: 0, dynCell: 1, dynN: 0, dynSlots: 0, dynBase: 0 };
+
+  /** Partial decal upload after `setDecals` (runtime decals patched into reserved capacity). */
+  patchDecals(decals: { index: number; data: Float32Array }[], cells: { offset: number; data: Uint32Array }[], count: number, grid?: Partial<DecalGrid> | null) {
+    for (const d of decals) this.device.queue.writeBuffer(this.decalBuffer, d.index * d.data.length * 4, d.data as Float32Array<ArrayBuffer>);
+    for (const c of cells) this.device.queue.writeBuffer(this.decalCellBuffer, c.offset * 4, c.data as Uint32Array<ArrayBuffer>);
+    this.decalCount = count;
+    if (grid) this.decalGrid = { ...this.decalGrid, ...grid };
+  }
+
 
   private growVisible(n: number) {
     if (n <= this.visible.data.length) return;
@@ -1509,6 +1524,8 @@ export class Renderer {
     const g = this.decalGrid;
     F.vec4(FO.decalGrid, g.originX, g.originZ, g.cell, 1 / g.cell);
     F.uvec4(FO.decalGrid2, g.nx, g.nz, g.maxPer, 0);
+    F.vec4(FO.decalDyn, g.dynOriginX, g.dynOriginZ, 1 / g.dynCell, g.dynN);
+    F.uvec4(FO.decalDyn2, g.dynSlots, g.dynBase, 0, 0);
     F.vec4(FO.atmo, PLANET_RADIUS_KM, ATMOSPHERE_TOP_KM, 0.1 + Math.max(0, v.position[1]) / 1000, sk.turbidity * AEROSOL_BASE);
     F.vec4(FO.sky, SUN_TOA_LUX * envState.sun.intensity, 0, ENV_SPEC_MIPS, sk.cloudSharpness);
     const tint = parseColor(sk.tint, [1, 1, 1, 1]);
@@ -1963,6 +1980,7 @@ export class Renderer {
     if (S.bounds) this.addBoundsLines(renderables, planes);
     if (this.frozenViewProj) this.addFrustumLines(this.frozenViewProj);
     if (S.showProbes && this.probes) this.addProbeLines();
+    for (let i = 0; i < this.debugLines.length; i++) this.lineVerts.push(this.debugLines[i]);
     if (this.lineVerts.length > 0) {
       const data = new Float32Array(this.lineVerts);
       if (data.byteLength > this.linesCapacity) {

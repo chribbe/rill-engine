@@ -1,4 +1,5 @@
 {
+ "surface": "concrete",
  "baseColor": "concrete_cast_albedo.png",
  "normal": "concrete_cast_normal.png",
  "orm": "concrete_cast_orm.png",

@@ -1,4 +1,5 @@
 {
+ "surface": "soil",
  "baseColor": "ground_forest_albedo.png",
  "normal": "ground_forest_normal.png",
  "orm": "ground_forest_orm.png",

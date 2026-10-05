@@ -1,4 +1,5 @@
 {
+ "surface": "asphalt",
  "inherits": "gravel",
  "baseColorFactor": [
   0.55,

@@ -1,2 +1,2 @@
-{ "alphaMode": "mask", "alphaCutoff": 0.5, "doubleSided": true, "baseColor": "railing_bars_albedo.png", "orm": "railing_bars_orm.png",
+{ "surface": "metal", "alphaMode": "mask", "alphaCutoff": 0.5, "doubleSided": true, "baseColor": "railing_bars_albedo.png", "orm": "railing_bars_orm.png",
   "physicalSize": 0.5, "roughness": 1, "porosity": 0, "notes": "Vertical flat-bar railing infill (viaduct, platform ends)." }

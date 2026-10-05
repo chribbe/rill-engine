@@ -557,9 +557,11 @@ Findings:
 - `standard.wgsl` is still one large source; variants are specialised but the source should be
   split into smaller chunks as features grow.
 - Collision is a simple sphere/ray controller over a uniform grid (no proper capsule sweep).
-- Runtime decals share the static 8 m decal grid: a dense cluster of holes in one cell raises
-  the per-pixel loop for that whole cell, and far hits stretch the grid extent. A separate
-  fine-grained dynamic grid (or clustered decals) is the fix when it matters.
+- ~~Runtime decals share the static 8 m decal grid~~ — fixed for G1 (docs/GAME.md):
+  runtime decals have their own 1 m grid around the viewer (16 newest per cell) appended to the
+  cell buffer, and adding one patches a record + its cells (0.03 ms instead of a 2.5 ms rebuild on
+  Hässelby). Remaining: the static grid uses one `maxPer` for every cell (Hässelby: 165 × 113
+  cells × 184 slots ≈ 13 MB); offsets per cell would shrink it to the decals' real count.
 - Particles are simulated on the CPU and lit per vertex (fine for hundreds; thousands of
   large smoke quads would want GPU sim and per-pixel noise lighting).
 - Env/sky regeneration runs synchronously on any environment change (~<1 ms, fine for now).

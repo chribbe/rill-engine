@@ -1,4 +1,5 @@
 {
+ "surface": "concrete",
  "baseColor": "concrete_viaduct_albedo.png",
  "normal": "concrete_viaduct_normal.png",
  "orm": "concrete_viaduct_orm.png",

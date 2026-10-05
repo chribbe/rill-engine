@@ -1,4 +1,5 @@
 {
+ "surface": "foliage",
  "shader": "foliage",
  "alphaMode": "mask",
  "alphaCutoff": 0.4,

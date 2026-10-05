@@ -1,4 +1,5 @@
 {
+ "surface": "tile",
  "baseColor": "roof_tiles_albedo.png",
  "normal": "roof_tiles_normal.png",
  "orm": "roof_tiles_orm.png",

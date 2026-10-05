@@ -1,4 +1,5 @@
 {
+ "surface": "grass",
  "baseColor": "ground_grass_albedo.png",
  "normal": "ground_grass_normal.png",
  "orm": "ground_grass_orm.png",

@@ -1,2 +1,2 @@
-{ "baseColor": "dev_green_albedo.png", "orm": "dev_green_orm.png", "physicalSize": 4, "porosity": 0.2,
+{ "surface": "concrete", "baseColor": "dev_green_albedo.png", "orm": "dev_green_orm.png", "physicalSize": 4, "porosity": 0.2,
   "notes": "Dev texture: 25 cm / 1 m / 4 m measured grid (Hammer-style blockout)." }

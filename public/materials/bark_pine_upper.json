@@ -1,2 +1,2 @@
-{ "baseColor": "bark_pine_upper_albedo.png", "normal": "bark_pine_upper_normal.png", "orm": "bark_pine_upper_orm.png", "physicalSize": 1, "roughness": 1, "porosity": 0.4,
+{ "surface": "wood", "baseColor": "bark_pine_upper_albedo.png", "normal": "bark_pine_upper_normal.png", "orm": "bark_pine_upper_orm.png", "physicalSize": 1, "roughness": 1, "porosity": 0.4,
   "notes": "Scots pine upper trunk: thin orange flaking bark." }

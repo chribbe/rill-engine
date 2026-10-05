@@ -85,7 +85,7 @@ async function main() {
     if (e.code === 'KeyP') capture();
     if (e.code === 'KeyB') renderer.settings.bounds = !renderer.settings.bounds;
     if (e.code === 'KeyL') sandbox.toggleFlashlight();
-    if (e.code === 'KeyX') sandbox.toggleWeapon();
+    if (e.code === 'KeyX' && !game) sandbox.toggleWeapon();
     if (e.code === 'KeyG') renderer.settings.wireframe = !renderer.settings.wireframe;
     if (e.code === 'KeyM') {
       renderer.settings.msaa = !renderer.settings.msaa;

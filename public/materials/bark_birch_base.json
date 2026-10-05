@@ -1,2 +1,2 @@
-{ "baseColor": "bark_birch_base_albedo.png", "normal": "bark_birch_base_normal.png", "orm": "bark_birch_base_orm.png", "physicalSize": 1, "roughness": 1, "porosity": 0.5,
+{ "surface": "wood", "baseColor": "bark_birch_base_albedo.png", "normal": "bark_birch_base_normal.png", "orm": "bark_birch_base_orm.png", "physicalSize": 1, "roughness": 1, "porosity": 0.5,
   "notes": "Fissured black-grey bark at the base of old birches." }

@@ -1,4 +1,5 @@
 {
+ "surface": "stone",
  "baseColor": "terrazzo_albedo.png",
  "normal": "terrazzo_normal.png",
  "orm": "terrazzo_orm.png",

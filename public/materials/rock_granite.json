@@ -1,4 +1,5 @@
 {
+ "surface": "stone",
  "baseColor": "rock_granite_albedo.png",
  "normal": "rock_granite_normal.png",
  "orm": "rock_granite_orm.png",

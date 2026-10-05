@@ -1,4 +1,5 @@
 {
+ "surface": "gravel",
  "baseColor": "gravel_albedo.png",
  "normal": "gravel_normal.png",
  "orm": "gravel_orm.png",

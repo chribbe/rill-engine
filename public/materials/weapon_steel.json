@@ -1,1 +1,1 @@
-{ "baseColorFactor": "#2e2f32", "metallic": 0.35, "roughness": 0.36, "snow": 0 }
+{ "surface": "metal", "baseColorFactor": "#2e2f32", "metallic": 0.35, "roughness": 0.36, "snow": 0 }

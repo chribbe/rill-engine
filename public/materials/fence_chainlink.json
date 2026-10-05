@@ -1,2 +1,2 @@
-{ "alphaMode": "mask", "alphaCutoff": 0.5, "doubleSided": true, "baseColor": "fence_chainlink_albedo.png", "orm": "fence_chainlink_orm.png",
+{ "surface": "metal", "alphaMode": "mask", "alphaCutoff": 0.5, "doubleSided": true, "baseColor": "fence_chainlink_albedo.png", "orm": "fence_chainlink_orm.png",
   "physicalSize": 0.1, "metallic": 1, "roughness": 1, "porosity": 0, "notes": "50 mm chain-link mesh (thin-geometry / alpha aliasing test)." }

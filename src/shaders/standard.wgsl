@@ -441,15 +441,30 @@ fn texGrad(t: texture_2d<f32>, uv: vec2f, dx: vec2f, dy: vec2f) -> vec4f {
 
 fn applyDecals(wp: vec3f, dpx: vec3f, dpy: vec3f, s: ptr<function, Surface>) {
   if (!hasFlag(F_DECALS) || frame.debug.w == 0u) { return; }
+  // Static decals (8 m grid) then runtime decals (fine grid around the viewer), one loop.
   let g = frame.decalGrid;
   let cell = vec2i(floor((wp.xz - g.xy) * g.w));
   let cells = vec2i(frame.decalGrid2.xy);
-  if (any(cell < vec2i(0)) || any(cell >= cells)) { return; }
   let maxPer = frame.decalGrid2.z;
-  let base = u32(cell.y * cells.x + cell.x) * (maxPer + 1u);
-  let count = min(decalCells[base], maxPer);
+  var base = 0u;
+  var countS = 0u;
+  if (all(cell >= vec2i(0)) && all(cell < cells)) {
+    base = u32(cell.y * cells.x + cell.x) * (maxPer + 1u);
+    countS = min(decalCells[base], maxPer);
+  }
+  let dg = frame.decalDyn;
+  let dcell = vec2i(floor((wp.xz - dg.xy) * dg.z));
+  let dn = i32(dg.w);
+  let slots = frame.decalDyn2.x;
+  var dbase = 0u;
+  var countD = 0u;
+  if (all(dcell >= vec2i(0)) && all(dcell < vec2i(dn))) {
+    dbase = frame.decalDyn2.y + u32(dcell.y * dn + dcell.x) * (slots + 1u);
+    countD = min(decalCells[dbase], slots);
+  }
+  let count = countS + countD;
   for (var k = 0u; k < count; k++) {
-    let d = decals[decalCells[base + 1u + k]];
+    let d = decals[select(decalCells[dbase + 1u + k - countS], decalCells[base + 1u + k], k < countS)];
     let lp = vec3f(dot(d.row0, vec4f(wp, 1.0)), dot(d.row1, vec4f(wp, 1.0)), dot(d.row2, vec4f(wp, 1.0)));
     if (any(abs(lp) > vec3f(0.5))) { continue; }
     let facing = dot((*s).Ng, d.axis.xyz);

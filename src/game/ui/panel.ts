@@ -14,6 +14,7 @@ export class TuningPanel {
   constructor(private game: Game, container: HTMLElement) {
     this.gui = new GUI({ title: 'Gameplay tuning', width: 300, container });
     this.buildPlayer();
+    this.buildWeapon();
     this.buildDebug();
   }
 
@@ -107,6 +108,38 @@ export class TuningPanel {
     this.fileButtons(f, cfg);
   }
 
+  private buildWeapon() {
+    const cfg = this.game.weaponConfig, d = cfg.data;
+    const f = this.gui.addFolder('Weapon');
+    const fire = f.addFolder('Fire');
+    const b = <O extends object>(folder: GUI, obj: O, group: string, key: keyof O & string, label: string, min?: number, max?: number, step?: number) =>
+      this.bind(folder, cfg, obj, key, `${group}.${key}`, label, min, max, step);
+    fire.add(d.fire, 'mode', ['auto', 'semi']).name('Mode');
+    b(fire, d.fire, 'fire', 'rpm', 'Rate of fire (RPM)', 200, 1200, 10);
+    b(fire, d.fire, 'fire', 'damage', 'Damage', 1, 100, 0.5);
+    b(fire, d.fire, 'fire', 'impactForce', 'Impact force (N·s)', 0, 40, 0.1);
+    b(fire, d.fire, 'fire', 'range', 'Range (m)', 20, 500, 5);
+    b(fire, d.fire, 'fire', 'falloffStart', 'Falloff start (m)', 0, 200, 1);
+    b(fire, d.fire, 'fire', 'falloffEnd', 'Falloff end (m)', 0, 400, 1);
+    b(fire, d.fire, 'fire', 'falloffMin', 'Falloff min ×', 0, 1, 0.01);
+    b(fire, d.fire, 'fire', 'magazine', 'Magazine', 1, 100, 1);
+    b(fire, d.fire, 'fire', 'reloadTime', 'Reload (s)', 0.3, 5, 0.05);
+    b(fire, d.fire, 'fire', 'infiniteAmmo', 'Infinite ammo');
+    b(fire, d.fire, 'fire', 'pierceGlass', 'Bullets pierce glass');
+    b(fire, d.fire, 'fire', 'sprintBlock', 'Sprint blocked after shot (s)', 0, 1, 0.01);
+    const sp = f.addFolder('Spread (cone half-angle °)');
+    b(sp, d.spread, 'spread', 'base', 'First shot', 0, 2, 0.01);
+    b(sp, d.spread, 'spread', 'perShot', 'Bloom per shot', 0, 1, 0.005);
+    b(sp, d.spread, 'spread', 'max', 'Bloom max', 0, 5, 0.05);
+    b(sp, d.spread, 'spread', 'recovery', 'Recovery (°/s)', 0, 20, 0.1);
+    b(sp, d.spread, 'spread', 'recoveryDelay', 'Recovery delay (s)', 0, 0.5, 0.005);
+    b(sp, d.spread, 'spread', 'moving', 'Moving (at run speed)', 0, 4, 0.05);
+    b(sp, d.spread, 'spread', 'air', 'In the air', 0, 8, 0.1);
+    b(sp, d.spread, 'spread', 'crouch', 'Crouched ×', 0.2, 1.5, 0.01);
+    sp.close();
+    this.fileButtons(f, cfg);
+  }
+
   private buildDebug() {
     const g = this.game, rt = g.rt;
     const f = this.gui.addFolder('Debug');
@@ -120,7 +153,21 @@ export class TuningPanel {
       fly: () => rt.player.toggleFly(),
       spawn: () => { const s = rt.world.spawn(); rt.player.fly = false; rt.player.teleport(s.position, s.yaw, s.pitch); },
       frameTest: async () => console.table((await g.testFrameRates()).maxDeviation),
+      get traces() { return g.showTraces; },
+      set traces(v: boolean) { g.showTraces = v; if (!v) g.debug.clear(); },
+      get decals() { return g.impacts.decals; },
+      set decals(v: boolean) { g.impacts.decals = v; },
+      get spreadTicks() { return g.crosshair?.showSpread ?? false; },
+      set spreadTicks(v: boolean) { if (g.crosshair) g.crosshair.showSpread = v; },
+      get hitMarker() { return g.crosshair?.hitMarker ?? false; },
+      set hitMarker(v: boolean) { if (g.crosshair) g.crosshair.hitMarker = v; },
+      clear: () => g.resetEffects(),
     };
+    f.add(dbg, 'traces').name('Shot traces');
+    f.add(dbg, 'decals').name('Bullet decals');
+    f.add(dbg, 'spreadTicks').name('Crosshair spread');
+    f.add(dbg, 'hitMarker').name('Hit marker');
+    f.add(dbg, 'clear').name('Clear decals / traces');
     f.add(dbg, 'timeScale', [0.05, 0.1, 0.25, 0.5, 1]).name('Time scale');
     f.add(dbg, 'fpsCap', { off: 0, '20': 20, '30': 30, '60': 60, '90': 90, '120': 120 }).name('FPS cap');
     f.add(dbg, 'hud').name('Readout');

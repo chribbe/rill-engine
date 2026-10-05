@@ -8,7 +8,8 @@ import { builtinMesh } from '../assets/primitives';
 import { loadLightmapSet, type LoadedLightmaps } from '../render/lightmaps';
 import { buildDecals, type DecalSet } from '../render/decals';
 import { ClutterSystem, type ClutterSource } from '../render/clutter';
-import { CollisionWorld, Surface } from './collision';
+import { CollisionWorld } from './collision';
+import { surfaceOfMaterial } from './surfaces';
 import type { DecalObject, Entity, LightObject, MapDocument, MarkerObject, MeshObject, ReflectionProbeObject, ScatterObject, SignObject, Transform } from './mapformat';
 import { evaluateScatter, type ScatterInstance, type ScatterPreset } from './scatter';
 import { buildSpline, type SplineBuild, type SplinePreset } from './splines';
@@ -160,11 +161,33 @@ export class World {
     this.renderer.setDecals(b.packed, b.count, b.cells, b.grid, this.decals!.atlas);
   }
 
-  /** Runtime decal (bullet hole...) on the surface hit at `point` with outward `normal`. */
-  addDecal(material: string, point: ArrayLike<number>, normal: ArrayLike<number>, size: number) {
-    if (!this.decals?.has(material)) return;
+  private runtimeDecalsDirty = false;
+
+  /**
+   * Runtime decal (bullet hole...) on the surface hit at `point` with outward
+   * `normal`. `defer`: batch the grid rebuild and upload into `flushRuntimeDecals`
+   * (call it once before rendering), so full-auto fire costs one rebuild per frame.
+   */
+  addDecal(material: string, point: ArrayLike<number>, normal: ArrayLike<number>, size: number, defer = false) {
+    if (!this.decals?.has(material)) return false;
     this.decals.addDynamic(material, point, normal, size);
-    this.uploadDecals();
+    if (defer) this.runtimeDecalsDirty = true;
+    else this.uploadDecals();
+    return true;
+  }
+
+  /** Uploads pending runtime decals; `viewer` keeps the fine runtime grid centred on the camera. */
+  flushRuntimeDecals(viewer?: ArrayLike<number>) {
+    if (!this.decals) return;
+    if (viewer) this.decals.follow(viewer[0], viewer[2]);
+    if (!this.runtimeDecalsDirty && !this.decals.pending) return;
+    this.runtimeDecalsDirty = false;
+    if (this.decals.patchable) {
+      const p = this.decals.takePatch();
+      this.renderer.patchDecals(p.decals, p.cells, p.count, p.grid);
+    } else {
+      this.uploadDecals();
+    }
   }
 
   /** Removes runtime decals (bullet holes) - leaving play mode. */
@@ -572,6 +595,12 @@ export class World {
     try { await this.signBuild; } finally { this.signBuild = null; }
   }
 
+  /** Surface class of a (loaded) material by name. */
+  private surfaceOf(material: string) {
+    const m = this.renderer.materials.byName(material);
+    return surfaceOfMaterial(material, m?.def ?? {});
+  }
+
   /** Spline geometry changed since the collision was built (ignored by ground queries during editing). */
   private splineCollisionStale = false;
 
@@ -587,15 +616,18 @@ export class World {
     for (const rt of this.objects.values()) {
       const o = rt.doc;
       if (o.type === 'spline' && rt.spline?.build && (o.collision ?? rt.spline.preset.collision ?? true) && this.isVisible(o.id)) {
-        for (const p of rt.spline.build.primitives) this.collision.addMesh(p.positions, p.indices, mat4.identity(), Surface.Default, o.id);
+        for (const p of rt.spline.build.primitives) this.collision.addMesh(p.positions, p.indices, mat4.identity(), this.surfaceOf(p.material), o.id);
         for (const r of rt.renderables.slice(rt.spline.mesh ? 1 : 0)) {
-          for (const p of r.mesh.primitives) this.collision.addMesh(p.positions, p.indices, this.renderer.instances.model(r.slot), Surface.Default, o.id);
+          r.mesh.primitives.forEach((p, k) => {
+            const m = r.materials[k];
+            this.collision.addMesh(p.positions, p.indices, this.renderer.instances.model(r.slot), m ? surfaceOfMaterial(m.name, m.def) : 0, o.id);
+          });
         }
         continue;
       }
       if (o.type === 'block' && rt.block?.build && (o.collision ?? o.static ?? true) && this.isVisible(o.id)) {
         const m = transformMatrix(blockExtent(o).transform);
-        for (const p of rt.block.build.primitives) this.collision.addMesh(p.positions, p.indices, m, Surface.Default, o.id);
+        for (const p of rt.block.build.primitives) this.collision.addMesh(p.positions, p.indices, m, this.surfaceOf(p.material), o.id);
         continue;
       }
       if (o.type !== 'mesh' || !(o.collision ?? o.static ?? true) || !this.isVisible(o.id)) continue;
@@ -605,7 +637,7 @@ export class World {
       r.mesh.primitives.forEach((p, k) => {
         const m = r.materials[k];
         if (m.def.shader === 'foliage') return;
-        this.collision.addMesh(p.positions, p.indices, model, (m.def.metallic ?? 0) > 0.5 ? Surface.Metal : Surface.Default, o.id);
+        this.collision.addMesh(p.positions, p.indices, model, surfaceOfMaterial(m.name, m.def), o.id);
       });
     }
     this.collisionDirty = false;

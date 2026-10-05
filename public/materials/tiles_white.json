@@ -1,3 +1,3 @@
-{ "baseColor": "tiles_white_albedo.png", "normal": "tiles_white_normal.png", "orm": "tiles_white_orm.png", "physicalSize": 1.2, "roughness": 1, "porosity": 0.05,
+{ "surface": "tile", "baseColor": "tiles_white_albedo.png", "normal": "tiles_white_normal.png", "orm": "tiles_white_orm.png", "physicalSize": 1.2, "roughness": 1, "porosity": 0.05,
   "macro": { "texture": "macro_variation.png", "physicalSize": 13, "albedoStrength": 0.05, "roughnessStrength": 0.1, "stainStrength": 0.08 },
   "notes": "Glazed 15x15 cm wall tiles (underpass / station interiors)." }

@@ -1,4 +1,5 @@
 {
+ "surface": "brick",
  "baseColor": "brick_tan_albedo.png",
  "normal": "brick_tan_normal.png",
  "orm": "brick_tan_orm.png",

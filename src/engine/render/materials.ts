@@ -11,6 +11,8 @@ export type Color = [number, number, number] | [number, number, number, number] 
 export interface MaterialDef {
   name?: string;
   inherits?: string;
+  /** Physical surface class (impacts, footsteps): a name from SURFACE_NAMES in scene/surfaces.ts. */
+  surface?: string;
   shader?: 'standard' | 'foliage' | 'unlit';
   /** 'blend': transparent glass, drawn after opaque geometry (no shadows, no depth writes). */
   alphaMode?: 'opaque' | 'mask' | 'blend';

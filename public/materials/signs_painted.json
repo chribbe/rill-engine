@@ -1,2 +1,2 @@
-{ "baseColor": "runtime/signs.png", "physicalSize": 1, "roughness": 0.5, "porosity": 0, "snow": 0.2,
+{ "surface": "metal", "baseColor": "runtime/signs.png", "physicalSize": 1, "roughness": 0.5, "porosity": 0, "snow": 0.2,
   "notes": "Painted / enamel sign faces (runtime atlas)." }

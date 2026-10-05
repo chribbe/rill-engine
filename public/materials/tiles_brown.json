@@ -1,4 +1,5 @@
 {
+ "surface": "tile",
  "baseColor": "tiles_brown_albedo.png",
  "normal": "tiles_brown_normal.png",
  "orm": "tiles_brown_orm.png",

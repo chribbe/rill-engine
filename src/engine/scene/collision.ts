@@ -4,9 +4,9 @@
  * Not a physics engine.
  */
 
-/** Coarse surface class per triangle (impact effects). */
+/** Surface class per triangle: an id from SURFACE_NAMES (scene/surfaces.ts); Default / Metal kept for old callers. */
 export const Surface = { Default: 0, Metal: 1 } as const;
-export type Surface = (typeof Surface)[keyof typeof Surface];
+export type Surface = number;
 
 export interface RayHit {
   t: number;

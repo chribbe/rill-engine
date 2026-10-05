@@ -1,1 +1,1 @@
-{ "baseColorFactor": "#202022", "metallic": 0, "roughness": 0.62, "specular": 0.45, "snow": 0 }
+{ "surface": "plastic", "baseColorFactor": "#202022", "metallic": 0, "roughness": 0.62, "specular": 0.45, "snow": 0 }

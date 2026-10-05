@@ -229,8 +229,9 @@ export class FirstPersonController {
     c[0] = e[0]; c[1] = e[1]; c[2] = e[2];
   }
 
-  /** Convenience for callers without a game clock (editor play, plain viewer): ticks + frame. */
+  /** Convenience for callers without a game clock (editor play, plain viewer): look, ticks, frame. */
   update(dt: number) {
+    this.look();
     const alpha = this.clock.advance(dt, (h) => {
       this.tick(h);
       this.input.endTick();
@@ -400,15 +401,26 @@ export class FirstPersonController {
     this.computeEye();
   }
 
-  /** Per rendered frame: mouse look, interpolated eye, camera feel. `alpha` = tick interpolation. */
-  frame(dt: number, alpha: number) {
+  /**
+   * Mouse look: applies the counts since the last frame. Call first in a frame, before
+   * the ticks, so a shot fired this frame goes where this frame's crosshair points.
+   * Returns the applied (yaw, pitch) change in radians.
+   */
+  look(): [number, number] {
     const t = this.tuning, c = this.camera;
     this.input.takeMouse(this.mouse);
-    if (this.input.locked && this._enabled) {
-      const k = (0.022 * t.sensitivity * Math.PI) / 180;
-      c.yaw += this.mouse[0] * k;
-      c.pitch = Math.max(-1.553, Math.min(1.553, c.pitch - this.mouse[1] * k * (t.invertY ? -1 : 1)));
-    }
+    if (!this.input.locked || !this._enabled) return [0, 0];
+    const k = (0.022 * t.sensitivity * Math.PI) / 180;
+    const p0 = c.pitch;
+    const dyaw = this.mouse[0] * k;
+    c.yaw += dyaw;
+    c.pitch = Math.max(-1.553, Math.min(1.553, c.pitch - this.mouse[1] * k * (t.invertY ? -1 : 1)));
+    return [dyaw, c.pitch - p0];
+  }
+
+  /** Per rendered frame (after `look` and the ticks): interpolated eye, camera feel. `alpha` = tick interpolation. */
+  frame(dt: number, alpha: number) {
+    const t = this.tuning, c = this.camera;
     c.fovY = 2 * Math.atan(Math.tan((t.fov * Math.PI) / 360) * (9 / 16));
     const e = this.prevEye, n = this.eye;
     const x = e[0] + (n[0] - e[0]) * alpha, z = e[2] + (n[2] - e[2]) * alpha;
