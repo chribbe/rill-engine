@@ -4,8 +4,7 @@
     "rpm": 700,
     "mode": "auto",
     "magazine": 30,
-    "reloadTime": 2.1,
-    "infiniteAmmo": true,
+    "infiniteAmmo": false,
     "damage": 24,
     "range": 300,
     "falloffStart": 40,
@@ -107,9 +106,29 @@
       -6
     ],
     "sprintRate": 9,
+    "reloadOffset": [
+      -0.02,
+      -0.01,
+      0
+    ],
+    "reloadRot": [
+      30,
+      -6,
+      -40
+    ],
     "breathe": 0.0012,
     "breathePitch": 0.12,
     "breatheRate": 0.22
+  },
+  "reload": {
+    "tactical": 1.75,
+    "empty": 2.3,
+    "magOut": 0.3,
+    "magIn": 1.08,
+    "rackStart": 1.45,
+    "rackEnd": 1.72,
+    "chamberPlusOne": true,
+    "auto": true
   },
   "mechanics": {
     "boltTravel": 0.065,

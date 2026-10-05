@@ -32,7 +32,9 @@ export interface ShotEvent {
  */
 export class Firearm {
   ammo: number;
-  reloading = 0;
+  /** Seconds into the current reload (-1 = not reloading) and whether it started empty. */
+  reloadT = -1;
+  reloadEmpty = false;
   /** Accumulated bloom (degrees). */
   bloom = 0;
   shots = 0;
@@ -41,7 +43,7 @@ export class Firearm {
   aimOffset: [number, number] = [0, 0];
   onShot: ((e: ShotEvent) => void)[] = [];
   onDryFire: (() => void)[] = [];
-  onReload: ((phase: 'start' | 'end') => void)[] = [];
+  onReload: ((phase: 'start' | 'magout' | 'magin' | 'rack' | 'release' | 'end', empty: boolean) => void)[] = [];
   lastLatencyMs = -1;
   /** Simulated time of the next possible shot. */
   nextShot = -Infinity;
@@ -66,9 +68,36 @@ export class Firearm {
     return 60 / Math.max(1, this.def.fire.rpm);
   }
 
+  get reloading() {
+    return this.reloadT >= 0;
+  }
+
   /** Whether held fire will produce the shot at `nextShot` (auto, rounds left, not reloading). */
   willContinue(held: boolean) {
-    return held && this.def.fire.mode === 'auto' && this.reloading === 0 && (this.ammo > 0 || this.def.fire.infiniteAmmo) && this.burst > 0;
+    return held && this.def.fire.mode === 'auto' && !this.reloading && (this.ammo > 0 || this.def.fire.infiniteAmmo) && this.burst > 0;
+  }
+
+  startReload() {
+    const f = this.def.fire;
+    if (this.reloading || f.infiniteAmmo || this.ammo >= f.magazine + (this.def.reload.chamberPlusOne ? 1 : 0)) return;
+    this.reloadT = 0;
+    this.reloadEmpty = this.ammo <= 0;
+    for (const g of this.onReload) g('start', this.reloadEmpty);
+  }
+
+  private stepReload(h: number) {
+    if (this.reloadT < 0) return;
+    const R = this.def.reload, t0 = this.reloadT, t1 = (this.reloadT += h);
+    const cross = (at: number) => t0 < at && t1 >= at;
+    if (cross(R.magOut)) for (const g of this.onReload) g('magout', this.reloadEmpty);
+    if (cross(R.magIn)) for (const g of this.onReload) g('magin', this.reloadEmpty);
+    if (this.reloadEmpty && cross(R.rackStart)) for (const g of this.onReload) g('rack', true);
+    if (this.reloadEmpty && cross(R.rackEnd)) for (const g of this.onReload) g('release', true);
+    if (t1 >= (this.reloadEmpty ? R.empty : R.tactical)) {
+      this.ammo = this.def.fire.magazine + (R.chamberPlusOne && !this.reloadEmpty ? 1 : 0);
+      this.reloadT = -1;
+      for (const g of this.onReload) g('end', this.reloadEmpty);
+    }
   }
 
   /** Current cone half-angle (degrees) for the player's state. */
@@ -96,11 +125,12 @@ export class Firearm {
   pressNow(now: number, input: Input, player: FirstPersonController, camera: Camera, enabled: boolean) {
     if (!enabled || !input.buttonPressed(0)) return;
     const f = this.def.fire;
-    if (this.reloading > 0 || now < this.nextShot) return;
+    if (this.reloading || now < this.nextShot) return;
     this.pullTime = input.buttonPressTime(0);
     input.consumeButton(0);
     if (this.ammo <= 0 && !f.infiniteAmmo) {
       for (const g of this.onDryFire) g();
+      if (this.def.reload.auto) this.startReload();
       return;
     }
     this.fire(now, now, player, camera);
@@ -116,24 +146,18 @@ export class Firearm {
       this.pullTime = input.buttonPressTime(0);
       if (f.mode === 'semi') this.semiQueued = true;
     }
-    if (enabled && input.pressed('KeyR') && !this.reloading && this.ammo < f.magazine && !f.infiniteAmmo) {
-      this.reloading = f.reloadTime;
-      for (const g of this.onReload) g('start');
-    }
-    if (this.reloading > 0) {
-      this.reloading = Math.max(0, this.reloading - h);
-      if (this.reloading === 0) {
-        this.ammo = f.magazine;
-        for (const g of this.onReload) g('end');
-      }
-    }
+    if (enabled && input.pressed('KeyR')) this.startReload();
+    this.stepReload(h);
     if (!held && !pressed && t - this.lastShot > this.interval * 1.5) this.burst = 0;
 
     const committed = f.mode === 'auto' && this.committedUntil > -Infinity && this.nextShot <= this.committedUntil && this.nextShot < t + h;
     const wants = f.mode === 'auto' ? held || pressed || committed : this.semiQueued;
-    if (wants && this.reloading === 0) {
+    if (wants && !this.reloading) {
       if (this.ammo <= 0 && !f.infiniteAmmo) {
-        if (pressed) for (const g of this.onDryFire) g();
+        if (pressed) {
+          for (const g of this.onDryFire) g();
+          if (this.def.reload.auto) this.startReload();
+        }
         this.semiQueued = false;
       } else {
         let shotT = Math.max(this.nextShot, t);
@@ -199,7 +223,7 @@ export class Firearm {
   reset() {
     this.seed = 0x2545f491;
     this.ammo = this.def.fire.magazine;
-    this.reloading = 0;
+    this.reloadT = -1;
     this.bloom = 0;
     this.burst = 0;
     this.nextShot = this.lastShot = this.committedUntil = -Infinity;

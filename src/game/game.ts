@@ -20,6 +20,7 @@ import { TuningPanel } from './ui/panel';
 import { DebugHud } from './ui/hud';
 import { Crosshair } from './ui/crosshair';
 import { RecoilPlot } from './ui/recoilplot';
+import { AmmoIndicator } from './ui/ammo';
 
 /** Last shot's result, for the debug readout. */
 export interface HitInfo {
@@ -60,6 +61,8 @@ export class Game {
   hud: DebugHud | null = null;
   crosshair: Crosshair | null = null;
   recoilPlot: RecoilPlot | null = null;
+  ammo: AmmoIndicator | null = null;
+  private reloadState = { t: 0, empty: false };
   /** Draw shot traces, normals and hit points. */
   showTraces = false;
   lastHit: HitInfo | null = null;
@@ -96,6 +99,10 @@ export class Game {
     rt.world.ensureCollision();
     this.weapon.onShot.push((e) => this.onShot(e));
     this.weapon.onDryFire.push(() => this.audio.play('carbine_dry'));
+    this.weapon.onReload.push((phase) => {
+      this.viewmodel.reloadEvent(phase);
+      if (phase !== 'start' && phase !== 'end') this.audio.play(`carbine_${phase}`);
+    });
     rt.player.onLand.push((speed, surface) => {
       this.viewmodel.land(speed);
       this.audio.land(surface, rt.player.feet, speed);
@@ -119,6 +126,7 @@ export class Game {
     this.hud = new DebugHud(this, overlay);
     this.crosshair = new Crosshair(overlay);
     this.recoilPlot = new RecoilPlot(overlay);
+    this.ammo = new AmmoIndicator(overlay);
     document.getElementById('crosshair')?.remove();
     this.ready = true;
   }
@@ -298,7 +306,16 @@ export class Game {
     this.recoil.frame(sdt, alpha, camera);
     world.update(sdt, player.feet);
     sandbox.update(sdt);
+    const W = this.weapon;
+    if (W.reloading) {
+      this.reloadState.t = W.reloadT;
+      this.reloadState.empty = W.reloadEmpty;
+      this.viewmodel.reload = this.reloadState;
+    } else {
+      this.viewmodel.reload = null;
+    }
     this.viewmodel.update(sdt, now, look, player, armed && input.buttonDown(0), this.weapon.interval);
+    this.ammo?.update(sdt, W.ammo, W.def.fire.magazine, W.def.fire.infiniteAmmo, W.reloading ? { t: W.reloadT, total: W.reloadEmpty ? W.def.reload.empty : W.def.reload.tactical } : null, this.active);
     this.shells.update(sdt);
     this.audio.frame(dt, camera, world.collision);
     // Exact burst cadence: the next shot's sound is scheduled ~a frame ahead and the shot committed

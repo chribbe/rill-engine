@@ -1,57 +1,26 @@
 {
   "events": {
-    "carbine_shot": {
-      "maxVoices": 14,
-      "layers": [
-        { "samples": ["carbine/blast_1.wav", "carbine/blast_2.wav", "carbine/blast_3.wav", "carbine/blast_4.wav"], "gain": 0, "gainJitter": 0.8, "pitch": [0.97, 1.03], "send": 0.32 },
-        { "samples": ["carbine/mech_1.wav", "carbine/mech_2.wav", "carbine/mech_3.wav"], "gain": -10, "gainJitter": 1, "pitch": [0.96, 1.04], "send": 0.04 },
-        { "samples": ["carbine/tail_outdoor_1.wav", "carbine/tail_outdoor_2.wav"], "gain": -9, "pitch": [0.95, 1.05], "env": "outdoor", "send": 0.2, "delay": 0.004 },
-        { "samples": ["carbine/tail_room_1.wav"], "gain": -8, "pitch": [0.96, 1.04], "env": "room", "send": 0.5, "delay": 0.002 }
-      ]
-    },
-    "carbine_dry": { "maxVoices": 2, "layers": [{ "samples": ["carbine/dry_1.wav"], "gain": -8, "pitch": [0.97, 1.03] }] },
-    "impact_concrete": {
-      "spatial": true, "ref": 3, "max": 90, "air": true, "maxVoices": 10,
-      "layers": [{ "samples": ["impact/concrete_1.wav", "impact/concrete_2.wav", "impact/concrete_3.wav", "impact/concrete_4.wav"], "gain": -5, "gainJitter": 1.5, "pitch": [0.9, 1.1], "send": 0.3 }]
-    },
-    "impact_metal": {
-      "spatial": true, "ref": 3, "max": 110, "air": true, "maxVoices": 8,
-      "layers": [
-        { "samples": ["impact/metal_1.wav", "impact/metal_2.wav", "impact/metal_3.wav"], "gain": -6, "gainJitter": 1.5, "pitch": [0.88, 1.12], "send": 0.35 },
-        { "samples": ["impact/ricochet_1.wav", "impact/ricochet_2.wav"], "gain": -12, "pitch": [0.9, 1.1], "chance": 0.3, "delay": 0.01, "send": 0.3 }
-      ]
-    },
-    "impact_wood": {
-      "spatial": true, "ref": 3, "max": 80, "air": true, "maxVoices": 8,
-      "layers": [{ "samples": ["impact/wood_1.wav", "impact/wood_2.wav", "impact/wood_3.wav"], "gain": -5, "gainJitter": 1.5, "pitch": [0.9, 1.1], "send": 0.25 }]
-    },
-    "impact_glass": {
-      "spatial": true, "ref": 3, "max": 90, "air": true, "maxVoices": 6,
-      "layers": [{ "samples": ["impact/glass_1.wav", "impact/glass_2.wav"], "gain": -5, "pitch": [0.9, 1.1], "send": 0.3 }]
-    },
-    "impact_soil": {
-      "spatial": true, "ref": 3, "max": 60, "air": true, "maxVoices": 8,
-      "layers": [{ "samples": ["impact/soil_1.wav", "impact/soil_2.wav", "impact/soil_3.wav"], "gain": -6, "gainJitter": 1.5, "pitch": [0.9, 1.1], "send": 0.15 }]
-    },
-    "impact_flesh": {
-      "spatial": true, "ref": 3, "max": 70, "air": true, "maxVoices": 8,
-      "layers": [{ "samples": ["impact/flesh_1.wav", "impact/flesh_2.wav", "impact/flesh_3.wav"], "gain": -2, "gainJitter": 1, "pitch": [0.92, 1.08], "send": 0.15 }]
-    },
-    "brass_hard": {
-      "spatial": true, "ref": 1.2, "max": 25, "maxVoices": 10,
-      "layers": [{ "samples": ["brass/hard_1.wav", "brass/hard_2.wav", "brass/hard_3.wav", "brass/hard_4.wav", "brass/hard_5.wav"], "gain": -17, "gainJitter": 3, "pitch": [0.92, 1.1], "send": 0.1 }]
-    },
-    "brass_soft": {
-      "spatial": true, "ref": 1.2, "max": 15, "maxVoices": 6,
-      "layers": [{ "samples": ["brass/soft_1.wav", "brass/soft_2.wav"], "gain": -20, "gainJitter": 3, "pitch": [0.9, 1.1] }]
-    },
-    "step_hard": { "spatial": true, "ref": 2, "max": 30, "maxVoices": 4, "layers": [{ "samples": ["step/hard_1.wav", "step/hard_2.wav", "step/hard_3.wav", "step/hard_4.wav"], "gain": -16, "gainJitter": 2, "pitch": [0.94, 1.06], "send": 0.1 }] },
-    "step_soft": { "spatial": true, "ref": 2, "max": 25, "maxVoices": 4, "layers": [{ "samples": ["step/soft_1.wav", "step/soft_2.wav", "step/soft_3.wav", "step/soft_4.wav"], "gain": -17, "gainJitter": 2, "pitch": [0.94, 1.06] }] },
-    "step_gravel": { "spatial": true, "ref": 2, "max": 30, "maxVoices": 4, "layers": [{ "samples": ["step/gravel_1.wav", "step/gravel_2.wav", "step/gravel_3.wav", "step/gravel_4.wav"], "gain": -15, "gainJitter": 2, "pitch": [0.94, 1.06] }] },
-    "step_metal": { "spatial": true, "ref": 2, "max": 35, "maxVoices": 4, "layers": [{ "samples": ["step/metal_1.wav", "step/metal_2.wav", "step/metal_3.wav", "step/metal_4.wav"], "gain": -15, "gainJitter": 2, "pitch": [0.94, 1.06], "send": 0.15 }] },
-    "land_hard": { "spatial": true, "ref": 2, "max": 35, "maxVoices": 2, "layers": [{ "samples": ["step/hard_land.wav"], "gain": -10, "pitch": [0.95, 1.05], "send": 0.15 }] },
-    "land_soft": { "spatial": true, "ref": 2, "max": 30, "maxVoices": 2, "layers": [{ "samples": ["step/soft_land.wav"], "gain": -11, "pitch": [0.95, 1.05] }] },
-    "land_gravel": { "spatial": true, "ref": 2, "max": 30, "maxVoices": 2, "layers": [{ "samples": ["step/gravel_land.wav"], "gain": -10, "pitch": [0.95, 1.05] }] },
-    "land_metal": { "spatial": true, "ref": 2, "max": 35, "maxVoices": 2, "layers": [{ "samples": ["step/metal_land.wav"], "gain": -10, "pitch": [0.95, 1.05], "send": 0.2 }] }
+    "carbine_shot": {"maxVoices": 14, "layers": [{"samples": ["carbine/blast_1.wav", "carbine/blast_2.wav", "carbine/blast_3.wav", "carbine/blast_4.wav"], "gain": 0, "gainJitter": 0.8, "pitch": [0.97, 1.03], "send": 0.32}, {"samples": ["carbine/mech_1.wav", "carbine/mech_2.wav", "carbine/mech_3.wav"], "gain": -10, "gainJitter": 1, "pitch": [0.96, 1.04], "send": 0.04}, {"samples": ["carbine/tail_outdoor_1.wav", "carbine/tail_outdoor_2.wav"], "gain": -9, "pitch": [0.95, 1.05], "env": "outdoor", "send": 0.2, "delay": 0.004}, {"samples": ["carbine/tail_room_1.wav"], "gain": -8, "pitch": [0.96, 1.04], "env": "room", "send": 0.5, "delay": 0.002}]},
+    "carbine_dry": {"maxVoices": 2, "layers": [{"samples": ["carbine/dry_1.wav"], "gain": -8, "pitch": [0.97, 1.03]}]},
+    "impact_concrete": {"spatial": true, "ref": 3, "max": 90, "air": true, "maxVoices": 10, "layers": [{"samples": ["impact/concrete_1.wav", "impact/concrete_2.wav", "impact/concrete_3.wav", "impact/concrete_4.wav"], "gain": -5, "gainJitter": 1.5, "pitch": [0.9, 1.1], "send": 0.3}]},
+    "impact_metal": {"spatial": true, "ref": 3, "max": 110, "air": true, "maxVoices": 8, "layers": [{"samples": ["impact/metal_1.wav", "impact/metal_2.wav", "impact/metal_3.wav"], "gain": -6, "gainJitter": 1.5, "pitch": [0.88, 1.12], "send": 0.35}, {"samples": ["impact/ricochet_1.wav", "impact/ricochet_2.wav"], "gain": -12, "pitch": [0.9, 1.1], "chance": 0.3, "delay": 0.01, "send": 0.3}]},
+    "impact_wood": {"spatial": true, "ref": 3, "max": 80, "air": true, "maxVoices": 8, "layers": [{"samples": ["impact/wood_1.wav", "impact/wood_2.wav", "impact/wood_3.wav"], "gain": -5, "gainJitter": 1.5, "pitch": [0.9, 1.1], "send": 0.25}]},
+    "impact_glass": {"spatial": true, "ref": 3, "max": 90, "air": true, "maxVoices": 6, "layers": [{"samples": ["impact/glass_1.wav", "impact/glass_2.wav"], "gain": -5, "pitch": [0.9, 1.1], "send": 0.3}]},
+    "impact_soil": {"spatial": true, "ref": 3, "max": 60, "air": true, "maxVoices": 8, "layers": [{"samples": ["impact/soil_1.wav", "impact/soil_2.wav", "impact/soil_3.wav"], "gain": -6, "gainJitter": 1.5, "pitch": [0.9, 1.1], "send": 0.15}]},
+    "impact_flesh": {"spatial": true, "ref": 3, "max": 70, "air": true, "maxVoices": 8, "layers": [{"samples": ["impact/flesh_1.wav", "impact/flesh_2.wav", "impact/flesh_3.wav"], "gain": -2, "gainJitter": 1, "pitch": [0.92, 1.08], "send": 0.15}]},
+    "brass_hard": {"spatial": true, "ref": 1.2, "max": 25, "maxVoices": 10, "layers": [{"samples": ["brass/hard_1.wav", "brass/hard_2.wav", "brass/hard_3.wav", "brass/hard_4.wav", "brass/hard_5.wav"], "gain": -17, "gainJitter": 3, "pitch": [0.92, 1.1], "send": 0.1}]},
+    "brass_soft": {"spatial": true, "ref": 1.2, "max": 15, "maxVoices": 6, "layers": [{"samples": ["brass/soft_1.wav", "brass/soft_2.wav"], "gain": -20, "gainJitter": 3, "pitch": [0.9, 1.1]}]},
+    "step_hard": {"spatial": true, "ref": 2, "max": 30, "maxVoices": 4, "layers": [{"samples": ["step/hard_1.wav", "step/hard_2.wav", "step/hard_3.wav", "step/hard_4.wav"], "gain": -16, "gainJitter": 2, "pitch": [0.94, 1.06], "send": 0.1}]},
+    "step_soft": {"spatial": true, "ref": 2, "max": 25, "maxVoices": 4, "layers": [{"samples": ["step/soft_1.wav", "step/soft_2.wav", "step/soft_3.wav", "step/soft_4.wav"], "gain": -17, "gainJitter": 2, "pitch": [0.94, 1.06]}]},
+    "step_gravel": {"spatial": true, "ref": 2, "max": 30, "maxVoices": 4, "layers": [{"samples": ["step/gravel_1.wav", "step/gravel_2.wav", "step/gravel_3.wav", "step/gravel_4.wav"], "gain": -15, "gainJitter": 2, "pitch": [0.94, 1.06]}]},
+    "step_metal": {"spatial": true, "ref": 2, "max": 35, "maxVoices": 4, "layers": [{"samples": ["step/metal_1.wav", "step/metal_2.wav", "step/metal_3.wav", "step/metal_4.wav"], "gain": -15, "gainJitter": 2, "pitch": [0.94, 1.06], "send": 0.15}]},
+    "land_hard": {"spatial": true, "ref": 2, "max": 35, "maxVoices": 2, "layers": [{"samples": ["step/hard_land.wav"], "gain": -10, "pitch": [0.95, 1.05], "send": 0.15}]},
+    "land_soft": {"spatial": true, "ref": 2, "max": 30, "maxVoices": 2, "layers": [{"samples": ["step/soft_land.wav"], "gain": -11, "pitch": [0.95, 1.05]}]},
+    "land_gravel": {"spatial": true, "ref": 2, "max": 30, "maxVoices": 2, "layers": [{"samples": ["step/gravel_land.wav"], "gain": -10, "pitch": [0.95, 1.05]}]},
+    "land_metal": {"spatial": true, "ref": 2, "max": 35, "maxVoices": 2, "layers": [{"samples": ["step/metal_land.wav"], "gain": -10, "pitch": [0.95, 1.05], "send": 0.2}]},
+    "carbine_magout": {"maxVoices": 2, "layers": [{"samples": ["carbine/magout_1.wav"], "gain": -10, "pitch": [0.96, 1.04], "send": 0.05}]},
+    "carbine_magin": {"maxVoices": 2, "layers": [{"samples": ["carbine/magin_1.wav"], "gain": -8, "pitch": [0.96, 1.04], "send": 0.05}]},
+    "carbine_rack": {"maxVoices": 2, "layers": [{"samples": ["carbine/rack_1.wav"], "gain": -9, "pitch": [0.96, 1.04], "send": 0.05}]},
+    "carbine_release": {"maxVoices": 2, "layers": [{"samples": ["carbine/release_1.wav"], "gain": -7, "pitch": [0.96, 1.04], "send": 0.05}]}
   }
 }

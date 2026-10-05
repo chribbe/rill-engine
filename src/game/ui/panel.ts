@@ -126,7 +126,6 @@ export class TuningPanel {
     b(fire, d.fire, 'fire', 'falloffEnd', 'Falloff end (m)', 0, 400, 1);
     b(fire, d.fire, 'fire', 'falloffMin', 'Falloff min ×', 0, 1, 0.01);
     b(fire, d.fire, 'fire', 'magazine', 'Magazine', 1, 100, 1);
-    b(fire, d.fire, 'fire', 'reloadTime', 'Reload (s)', 0.3, 5, 0.05);
     b(fire, d.fire, 'fire', 'infiniteAmmo', 'Infinite ammo');
     b(fire, d.fire, 'fire', 'pierceGlass', 'Bullets pierce glass');
     b(fire, d.fire, 'fire', 'sprintBlock', 'Sprint blocked after shot (s)', 0, 1, 0.01);
@@ -189,6 +188,15 @@ export class TuningPanel {
     vec('Crouch offset (m)', vmo.crouchOffset, 'viewmodel.crouchOffset', 0.1);
     vec('Sprint offset (m)', vmo.sprintOffset, 'viewmodel.sprintOffset', 0.2);
     vec('Sprint rotation (°)', vmo.sprintRot, 'viewmodel.sprintRot', 60);
+    vec('Reload offset (m)', vmo.reloadOffset, 'viewmodel.reloadOffset', 0.2);
+    vec('Reload rotation (°)', vmo.reloadRot, 'viewmodel.reloadRot', 60);
+    const rl = table('Reload (s)', 'reload', [
+      ['tactical', 'Tactical reload', 0.3, 5, 0.05], ['empty', 'Empty reload', 0.3, 6, 0.05],
+      ['magOut', 'Magazine out at', 0, 3, 0.01], ['magIn', 'Magazine in at', 0, 4, 0.01],
+      ['rackStart', 'Rack at (empty)', 0, 5, 0.01], ['rackEnd', 'Release at (empty)', 0, 5, 0.01],
+    ]);
+    this.bind(rl, cfg, d.reload, 'chamberPlusOne', 'reload.chamberPlusOne', 'Chambered round +1');
+    this.bind(rl, cfg, d.reload, 'auto', 'reload.auto', 'Auto reload when empty');
     table('Mechanics', 'mechanics', [
       ['boltTravel', 'Bolt travel (m)', 0, 0.15, 0.001], ['boltBack', 'Bolt back share', 0.05, 0.95, 0.01], ['triggerPull', 'Trigger pull (°)', 0, 30, 0.5],
     ]);

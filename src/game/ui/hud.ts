@@ -26,7 +26,7 @@ export class DebugHud {
     this.el.textContent = [
       `speed ${player.speed.toFixed(2)} m/s  vy ${v[1].toFixed(2)}  ${player.fly ? 'FLY' : m.grounded ? 'ground' : 'air'}  ${player.stance}${player.sprinting ? '  sprint' : ''}`,
       `surface ${m.grounded ? surfaceName(m.ground.surface) : '-'}  slope ${m.grounded ? ((Math.acos(Math.min(1, m.ground.ny)) * 180) / Math.PI).toFixed(0) : '-'}°`,
-      `ammo ${w.def.fire.infiniteAmmo ? '∞' : `${w.ammo}/${w.def.fire.magazine}`}${w.reloading ? ` reloading ${w.reloading.toFixed(1)}s` : ''}  spread ${w.spread(player).toFixed(2)}°  shots ${w.shots}  trigger→shot ${w.lastLatencyMs >= 0 ? w.lastLatencyMs.toFixed(1) + ' ms' : '-'}`,
+      `ammo ${w.def.fire.infiniteAmmo ? '∞' : `${w.ammo}/${w.def.fire.magazine}`}${w.reloading ? ` reloading ${w.reloadT.toFixed(1)}s${w.reloadEmpty ? ' (empty)' : ''}` : ''}  spread ${w.spread(player).toFixed(2)}°  shots ${w.shots}  trigger→shot ${w.lastLatencyMs >= 0 ? w.lastLatencyMs.toFixed(1) + ' ms' : '-'}`,
       h ? `hit ${h.object || '?'}  ${h.surface}${h.region ? ` (${h.region})` : ''}  ${h.distance.toFixed(1)} m  dmg ${h.damage.toFixed(1)}${h.pierced ? `  through ${h.pierced} pane` : ''}` : 'hit -',
       h ? `    at ${h.point.map((x) => x.toFixed(2)).join(' ')}  n ${h.normal.map((x) => x.toFixed(2)).join(' ')}` : '',
       g.enemies.list.length ? 'enemy ' + g.enemies.list.map((e) => `${e.state} ${Math.max(0, e.health).toFixed(0)}hp ${Math.hypot(e.feet[0] - player.feet[0], e.feet[2] - player.feet[2]).toFixed(1)}m`).join(' | ') : 'enemy -',

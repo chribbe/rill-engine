@@ -10,8 +10,6 @@ export interface WeaponDef {
     rpm: number;
     mode: 'auto' | 'semi';
     magazine: number;
-    /** Seconds from reload start until the magazine is usable. */
-    reloadTime: number;
     infiniteAmmo: boolean;
     damage: number;
     range: number;
@@ -118,10 +116,29 @@ export interface WeaponDef {
     sprintOffset: [number, number, number];
     sprintRot: [number, number, number];
     sprintRate: number;
+    /** Reload pose (added at full blend): offset and pitch / yaw / roll degrees (magazine well towards the eye). */
+    reloadOffset: [number, number, number];
+    reloadRot: [number, number, number];
     /** Idle breathing: metres, degrees, cycles per second. */
     breathe: number;
     breathePitch: number;
     breatheRate: number;
+  };
+  /**
+   * Reload timeline (seconds from the start): magazine out, new magazine seated,
+   * and on an empty gun the charging handle racked. A tactical reload keeps the
+   * chambered round (+1).
+   */
+  reload: {
+    tactical: number;
+    empty: number;
+    magOut: number;
+    magIn: number;
+    rackStart: number;
+    rackEnd: number;
+    chamberPlusOne: boolean;
+    /** Start reloading by itself when the trigger is pulled on an empty gun. */
+    auto: boolean;
   };
   /** Mechanical animation. */
   mechanics: {
@@ -139,8 +156,7 @@ export const CARBINE_DEFAULTS: WeaponDef = {
     rpm: 700,
     mode: 'auto',
     magazine: 30,
-    reloadTime: 2.1,
-    infiniteAmmo: true,
+    infiniteAmmo: false,
     damage: 24,
     range: 300,
     falloffStart: 40,
@@ -218,9 +234,21 @@ export const CARBINE_DEFAULTS: WeaponDef = {
     sprintOffset: [0.03, -0.045, 0.03],
     sprintRot: [-14, 28, -6],
     sprintRate: 9,
+    reloadOffset: [-0.02, -0.01, 0],
+    reloadRot: [30, -6, -40],
     breathe: 0.0012,
     breathePitch: 0.12,
     breatheRate: 0.22,
+  },
+  reload: {
+    tactical: 1.75,
+    empty: 2.3,
+    magOut: 0.3,
+    magIn: 1.08,
+    rackStart: 1.45,
+    rackEnd: 1.72,
+    chamberPlusOne: true,
+    auto: true,
   },
   mechanics: {
     boltTravel: 0.065,

@@ -306,6 +306,38 @@ function step(seed: number, kind: 'hard' | 'soft' | 'gravel' | 'metal', land = f
   return finish(x, land ? -1 : -3);
 }
 
+/** Reload foley: release click + scrape out; scrape + seat clack in; charging handle pull and slam. */
+function reloadSound(seed: number, kind: 'magout' | 'magin' | 'rack' | 'release') {
+  const r = rng(seed), x = buf(kind === 'magin' ? 0.3 : 0.24);
+  const click = (at: number, f: number, g: number) => mix(x, env(biquad(noise(x.length, r), 'bp', f, 2), 0, 0.0015), g, at);
+  const scrape = (at: number, dur: number, f0: number, f1: number, g: number) => {
+    const n = buf(dur);
+    const b = noise(n.length, r);
+    for (let i = 0; i < b.length; i++) { const t = i / b.length; b[i] *= Math.sin(Math.PI * t) * (0.6 + 0.4 * Math.sin(i / 90)); }
+    biquad(b, 'bp', (f0 + f1) / 2, 1.2);
+    mix(x, b, g, at);
+  };
+  if (kind === 'magout') {
+    click(0, 2900, 0.8);
+    scrape(0.01, 0.12, 1300, 2200, 0.5);
+    mix(x, ring(0.15, [[v(r, 1900), 0.02, 0.3], [v(r, 3300), 0.012, 0.2]], r), 0.4, 0.11);
+  } else if (kind === 'magin') {
+    scrape(0, 0.09, 1200, 2000, 0.35);
+    click(0.1, 2400, 1);
+    mix(x, ring(0.18, [[v(r, 1450), 0.03, 0.5], [v(r, 2650), 0.02, 0.35], [v(r, 4100), 0.012, 0.2]], r), 0.8, 0.1);
+    mix(x, env(biquad(noise(x.length, r), 'lp', 380), 0.001, 0.02), 0.6, 0.1);
+  } else if (kind === 'rack') {
+    scrape(0, 0.11, 1100, 2600, 0.6);
+    click(0.11, 3200, 0.7);
+    mix(x, ring(0.1, [[v(r, 2400), 0.015, 0.3]], r), 0.4, 0.11);
+  } else {
+    click(0, 3600, 1);
+    mix(x, ring(0.15, [[v(r, 1700), 0.028, 0.5], [v(r, 2950), 0.02, 0.4], [v(r, 4500), 0.012, 0.25]], r), 0.9, 0.001);
+    mix(x, env(biquad(noise(x.length, r), 'bp', 900, 1.2), 0, 0.008), 0.6);
+  }
+  return finish(x, -3);
+}
+
 // ------------------------------------------------------------------ build
 
 const files: string[] = [];
@@ -315,6 +347,7 @@ for (let i = 1; i <= 3; i++) out(`carbine/mech_${i}`, mech(200 + i));
 for (let i = 1; i <= 2; i++) out(`carbine/tail_outdoor_${i}`, tailOutdoor(300 + i));
 out('carbine/tail_room_1', tailRoom(401));
 out('carbine/dry_1', dryFire(501));
+for (const k of ['magout', 'magin', 'rack', 'release'] as const) out(`carbine/${k}_1`, reloadSound(520 + k.length, k));
 for (let i = 1; i <= 5; i++) out(`brass/hard_${i}`, brass(600 + i, false));
 for (let i = 1; i <= 2; i++) out(`brass/soft_${i}`, brass(650 + i, true));
 for (let i = 1; i <= 4; i++) out(`impact/concrete_${i}`, impactConcrete(700 + i));

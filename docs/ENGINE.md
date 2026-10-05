@@ -69,7 +69,8 @@ World (runtime, derived) ───────────────┐       
 | Ground clutter | `render/clutter.ts`, `vsClutter` in `standard.wgsl`, `tools/blender/clutter.py` |
 | Action effects | `render/particles.ts` + `shaders/particles.wgsl`, `render/spotshadows.ts`, `shaders/lighting.wgsl`, `src/sandbox.ts` |
 | Map / world | `scene/mapformat.ts`, `scene/world.ts`, `scene/environment.ts` |
-| Player | `player/controller.ts`, `scene/collision.ts` |
+| Player | `player/controller.ts` (on `physics/character.ts`), `scene/collision.ts` |
+| Gameplay support (G1, docs/GAME.md) | `core/clock.ts` (fixed tick), `core/spring.ts`, `input/input.ts`, `physics/character.ts` (capsule motor), `physics/verlet.ts` (ragdolls), `physics/shapes.ts` (ray / capsule), `scene/rig.ts` (rigid-part rigs), `scene/surfaces.ts` (surface classes), `audio/audio.ts` + `audio/reverb.ts`, `render/lightpulses.ts`, `debug/draw.ts` |
 | UI | `ui/stats.ts`, `ui/playground.ts` |
 | Content tools | `tools/textures/generate.ts`, `tools/blender/build_testmap.py`, `tools/blender/common.py` |
 

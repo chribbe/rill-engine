@@ -285,7 +285,72 @@ Panel summary (play page right column, editor Gameplay tab):
 
 Every config folder has Save (writes `public/game/*.json`), Revert to file and Code defaults. Values that differ from the file are marked •.
 
+**Step 8 — reload, verification (done, 2026-10-05; playtesting with you is next).**
+- Reload (`WeaponDef.reload`, a timeline in data):
+  - Tactical reload 1.75 s and keeps the chambered round (31). Empty reload 2.3 s: magazine out, in, then the charging handle racked.
+  - Auto reload after the dry click on an empty pull. The magazine is finite by default now.
+  - The viewmodel cants (pose in data), the magazine drops and seats, the handle racks and slams home. Each beat jolts the gun.
+  - Synthesised foley: magazine out / in, rack, release.
+  - Minimal ammo readout: only when low or reloading.
+- Verification on Hässelby at 1280×720:
+  - GPU 4.52 ms with the gun and the enemy on screen, identical without them; CPU about 1.1 ms per frame (simulation 0.1–0.3 ms).
+  - Renderer regression (`?game=0`, FOV matched) against `e3b`: every view at baseline noise.
+  - The frame-rate test is identical at 30–240 fps.
+  - The editor's play mode works and leaves the map clean.
+
+### How to play / test
+- `npm run dev`, open `http://127.0.0.1:5173/play.html?map=hasselby`, click to capture the mouse.
+- Controls: WASD, Shift sprint, Alt walk, C / Ctrl crouch, Space jump, LMB fire, R reload, L flashlight, F fly, H hides the panels.
+- Tuning panel: right column on the play page, the Gameplay tab in the editor. Save writes `public/game/*.json`.
+- `rill.game` in the console: `testFrameRates()`, `enemies.spawn(rill.player)`, `showTraces`, `showHitboxes`, `clock.timeScale`.
+- Rebuild assets: `npm run weapon`, `npm run enemy` (`-- --preview` renders studio shots to `screenshots/`). Sounds: `node tools/audio/generate.ts`. Splat texture: `npm run textures -- splats`.
+- Real recordings can replace any `public/audio/**/*.wav` by name, or a sound event's `samples` can point at your own files (`public/audio/sounds.json`). Keep licensed libraries out of the public repo: put them under a gitignored folder.
+
+### Success criteria (self-assessment; feel needs your hands on it)
+
+| # | Criterion | Status |
+|---|---|---|
+| 1 | Enter Hässelby, control at once | ✅ play page starts at the player start; editor F5 |
+| 2 | Movement responsive, grounded, stable | ✅ capsule motor, clipping, stairs, slopes, landing dip — needs your playtest |
+| 3 | Mouse look | ✅ raw pointer lock, applied per frame before the simulation, no smoothing — needs your mouse |
+| 4 | One functioning firearm | ✅ carbine, semi / auto, magazine, reload |
+| 5 | Immediate trigger | ✅ the press fires at frame start (shot on the first frame after it); readout shows trigger→shot ms |
+| 6 | Recoil physical and controllable | ✅ layered (aim kick pattern + view punch + model kick), compensation-aware recovery, plot for tuning |
+| 7 | Weapon model motion | ✅ ten layers, bolt cycle, trigger, reload; modelled gun with baked wear (no hands yet) |
+| 8 | Flash and effects in sync | ✅ flash in the weapon's projection on the shot frame, light pulse, smoke, sub-frame kicks |
+| 9 | Audio sells the shot | ⚠️ the layer architecture is complete (exact cadence, reverbs, distance), but the samples are synthesised placeholders: the biggest quality gap |
+| 10 | Surface impacts | ✅ 16 surface classes: decals, particles, sounds, sparks / dust / splinters / glass |
+| 11 | Enemy moves / reacts / is damaged / dies | ✅ |
+| 12 | Hit feedback | ✅ per-part springs, squash, stagger, juice, chunks, splats, flesh sound, hit tick |
+| 13 | Satisfying death | ✅ Verlet ragdoll from the pose, killing impulse, head pop, landing splat |
+| 14 | Easily tunable | ✅ panel, save / revert / defaults, slow motion, FPS cap |
+| 15 | Stable across frame rates | ✅ bit-identical simulation, exact audio cadence (tested 30–240 fps and jittery frames) |
+| 16 | Rendering and editor intact | ✅ regression at noise; editor play mode extended, not broken |
+| 17 | Engine / game separation | ✅ `src/engine` (clock, input, motor, verlet, shapes, rig, audio, surfaces, decals, particles, debug draw) vs `src/game` |
+| 18 | Gaps for G2 identified | ✅ below |
+
+The one criterion that matters most, "I want to keep shooting the gun", can only be judged by you. The first tuning passes to try are listed at the end of the status.
+
 ## 7. Known limits to carry into G2
 
-Written up as G1 progresses: skinning and clips, navigation, enemy broadphase (spatial hash),
-physics library choice, particle GPU simulation, the decal grid under many impacts.
+Engine capabilities the next milestone (several enemies, navigation, animation scaling, combat
+performance) will need:
+
+1. **Skinned animation.** Rigid-part rigs were right for one gun and one creature, but hordes of soft creatures need skinning (glTF skins, a joint palette in a storage buffer) and clip playback / blending. Later, vertex-animation textures or GPU skinning for crowds. The procedural layer (reaction springs, look-at) should become an additive layer on top of clips.
+2. **Navigation.** Enemies walk straight at the player and slide along walls. G2 needs a navmesh (baked from the collision soup in the editor, stored with the map), path following, local avoidance between enemies, and the station stairs and doors as links.
+3. **Broadphase for dynamic actors.** Hitscan tests every enemy (sphere, then capsules) and the player push is pairwise. Fine for one enemy; G2 needs a spatial hash for enemies (hitscan, separation, splash) and the same for ragdoll bodies.
+4. **Physics choice.** The Verlet ragdoll is cheap (≈0.15 ms per active body per frame at 120 Hz, sleeps when settled) and good enough for G1. With many simultaneous corpses, props to knock over and ragdoll-on-ragdoll contact, evaluate Rapier (WASM, character controller, joints) against Jolt. The cost is mirroring the 350k-triangle world, which must stay in sync with editor edits.
+5. **Collision queries.** Triangle tests per cell have no per-triangle bounds or BVH. Raycasts cost ~8–30 µs on Hässelby, and shell-casing / ragdoll sphere pushes loop over whole 4 m cells. A BVH per cell (or a two-level BVH) is needed before many enemies cast rays (sight lines) every tick.
+6. **Particles.** CPU simulation, lit per vertex, pooled. Fine for hundreds; hordes with juice everywhere want GPU simulation. Particles still have no depth-based soft fade (ENGINE.md §11).
+7. **Decals.** Runtime decals are bounded (256-entry ring, 16 per 1 m cell, newest win) and cheap to add. Re-centring the runtime grid costs ~1.7 ms every 24 m of travel. The static grid still uses one `maxPer` for every cell (13 MB on Hässelby).
+8. **Audio.** Real recordings (blast close / mid / far, mechanism, tails per environment, impacts, enemy vocals). A distant gun layer for other shooters, occlusion (ray to the listener), a voice budget for crowds, and a mix with ducking. The `tunnel` reverb exists for the subway later.
+9. **Player.** No health, damage or death yet (strikes only shove and kick the view). Air crouch (feet tuck) and ledge handling are basic. ADS is postponed by decision.
+10. **Viewmodel.** No hands or arms: needs a skinned arms rig with clips (reload, inspect) and IK onto the gun.
+11. **Data / editor.** Spawns are map markers (`enemy_spawn`); G2 wants encounter entities (spawn groups, triggers, combat areas, patrol routes) as editor entities the AI layer can place.
+
+### First tuning passes to try (in the panel)
+- Mouse sensitivity / FOV to your taste first; then run speed (4.6), acceleration (50) and braking (40).
+- Recoil: vertical per shot 0.42°, permanent share 0.25, recovery rate 7. Watch the plot while you pull down.
+- View punch pitch 0.55° and weapon kick back / rise (2.8 cm / 2.4°): the "weight" of each shot.
+- Look lag (0.9) and bob: how glued the gun feels.
+- Enemy part kick (2.2), stagger threshold (60), health (180): how hits read and how long a fight lasts.

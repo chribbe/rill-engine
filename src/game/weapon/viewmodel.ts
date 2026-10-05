@@ -37,6 +37,9 @@ export class Viewmodel {
   private receiver: RigPart | null = null;
   private bolt: RigPart | null = null;
   private trigger: RigPart | null = null;
+  private magazine: RigPart | null = null;
+  /** Current reload (seconds in, started empty) or null; set by the game each frame. */
+  reload: { t: number; empty: boolean } | null = null;
   /** Muzzle and ejection port in receiver space. */
   muzzleLocal: [number, number, number] = [0, 0, -0.47];
   ejectLocal: [number, number, number] = [0.024, 0.012, -0.04];
@@ -104,6 +107,7 @@ export class Viewmodel {
     this.receiver = this.rig.part('receiver') ?? this.rig.parts[0];
     this.bolt = this.rig.part('bolt') ?? null;
     this.trigger = this.rig.part('trigger') ?? null;
+    this.magazine = this.rig.part('magazine') ?? null;
     this.loaded = true;
   }
 
@@ -144,6 +148,14 @@ export class Viewmodel {
     const V = this.def.viewmodel, k = Math.min(8, Math.max(0, speed - 1)) * 2 * Math.PI * 5 * 1.6;
     this.airY.v -= V.landDrop * k;
     this.airP.v -= V.landPitch * RAD * k;
+  }
+
+  /** Reload beats: a seated magazine and a released bolt jolt the gun. */
+  reloadEvent(phase: string) {
+    const K = this.kick, w = 2 * Math.PI * this.def.kick.posHz, wr = 2 * Math.PI * this.def.kick.rotHz;
+    if (phase === 'magin') { K.y.v += 0.006 * w * 1.6; K.p.v += 1.4 * RAD * wr * 1.6; }
+    if (phase === 'release') { K.z.v += 0.01 * w * 1.6; K.p.v += 0.8 * RAD * wr * 1.6; }
+    if (phase === 'magout') { K.y.v -= 0.003 * w * 1.6; }
   }
 
   /** A shot was fired (from the tick): kick at its exact time, flash on the next pose. */
@@ -231,14 +243,24 @@ export class Viewmodel {
     const br = this.time * 2 * Math.PI * V.breatheRate, still = Math.max(0, 1 - this.bobAmp * 2);
     const breY = Math.sin(br) * V.breathe * still, breP = Math.sin(br - 0.6) * V.breathePitch * still;
 
+    // ---- reload: the gun cants and lowers to bring the magazine well up
+    const RL = this.def.reload, rl = this.reload;
+    let re = 0;
+    if (rl) {
+      const total = rl.empty ? RL.empty : RL.tactical, t = rl.t;
+      const up = Math.min(1, t / 0.25), down = Math.min(1, Math.max(0, (total - t) / 0.35));
+      re = Math.min(up * up * (3 - 2 * up), down * down * (3 - 2 * down));
+    }
+
     // ---- compose: camera × offset × pivot × rotation × pivot⁻¹
     const K = this.kick, s = this.sprint, cr = this.crouch;
-    const ox = V.offset[0] + V.crouchOffset[0] * cr + V.sprintOffset[0] * s + bobX + this.swayX.x;
-    const oy = V.offset[1] + V.crouchOffset[1] * cr + V.sprintOffset[1] * s + bobY + breY + this.airY.x + K.y.x;
-    const oz = V.offset[2] + V.crouchOffset[2] * cr + V.sprintOffset[2] * s + this.lagZ.x + K.z.x;
-    const pitch = (V.rotation[0] + V.sprintRot[0] * s + breP) * RAD + this.swayP.x * RAD + this.airP.x + K.p.x;
-    const yaw = (V.rotation[1] + V.sprintRot[1] * s) * RAD + this.swayY.x * RAD + K.yaw.x;
-    const roll = (V.rotation[2] + V.sprintRot[2] * s + V.crouchRoll * cr + bobR) * RAD + this.swayR.x * RAD + K.r.x;
+    const RO = V.reloadOffset, RR = V.reloadRot;
+    const ox = V.offset[0] + V.crouchOffset[0] * cr + V.sprintOffset[0] * s + bobX + this.swayX.x + RO[0] * re;
+    const oy = V.offset[1] + V.crouchOffset[1] * cr + V.sprintOffset[1] * s + bobY + breY + this.airY.x + K.y.x + RO[1] * re;
+    const oz = V.offset[2] + V.crouchOffset[2] * cr + V.sprintOffset[2] * s + this.lagZ.x + K.z.x + RO[2] * re;
+    const pitch = (V.rotation[0] + V.sprintRot[0] * s + breP + RR[0] * re) * RAD + this.swayP.x * RAD + this.airP.x + K.p.x;
+    const yaw = (V.rotation[1] + V.sprintRot[1] * s + RR[1] * re) * RAD + this.swayY.x * RAD + K.yaw.x;
+    const roll = (V.rotation[2] + V.sprintRot[2] * s + V.crouchRoll * cr + bobR + RR[2] * re) * RAD + this.swayR.x * RAD + K.r.x;
     const f = c.forward, r = c.right;
     const ux = r[1] * f[2] - r[2] * f[1], uy = r[2] * f[0] - r[0] * f[2], uz = r[0] * f[1] - r[1] * f[0];
     const M = this.root;
@@ -258,7 +280,24 @@ export class Viewmodel {
         if (u < m.boltBack) { const q = u / m.boltBack; x = 1 - (1 - q) * (1 - q); }
         else { const q = (u - m.boltBack) / (1 - m.boltBack); x = 1 - q * q; }
       }
+      // Empty reload: the charging handle is pulled back and let go (snaps home).
+      if (rl?.empty && rl.t > RL.rackStart && rl.t < RL.rackEnd + 0.05) {
+        const q = Math.min(1, (rl.t - RL.rackStart) / Math.max(0.05, RL.rackEnd - RL.rackStart));
+        x = rl.t < RL.rackEnd ? 1 - (1 - q) * (1 - q) : 1 - (rl.t - RL.rackEnd) / 0.05;
+      }
       this.bolt.pos[2] = x * m.boltTravel;
+    }
+    if (this.magazine) {
+      // Old magazine drops out, a fresh one rises into the well and seats.
+      let y = 0, show = true;
+      if (rl) {
+        const t = rl.t;
+        if (t >= RL.magOut && t < RL.magOut + 0.28) { const q = (t - RL.magOut) / 0.28; y = -0.32 * q * q; }
+        else if (t >= RL.magOut + 0.28 && t < RL.magIn - 0.45) show = false;
+        else if (t >= RL.magIn - 0.45 && t < RL.magIn) { const q = (t - (RL.magIn - 0.45)) / 0.45; y = -0.24 * (1 - q * q * (3 - 2 * q)); }
+      }
+      this.magazine.pos[1] = y;
+      this.magazine.visible = show;
     }
     this.trig += ((triggerHeld ? 1 : 0) - this.trig) * approach(60, dt);
     if (this.trigger) quat.fromEuler(-this.trig * m.triggerPull * RAD, 0, 0, 'xyz', this.trigger.rot);
