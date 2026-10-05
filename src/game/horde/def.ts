@@ -143,9 +143,9 @@ export const TOMATO_DEFAULTS: TomatoDef = {
   reactions: { knock: 0.09, squash: 0.18, springHz: 5, springDamping: 0.32, staggerThreshold: 40, staggerTime: 0.35, flinch: 0.5 },
   gore: {
     shells: [6, 9], chunks: [2, 3], pulp: [5, 8], gibSpeed: [3.5, 10], gibSpin: 16, gibScale: [1.0, 1.6], gibLife: 60, legsOff: 3,
-    pops: 7, popSize: [0.6, 2.3], popLife: [0.26, 0.5], sprays: 10, sprayLength: [1.6, 3.4], sprayLife: [0.2, 0.36],
-    jets: 9, jetBlobs: 80, jetCone: 44, jetSpeed: [3, 13], jetSize: [0.015, 0.046], backJets: 4, coreBlobs: 70, coreSize: [0.035, 0.09],
-    drops: 260, dropSize: [0.008, 0.024], dropSpeed: [2, 11], blobs: 70, blobSize: [0.025, 0.08], seeds: 40,
+    pops: 2, popSize: [0.35, 1.2], popLife: [0.08, 0.14], sprays: 4, sprayLength: [1.2, 2.4], sprayLife: [0.07, 0.12],
+    jets: 10, jetBlobs: 95, jetCone: 46, jetSpeed: [3, 14], jetSize: [0.018, 0.058], backJets: 4, coreBlobs: 100, coreSize: [0.04, 0.1],
+    drops: 320, dropSize: [0.01, 0.028], dropSpeed: [2.5, 13], blobs: 80, blobSize: [0.03, 0.09], seeds: 40,
     red: [0.13, 0.004, 0.003],
     splats: 20, streaks: 14, splatSize: [0.8, 2.0], splatRadius: 6, wallSplats: 10, poolSize: [3.2, 4.6], mist: 0.3,
     juice: [0.045, 0.0015, 0.001], flesh: [0.32, 0.022, 0.009], seed: [0.42, 0.33, 0.15],

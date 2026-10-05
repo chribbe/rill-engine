@@ -82,8 +82,9 @@ export class TomatoGore {
     this.particles.emit('drop', { count: n, pos: from, dir: d, spread: 0.07, speed, life: [0.8, 1.8], size, color, alpha: 1, drag: 0.3, gravity: 9.8, stretch: true, addVel: inherit });
     if (!sheet) return;
     // The stream's body: a lit liquid sheet flung along the jet for its first few frames.
-    const L = (speed[0] + speed[1]) * 0.085, w = L * 0.17, sp = Math.max(0, (L * 0.5 - w) / 0.012);
-    this.particles.emit('splash', { pos: [from[0] + d[0] * L * 0.45, from[1] + d[1] * L * 0.45, from[2] + d[2] * L * 0.45], dir: d, spread: 0, speed: [sp, sp], life: [0.14, 0.26], size: [w * 0.7, w], color, alpha: 1, stretch: true, fixed: true });
+    // Kept brief and slim: it reads as the stream leaving, then the drops take over.
+    const L = (speed[0] + speed[1]) * 0.055, w = L * 0.14, sp = Math.max(0, (L * 0.5 - w) / 0.012);
+    this.particles.emit('splash', { pos: [from[0] + d[0] * L * 0.45, from[1] + d[1] * L * 0.45, from[2] + d[2] * L * 0.45], dir: d, spread: 0, speed: [sp, sp], life: [0.06, 0.1], size: [w * 0.7, w], color, alpha: 1, stretch: true, fixed: true });
   }
 
   /** World centre and orientation of a rig part (its mesh bounds centre), for the gib that replaces it. */

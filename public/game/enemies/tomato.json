@@ -73,54 +73,54 @@
     ],
     "gibLife": 60,
     "legsOff": 3,
-    "pops": 7,
+    "pops": 2,
     "popSize": [
-      0.6,
-      2.3
+      0.35,
+      1.2
     ],
     "popLife": [
-      0.26,
-      0.5
+      0.08,
+      0.14
     ],
-    "sprays": 10,
+    "sprays": 4,
     "sprayLength": [
-      1.6,
-      3.4
+      1.2,
+      2.4
     ],
     "sprayLife": [
-      0.2,
-      0.36
+      0.07,
+      0.12
     ],
-    "jets": 9,
-    "jetBlobs": 80,
-    "jetCone": 44,
+    "jets": 10,
+    "jetBlobs": 95,
+    "jetCone": 46,
     "jetSpeed": [
       3,
-      13
+      14
     ],
     "jetSize": [
-      0.015,
-      0.046
+      0.018,
+      0.058
     ],
     "backJets": 4,
-    "coreBlobs": 70,
+    "coreBlobs": 100,
     "coreSize": [
-      0.035,
-      0.09
+      0.04,
+      0.1
     ],
-    "drops": 260,
+    "drops": 320,
     "dropSize": [
-      0.008,
-      0.024
+      0.01,
+      0.028
     ],
     "dropSpeed": [
-      2,
-      11
+      2.5,
+      13
     ],
-    "blobs": 70,
+    "blobs": 80,
     "blobSize": [
-      0.025,
-      0.08
+      0.03,
+      0.09
     ],
     "seeds": 40,
     "red": [

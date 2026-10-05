@@ -575,3 +575,7 @@ performance) will need:
 - **Engine budgets:** particles 16,384 (was 4,096), runtime decals 1,024 (was 256), 24 per runtime decal cell (was 16).
 - Renderer regression pixel-identical.
 
+**Gore, balance pass (2026-10-05).** Your note: the fading flat part takes over; the cool particles don't show as much.
+- Flat sheets are now only a quick pop: 2 burst sheets of up to 1.6 m that last under 0.15 s, 4 short sprays, and slim stream sheets that last ~0.1 s.
+- The size comes from particles: 10 jets × 95 blobs in a 46° cone at up to 14 m/s, 100 core blobs, 320 fine drops, 80 pulp blobs, slightly bigger drops.
+
