@@ -9,6 +9,7 @@ import { spring, stepSpring, approach, type Spring1 } from '../../engine/core/sp
 import { surfaceId } from '../../engine/scene/surfaces';
 import type { Hittable, ShotHit } from '../combat/hitscan';
 import type { EnemyDef } from './def';
+import { Ragdoll } from './ragdoll';
 
 const RAD = Math.PI / 180;
 const FLESH = surfaceId('flesh');
@@ -57,8 +58,13 @@ export class Enemy implements Hittable {
   private root: Mat4 = mat4.identity();
   private tmp: [number, number, number] = [0, 0, 0];
   private q = quat.create();
+  /** Death physics (null while alive). */
+  ragdoll: Ragdoll | null = null;
   /** Fires at the strike moment of an attack that reaches the player. */
   onStrike: ((e: Enemy) => void)[] = [];
+  /** The body (pelvis / chest) hits the ground after death: position, impact speed. */
+  onBodyLand: ((e: Enemy, pos: ArrayLike<number>, speed: number) => void)[] = [];
+  private landed = false;
 
   constructor(readonly id: string, public def: EnemyDef, private renderer: Renderer, collision: CollisionWorld, parts: RigPartSource[], renderables: Renderable[], at: [number, number, number], yawDeg: number) {
     this.rig = new Rig(renderer, id, { castShadow: true }).add(parts, renderables);
@@ -126,6 +132,16 @@ export class Enemy implements Hittable {
         break;
       case 'dead':
         this.deadT += h;
+        if (this.ragdoll) {
+          this.ragdoll.step(h, m.collision!);
+          // A slow crumple may touch down too gently for a contact event: settle it here.
+          if (!this.landed && this.deadT > 1.2) {
+            const j = this.ragdoll.joint('pelvis') ?? this.ragdoll.body.particles[0];
+            this.landed = true;
+            for (const f of this.onBodyLand) f(this, j.pos, 0.5);
+          }
+          return;
+        }
         turn = false;
         break;
     }
@@ -170,9 +186,17 @@ export class Enemy implements Hittable {
     if (m.feet[1] < -100) this.state = 'dead';
   }
 
-  /** A shot hit `region` with `impulse` (N·s) along `dir` at `point`: reactions (more in step 6). */
-  hit(damage: number, region: string, point: ArrayLike<number>, dir: ArrayLike<number>, impulse: number, partName: string): boolean {
-    if (!this.alive) return false;
+  /**
+   * A shot hit `region` with `impulse` (N·s) along `dir` at `point`. Alive:
+   * damage, reactions, maybe death (ragdoll from the current pose, the killing
+   * impulse, the head popping off on a killing headshot). Dead: pushes the
+   * ragdoll. Returns true when this hit killed it.
+   */
+  hit(damage: number, region: string, point: ArrayLike<number>, dir: ArrayLike<number>, impulse: number, partName: string, h = 1 / 120): boolean {
+    if (!this.alive) {
+      this.ragdoll?.body.impulse(point, dir, impulse * 1.6, 0.5, h);
+      return false;
+    }
     const D = this.def, R = D.reactions;
     this.health -= damage;
     const reg = D.regions[region] ?? { damage: 1, stagger: 1 };
@@ -181,12 +205,32 @@ export class Enemy implements Hittable {
     if (this.health <= 0) {
       this.state = 'dead';
       this.deadT = 0;
+      this.ragdoll = new Ragdoll(D, this.rig, this.motor.velocity, h);
+      // A heavy round knocks it over: the killing impulse plus a shove at the hips (it crumples, then falls).
+      this.ragdoll.body.impulse(point, dir, impulse * 3.2, 0.55, h);
+      const pel = this.ragdoll.joint('pelvis');
+      if (pel) this.ragdoll.body.impulse(pel.pos, [dir[0], 0, dir[2]], impulse * 1.2, 0.4, h);
+      if (region === 'head' && D.impact.headPop) this.ragdoll.popHead(dir, 3.2, h);
+      this.ragdoll.body.onContact = (i, speed) => {
+        const P = this.ragdoll!.body.particles;
+        const pel2 = this.ragdoll!.joint('pelvis'), ch = this.ragdoll!.joint('chest');
+        if (!this.landed && (P[i] === pel2 || P[i] === ch) && speed > 0.2) {
+          this.landed = true;
+          for (const f of this.onBodyLand) f(this, P[i].pos, speed);
+        }
+      };
       return true;
     }
     if (this.stagger > R.staggerThreshold && this.state !== 'stagger') {
+      // Stumble: shoved back along the shot, rocking back hard, arms thrown up (see pose).
       this.state = 'stagger';
       this.staggerT = R.staggerTime;
       this.stagger *= 0.4;
+      const v = this.motor.velocity, w = 2 * Math.PI * R.springHz;
+      v[0] += dir[0] * 1.4; v[2] += dir[2] * 1.4;
+      const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
+      const lz = -dir[0] * sy + dir[2] * cy;
+      this.bodyKick.x.v += -Math.sign(lz || 1) * 0.5 * w;
     }
     return false;
   }
@@ -217,8 +261,17 @@ export class Enemy implements Hittable {
     void point;
   }
 
-  /** Per frame: interpolated root, procedural animation, reaction springs, hit capsules. */
+  /** Per frame: interpolated root, procedural animation (or the ragdoll), reaction springs, hit capsules. */
   pose(dt: number, alpha: number, player: FirstPersonController) {
+    if (this.ragdoll) {
+      this.ragdoll.apply();
+      // Last moments of a corpse: it sinks into the ground instead of vanishing.
+      const sink = Math.max(0, this.deadT - (this.def.corpseTime - 1.5)) / 1.5;
+      if (sink > 0) for (const p of this.rig.parts) p.world[13] -= sink * sink * 0.6;
+      this.rig.commit(2);
+      this.updateCapsules();
+      return;
+    }
     const D = this.def, G = D.gait, m = this.motor;
     const fx = this.prevFeet[0] + (m.feet[0] - this.prevFeet[0]) * alpha;
     const fy = this.prevFeet[1] + (m.feet[1] - this.prevFeet[1]) * alpha;
@@ -266,16 +319,19 @@ export class Enemy implements Hittable {
       else if (t < A.windup + A.strike) { const u = (t - A.windup) / A.strike; armR = 2.3 - 3.0 * u; twist = 0.35 - 0.7 * u; forearmR = 0.95 - 0.8 * u; }
       else { const u = Math.min(1, (t - A.windup - A.strike) / A.recover); armR = -0.7 * (1 - u); twist = -0.35 * (1 - u); forearmR = 0.15 + 0.2 * u; }
     }
-    // Death: topple backwards (the ragdoll replaces this in step 6).
+    // Stagger: arms thrown up and out, leaning back while it regains balance.
+    const st = this.state === 'stagger' ? Math.min(1, this.staggerT / Math.max(0.05, D.reactions.staggerTime)) : 0;
+    const stE = Math.sin(st * Math.PI * 0.5);
+    // Death without a ragdoll (fell off the map): topple backwards.
     const fall = dead ? Math.min(1, this.deadT / 0.6) : 0;
     const fallE = fall * fall;
     const bob = -G.bob * Math.abs(s) * sp;
     const lean = -G.lean * RAD * Math.min(1, sp);
     const breathe = Math.sin(performance.now() / 700) * 0.015 * (1 - Math.min(1, sp));
-    set('body', lean + this.bodyKick.x.x + fallE * 1.45, twist, G.roll * RAD * c * sp + this.bodyKick.z.x, bob + breathe - fallE * 0.62, 0);
+    set('body', lean + this.bodyKick.x.x + fallE * 1.45 + stE * 0.25, twist, G.roll * RAD * c * sp + this.bodyKick.z.x, bob + breathe - fallE * 0.62, 0);
     set('head', -this.headPitch, this.headYaw - twist, 0);
-    set('arm_l', -G.armSwing * RAD * s * sp - fallE * 1.2, 0, -0.12 - fallE * 0.5);
-    set('arm_r', -G.armSwing * RAD * s * sp * (this.state === 'attack' ? 0 : 1) + armR - fallE * 1.2, 0, 0.12 + fallE * 0.5);
+    set('arm_l', -G.armSwing * RAD * s * sp - fallE * 1.2 + stE * 1.1, 0, -0.12 - fallE * 0.5 - stE * 0.6);
+    set('arm_r', -G.armSwing * RAD * s * sp * (this.state === 'attack' ? 0 : 1) + armR - fallE * 1.2 + stE * 0.9, 0, 0.12 + fallE * 0.5 + stE * 0.7);
     set('forearm_l', 0.35 + 0.15 * s * sp, 0, 0);
     set('forearm_r', forearmR, 0, 0);
     set('leg_l', G.legSwing * RAD * s * sp + fallE * 0.6, 0, -0.04);
@@ -283,8 +339,12 @@ export class Enemy implements Hittable {
     set('shin_l', -G.kneeBend * RAD * Math.max(0, c) * sp - fallE * 0.4, 0, 0);
     set('shin_r', -G.kneeBend * RAD * Math.max(0, -c) * sp - fallE * 0.7, 0, 0);
     this.rig.update(this.root, 2);
+    this.updateCapsules();
+  }
 
-    // Hit capsules in world space.
+  /** Hit capsules in world space (from the parts as posed). */
+  private updateCapsules() {
+    const D = this.def;
     const H = D.hitboxes;
     for (let i = 0; i < H.length; i++) {
       const hb = H[i], p = this.parts.get(hb.part);

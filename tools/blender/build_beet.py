@@ -191,7 +191,7 @@ def compose(ao, idm, hgt):
     nz = lambda r: (lambda x: (x - x.mean()) / (x.std() + 1e-6))(blur(rng.random((ATLAS, ATLAS)).astype(np.float32), r))
     n_fine, n_mid, n_low = nz(1), nz(4), nz(18)
     srgb = lambda c: (np.array(c) / 255.0) ** 2.2
-    base = {0: (srgb((92, 20, 44)), 0.42), 1: (srgb((128, 78, 70)), 0.78), 2: (srgb((150, 28, 72)), 0.5), 3: (srgb((44, 78, 30)), 0.62), 4: (srgb((22, 6, 12)), 0.22)}
+    base = {0: (srgb((70, 13, 33)), 0.42), 1: (srgb((128, 78, 70)), 0.78), 2: (srgb((150, 28, 72)), 0.5), 3: (srgb((44, 78, 30)), 0.62), 4: (srgb((22, 6, 12)), 0.22)}
     alb = np.zeros((ATLAS, ATLAS, 3), np.float32)
     rough = np.zeros((ATLAS, ATLAS), np.float32)
     for i, (c, r) in base.items():
@@ -204,7 +204,7 @@ def compose(ao, idm, hgt):
     pores = np.clip((n_fine - 1.6) * 2, 0, 1) * skin
     alb *= (1 - pores * 0.5)[..., None]
     bloom = np.clip(n_low * 0.5 + 0.2, 0, 1) * skin * 0.25
-    alb = alb * (1 - bloom[..., None]) + srgb((120, 60, 90)) * bloom[..., None]
+    alb = alb * (1 - bloom[..., None]) + srgb((96, 44, 70)) * bloom[..., None]
     # Soil residue low on the body and roots: dusty, rougher.
     dirt = np.clip((0.45 - h) * 3 + n_mid * 0.25, 0, 1) * (ids <= 1)
     alb = alb * (1 - dirt[..., None] * 0.55) + srgb((88, 72, 58)) * dirt[..., None] * 0.55

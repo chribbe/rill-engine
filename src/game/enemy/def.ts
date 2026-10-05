@@ -65,6 +65,38 @@ export interface EnemyDef {
   /** Seconds before a new one rises after death; corpse lifetime. */
   respawn: number;
   corpseTime: number;
+  /** Enemy-specific impact feedback (the vegetable's juice, chunks, splats). */
+  impact: {
+    /** impacts.json entry for per-hit particles and sound. */
+    surface: string;
+    /** Splat decal on the world behind / below a hit: material, size range, reach (m), chance. */
+    splat: { decal: string; size: [number, number]; reach: number; chance: number };
+    /** Hard chunks per hit and their colour. */
+    chunks: [number, number];
+    chunkColor: [number, number, number];
+    /** Juice colour (droplets, mist). */
+    juice: [number, number, number];
+    /** Death: extra droplets, chunks, a splat under the body as it lands. */
+    deathBurst: number;
+    deathChunks: number;
+    landSplat: [number, number];
+    /** A killing headshot pops the head off. */
+    headPop: boolean;
+  };
+  /**
+   * Death ragdoll (Verlet): joints in rest space (part they ride on, position,
+   * mass, radius), links between joints ('eq' rigid, 'min' joint limits as a
+   * fraction of the rest length), and bones (part ← pivot joint, axis joint,
+   * twist reference joints).
+   */
+  ragdoll: {
+    joints: { name: string; part: string; at: [number, number, number]; mass: number; radius: number }[];
+    rigid: string[][];
+    links: [string, string, 'eq' | 'min', number][];
+    bones: { part: string; from: string; to: string; ref: [string, string] }[];
+    /** The head stick (neck joint, head joint): its links to the body break when the head pops. */
+    head: [string, string];
+  };
 }
 
 const L = (part: string, a: [number, number, number], b: [number, number, number], r: number, region: string): Hitbox => ({ part, a, b, r, region });
@@ -103,4 +135,57 @@ export const BEET_DEFAULTS: EnemyDef = {
   },
   respawn: 4,
   corpseTime: 20,
+  impact: {
+    surface: 'flesh',
+    splat: { decal: 'decal_beet_splat', size: [0.22, 0.5], reach: 2.4, chance: 0.55 },
+    chunks: [1, 3],
+    chunkColor: [0.22, 0.009, 0.055],
+    juice: [0.085, 0.003, 0.025],
+    deathBurst: 28,
+    deathChunks: 10,
+    landSplat: [0.7, 1.1],
+    headPop: true,
+  },
+  ragdoll: {
+    joints: [
+      { name: 'pelvis', part: 'body', at: [0, 0.84, 0], mass: 8, radius: 0.2 },
+      { name: 'chest', part: 'body', at: [0, 1.22, -0.01], mass: 10, radius: 0.22 },
+      { name: 'neck', part: 'head', at: [0, 1.33, -0.02], mass: 1.5, radius: 0.08 },
+      { name: 'head', part: 'head', at: [0, 1.58, -0.02], mass: 3, radius: 0.13 },
+      { name: 'shoulder_l', part: 'arm_l', at: [-0.25, 1.2, 0], mass: 2, radius: 0.07 },
+      { name: 'elbow_l', part: 'forearm_l', at: [-0.42, 0.94, -0.06], mass: 1.5, radius: 0.05 },
+      { name: 'hand_l', part: 'forearm_l', at: [-0.46, 0.7, -0.2], mass: 1, radius: 0.045 },
+      { name: 'shoulder_r', part: 'arm_r', at: [0.25, 1.2, 0], mass: 2, radius: 0.07 },
+      { name: 'elbow_r', part: 'forearm_r', at: [0.42, 0.94, -0.06], mass: 1.5, radius: 0.05 },
+      { name: 'hand_r', part: 'forearm_r', at: [0.46, 0.7, -0.2], mass: 1, radius: 0.045 },
+      { name: 'hip_l', part: 'leg_l', at: [-0.12, 0.78, 0], mass: 3, radius: 0.09 },
+      { name: 'knee_l', part: 'shin_l', at: [-0.15, 0.44, -0.04], mass: 2, radius: 0.07 },
+      { name: 'foot_l', part: 'shin_l', at: [-0.16, 0.08, 0.01], mass: 1.5, radius: 0.06 },
+      { name: 'hip_r', part: 'leg_r', at: [0.12, 0.78, 0], mass: 3, radius: 0.09 },
+      { name: 'knee_r', part: 'shin_r', at: [0.15, 0.44, -0.04], mass: 2, radius: 0.07 },
+      { name: 'foot_r', part: 'shin_r', at: [0.16, 0.08, 0.01], mass: 1.5, radius: 0.06 },
+    ],
+    rigid: [['pelvis', 'chest', 'shoulder_l', 'shoulder_r', 'hip_l', 'hip_r']],
+    links: [
+      ['neck', 'chest', 'eq', 1], ['neck', 'shoulder_l', 'eq', 0.9], ['neck', 'shoulder_r', 'eq', 0.9], ['neck', 'pelvis', 'eq', 0.9],
+      ['head', 'neck', 'eq', 1], ['head', 'chest', 'min', 0.92], ['head', 'shoulder_l', 'eq', 0.35], ['head', 'shoulder_r', 'eq', 0.35],
+      ['shoulder_l', 'elbow_l', 'eq', 1], ['elbow_l', 'hand_l', 'eq', 1], ['shoulder_l', 'hand_l', 'min', 0.55], ['chest', 'elbow_l', 'min', 0.6],
+      ['shoulder_r', 'elbow_r', 'eq', 1], ['elbow_r', 'hand_r', 'eq', 1], ['shoulder_r', 'hand_r', 'min', 0.55], ['chest', 'elbow_r', 'min', 0.6],
+      ['hip_l', 'knee_l', 'eq', 1], ['knee_l', 'foot_l', 'eq', 1], ['hip_l', 'foot_l', 'min', 0.62], ['pelvis', 'knee_l', 'min', 0.7],
+      ['hip_r', 'knee_r', 'eq', 1], ['knee_r', 'foot_r', 'eq', 1], ['hip_r', 'foot_r', 'min', 0.62], ['pelvis', 'knee_r', 'min', 0.7],
+    ],
+    bones: [
+      { part: 'body', from: 'pelvis', to: 'chest', ref: ['shoulder_l', 'shoulder_r'] },
+      { part: 'head', from: 'neck', to: 'head', ref: ['shoulder_l', 'shoulder_r'] },
+      { part: 'arm_l', from: 'shoulder_l', to: 'elbow_l', ref: ['shoulder_l', 'shoulder_r'] },
+      { part: 'forearm_l', from: 'elbow_l', to: 'hand_l', ref: ['shoulder_l', 'shoulder_r'] },
+      { part: 'arm_r', from: 'shoulder_r', to: 'elbow_r', ref: ['shoulder_l', 'shoulder_r'] },
+      { part: 'forearm_r', from: 'elbow_r', to: 'hand_r', ref: ['shoulder_l', 'shoulder_r'] },
+      { part: 'leg_l', from: 'hip_l', to: 'knee_l', ref: ['hip_l', 'hip_r'] },
+      { part: 'shin_l', from: 'knee_l', to: 'foot_l', ref: ['hip_l', 'hip_r'] },
+      { part: 'leg_r', from: 'hip_r', to: 'knee_r', ref: ['hip_l', 'hip_r'] },
+      { part: 'shin_r', from: 'knee_r', to: 'foot_r', ref: ['hip_l', 'hip_r'] },
+    ],
+    head: ['neck', 'head'],
+  },
 };

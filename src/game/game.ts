@@ -87,7 +87,7 @@ export class Game {
     await this.enemies.load();
     this.impactTable = await impacts;
     this.impacts = new ImpactFx(this.impactTable, rt.world, rt.renderer.particles, this.pulses);
-    const decalMats = Object.values(this.impactTable.surfaces).map((e) => e.decal).filter((d): d is string => !!d);
+    const decalMats = [...Object.values(this.impactTable.surfaces).map((e) => e.decal), this.enemyConfig.data.impact.splat.decal].filter((d): d is string => !!d);
     await rt.world.addRuntimeDecalMaterials(decalMats);
     rt.player.tuning = this.playerConfig.data;
     rt.sandbox.ownsParticles = false;
@@ -107,7 +107,10 @@ export class Game {
         fwd, [up[0] * 25 + j() * 6, up[1] * 25 + j() * 6, up[2] * 25 + j() * 6]);
     });
     this.shells.onBounce.push((pos, speed, surface, bounce) => this.audio.brass(surface, pos, speed, bounce));
-    this.enemies.onSpawn.push((e) => e.onStrike.push((en) => this.onStrike(en)));
+    this.enemies.onSpawn.push((e) => {
+      e.onStrike.push((en) => this.onStrike(en));
+      e.onBodyLand.push((en, pos, speed) => this.onBodyLand(en, pos, speed));
+    });
     if (opts.panel) {
       this.panel = new TuningPanel(this, opts.panel);
       this.hud = new DebugHud(this);
@@ -117,6 +120,52 @@ export class Game {
     const sp = rt.world.spawn();
     rt.player.teleport(sp.position, sp.yaw, sp.pitch);
     this.enemies.spawn(rt.player);
+  }
+
+  /**
+   * Enemy-specific hit feedback (EnemyDef.impact): the surface profile's juice,
+   * hard chunks that land, sometimes a splat sprayed onto the world behind the
+   * hit; on a kill a burst, more chunks and (headshot) a neck spray.
+   */
+  private enemyHitFx(en: Enemy, h: { point: [number, number, number]; normal: [number, number, number]; region: string }, dir: ArrayLike<number>, killed: boolean, wasAlive: boolean) {
+    const I = en.def.impact, P = this.rt.renderer.particles, W = this.rt.world, C = W.collision;
+    this.impacts.playSurface(I.surface, h.point, h.normal, dir, false);
+    const floor = C.groundHeight(h.point[0], h.point[1] + 0.1, h.point[2], 4);
+    const n = h.normal;
+    const out = [n[0] * 0.6 + dir[0] * 0.4, n[1] * 0.6 + dir[1] * 0.4 + 0.3, n[2] * 0.6 + dir[2] * 0.4];
+    const count = (wasAlive ? I.chunks[0] + Math.floor(Math.random() * (I.chunks[1] - I.chunks[0] + 1)) : 1) + (killed ? I.deathChunks : 0);
+    P.emit('debris', { count, pos: h.point, dir: out, spread: killed ? 1 : 0.6, speed: killed ? [1.5, 5] : [1.2, 3.5], life: [1.4, 2.6], size: [0.012, 0.032], color: I.chunkColor, alpha: 1, drag: 0.5, gravity: 9.8, floor: floor > -Infinity ? floor : undefined });
+    if (killed) {
+      P.emit('dust', { count: I.deathBurst, pos: h.point, dir: out, spread: 1, speed: [1, 4.5], life: [0.4, 1], size: [0.01, 0.045], color: I.juice, alpha: 0.95, drag: 1.1, gravity: 9.8 });
+      if (h.region === 'head' && en.ragdoll?.headPopped) {
+        const neck = en.ragdoll.joint(en.def.ragdoll.head[0]);
+        if (neck) P.emit('dust', { count: 26, pos: neck.pos, dir: [0, 1, 0], spread: 0.5, speed: [1.5, 4.5], life: [0.5, 1.1], size: [0.012, 0.05], color: I.juice, alpha: 0.95, drag: 1, gravity: 9.8 });
+      }
+    }
+    // Spray behind the hit onto walls within reach, else down onto the ground behind it.
+    if (Math.random() < I.splat.chance * (killed ? 2 : 1)) {
+      const [a, b] = I.splat.size;
+      let hit = C.raycast(h.point, dir, I.splat.reach);
+      if (!hit) {
+        const dl = Math.hypot(dir[0], dir[2]) || 1, f = 0.3 + Math.random() * 0.5;
+        const down = [dir[0] / dl * f, -1, dir[2] / dl * f], l = Math.hypot(down[0], down[1], down[2]);
+        hit = C.raycast(h.point, [down[0] / l, down[1] / l, down[2] / l], I.splat.reach + 1.5);
+      }
+      if (hit) W.addDecal(I.splat.decal, hit.point, hit.normal, a + Math.random() * (b - a), true);
+    }
+  }
+
+  /** The corpse hits the ground: a splat under it, a wet thud. */
+  private onBodyLand(en: Enemy, pos: ArrayLike<number>, speed: number) {
+    const W = this.rt.world, I = en.def.impact;
+    const g = W.collision.groundHeight(pos[0], pos[1] + 0.3, pos[2], 2);
+    if (g > -Infinity) {
+      const [a, b] = I.landSplat;
+      W.addDecal(I.splat.decal, [pos[0], g, pos[2]], [0, 1, 0], a + Math.random() * (b - a), true);
+    }
+    this.audio.play('land_soft', { pos, gain: Math.min(4, speed * 2), pitch: 0.75 });
+    this.audio.play('impact_flesh', { pos, gain: -3, pitch: 0.8 });
+    this.rt.renderer.particles.emit('dust', { count: 10, pos, dir: [0, 1, 0], spread: 1, speed: [0.5, 2], life: [0.4, 0.8], size: [0.01, 0.035], color: I.juice, alpha: 0.9, drag: 1.5, gravity: 9.8 });
   }
 
   /** An enemy's swing connected: the player feels it (view kick, thud). */
@@ -146,10 +195,11 @@ export class Game {
         const reg = en.def.regions[h.region] ?? { damage: 1, stagger: 1 };
         const dmg = h.damage * reg.damage;
         h.damage = dmg;
-        const killed = en.hit(dmg, h.region, h.point, e.dir, this.weapon.def.fire.impactForce, h.part || 'body');
-        this.impacts.playSurface('flesh', h.point, h.normal, e.dir, false);
-        this.audio.play('impact_flesh', { pos: h.point, at: at + h.t / 900, gain: killed ? 3 : 0 });
-        this.crosshair?.confirm(killed);
+        const wasAlive = en.alive;
+        const killed = en.hit(dmg, h.region, h.point, e.dir, this.weapon.def.fire.impactForce, h.part || 'body', this.clock.step);
+        this.enemyHitFx(en, h, e.dir, killed, wasAlive);
+        this.audio.play('impact_flesh', { pos: h.point, at: at + h.t / 900, gain: killed ? 3 : wasAlive ? 0 : -4 });
+        if (wasAlive) this.crosshair?.confirm(killed);
       }
       if (h.kind === 'world') {
         this.impacts.play(h, e.dir);

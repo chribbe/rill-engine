@@ -12,7 +12,7 @@ const UP = [0, 1, 0];
 const GREY: [number, number, number] = [0.5, 0.5, 0.5];
 const FLOATS = 16; // per GPU particle: pos.xyz size | rot alpha kind seed | rgb emissive | vel.xyz -
 
-export type ParticleKind = 'smoke' | 'flash' | 'spark' | 'dust';
+export type ParticleKind = 'smoke' | 'flash' | 'spark' | 'dust' | 'debris';
 
 interface P {
   kind: ParticleKind;
@@ -33,6 +33,8 @@ interface P {
   flags: number;
   /** Anchor id (follows a moving point, e.g. a muzzle), -1 = free. */
   anchor: number;
+  /** Ground height to bounce on (debris), -Infinity = none. */
+  floor: number;
 }
 
 export interface EmitOptions {
@@ -54,6 +56,8 @@ export interface EmitOptions {
   stretch?: boolean;
   /** Follow anchor `id` (see `setAnchor`): the particle keeps its offset from that point. */
   anchor?: number;
+  /** Bounce on this ground height (debris chunks land instead of falling through). */
+  floor?: number;
 }
 
 export class ParticleSystem {
@@ -107,6 +111,7 @@ export class ParticleSystem {
       p.seed = (this.seed++ * 2654435761) >>> 0;
       p.flags = (o.viewmodel ? 1 : 0) | (o.stretch ? 2 : 0);
       p.anchor = a ? o.anchor! : -1;
+      p.floor = o.floor ?? -Infinity;
       this.list.push(p);
     }
   }
@@ -131,6 +136,13 @@ export class ParticleSystem {
       p.vel[0] = ax + (p.vel[0] - ax) * k; p.vel[1] = p.vel[1] * k - p.gravity * dt; p.vel[2] = az + (p.vel[2] - az) * k;
       p.pos[0] += p.vel[0] * dt; p.pos[1] += p.vel[1] * dt; p.pos[2] += p.vel[2] * dt;
       p.rot += p.spin * dt;
+      const fl = p.floor + p.size0 * 0.5;
+      if (p.pos[1] < fl) {
+        p.pos[1] = fl;
+        if (p.vel[1] < 0) p.vel[1] *= -0.25;
+        p.vel[0] *= 0.5; p.vel[2] *= 0.5;
+        p.spin *= 0.4;
+      }
     }
     // Compact in place; dead records go back to the pool.
     let w = 0;
@@ -155,7 +167,7 @@ export class ParticleSystem {
     const alpha = this.alphaList, add = this.addList;
     alpha.length = 0;
     add.length = 0;
-    for (const p of this.list) (p.kind === 'smoke' || p.kind === 'dust' ? alpha : add).push(p);
+    for (const p of this.list) (p.kind === 'smoke' || p.kind === 'dust' || p.kind === 'debris' ? alpha : add).push(p);
     this.eye[0] = eye[0]; this.eye[1] = eye[1]; this.eye[2] = eye[2];
     alpha.sort(this.byDistance);
     for (let i = 0; i < alpha.length; i++) this.write(alpha[i], i);
@@ -166,11 +178,12 @@ export class ParticleSystem {
   private write(p: P, i: number) {
     const t = p.age / p.life;
     const o = i * FLOATS;
-    const size = p.size0 + (p.size1 - p.size0) * Math.sqrt(t);
+    const size = p.kind === 'debris' ? p.size0 * Math.min(1, (1 - t) * 6) : p.size0 + (p.size1 - p.size0) * Math.sqrt(t);
     // Soot fades in over a few frames and out smoothly; flashes and sparks start at full strength.
     const lit = p.kind === 'smoke' || p.kind === 'dust';
-    const fade = lit ? Math.min(1, 0.2 + p.age / 0.08) * (1 - t) * (1 - t) : 1 - t;
-    const kind = p.kind === 'smoke' ? 0 : p.kind === 'dust' ? 1 : p.kind === 'flash' ? 2 : 3;
+    // Debris stays solid and only shrinks away at the end of its life.
+    const fade = p.kind === 'debris' ? 1 : lit ? Math.min(1, 0.2 + p.age / 0.08) * (1 - t) * (1 - t) : 1 - t;
+    const kind = p.kind === 'smoke' ? 0 : p.kind === 'dust' ? 1 : p.kind === 'flash' ? 2 : p.kind === 'spark' ? 3 : 4;
     const a = p.anchor >= 0 ? this.anchors.get(p.anchor) : undefined;
     const C = this.cpu;
     C[o] = p.pos[0] + (a ? a[0] : 0); C[o + 1] = p.pos[1] + (a ? a[1] : 0); C[o + 2] = p.pos[2] + (a ? a[2] : 0); C[o + 3] = size;

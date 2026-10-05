@@ -240,6 +240,33 @@ Game:
 - A connected strike kicks the player's view, shoves the player and plays a thud.
 - Panel Enemy folder (health, movement, reactions, region damage, attack, AI on/off, hitboxes, spawn / remove); readout line.
 
+**Step 6 — reactions and death (done, 2026-10-05).**
+
+Engine:
+- `physics/verlet.ts`: Jakobsen Verlet body.
+  - Equality and `min` (joint-limit) links, sphere collision against the world through `CollisionWorld.pushSphereOut` (full push, allocation-free).
+  - Contact friction, contact events with the pre-step impact speed, sleeping.
+- `Rig.commit` writes externally simulated worlds; `Rig.restOrigin`.
+- Particle kind `debris`: hard, lit, irregular chunks that keep their opacity. A per-particle `floor` makes chunks land and bounce.
+- `splat` decal texture recipe (`npm run textures -- splats`).
+
+Game:
+- `enemy/ragdoll.ts`, data-driven from `EnemyDef.ragdoll`:
+  - 16 joints, a rigid torso, neck and head stick, arm and leg chains with `min` limits.
+  - Built from the posed rig at the moment of death (body velocity, the killing impulse plus a shove at the hips). Parts are oriented from particle frames.
+  - A killing headshot pops the head off (its links to the body break) with a neck spray.
+  - Shooting the corpse pushes it.
+  - Corpses sink into the ground over their last 1.5 s.
+- Stagger: when the stagger meter trips, the creature stumbles back along the shot, rocks back and throws its arms up, then recovers.
+- `EnemyDef.impact` profile, so later enemies (tomato, cucumber, onion) bring their own:
+  - juice colour, chunk count and colour;
+  - a splat sprayed onto a wall within reach, else onto the ground behind (decal `decal_beet_splat`);
+  - a death burst and extra chunks;
+  - a landing splat and wet thud when the body comes down (contact event, with a time fallback).
+- Colours were tuned under the November exposure: juice is nearly black-purple, chunks vivid; the splat is semi-gloss (a glossy stain mirrored the bright sky and read pink).
+
+Measured: about 0.27 ms of simulation per frame with an active ragdoll; it sleeps once it settles. The frame-rate test stays identical with the enemy present.
+
 ## 7. Known limits to carry into G2
 
 Written up as G1 progresses: skinning and clips, navigation, enemy broadphase (spatial hash),

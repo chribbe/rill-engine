@@ -92,7 +92,6 @@ export class Rig {
    * instance slots. `instanceFlags`: renderer instance bits (viewmodel etc.).
    */
   update(root: Mat4, instanceFlags = 0) {
-    const R = this.renderer;
     for (const p of this.parts) {
       const parent = p.parent >= 0 ? this.parts[p.parent].world : root;
       // world = parent * rest * T(pos) * R(rot) * S(scale)
@@ -101,6 +100,14 @@ export class Rig {
       mat4.fromQuat(p.rot, TMP2);
       mat4.multiply(TMP, TMP2, p.world);
       if (p.scale[0] !== 1 || p.scale[1] !== 1 || p.scale[2] !== 1) mat4.scale(p.world, p.scale, p.world);
+    }
+    this.commit(instanceFlags);
+  }
+
+  /** Writes the parts' current world matrices (set by `update` or by a simulation) to their instances. */
+  commit(instanceFlags = 0) {
+    const R = this.renderer;
+    for (const p of this.parts) {
       const r = p.r;
       if (!r) continue;
       r.visible = this.visible && p.visible;
@@ -108,6 +115,17 @@ export class Rig {
       transformAabb(p.world, r.mesh.aabb.min, r.mesh.aabb.max, r.worldMin, r.worldMax);
       R.instances.set(r.slot, p.world, null, -1, instanceFlags | R.probeBits(r.worldMin, r.worldMax), 1, 0x5eed);
     }
+  }
+
+  /** A part's origin in the rig's rest space (rests are composed up the chain). */
+  restOrigin(part: RigPart, out: [number, number, number]) {
+    out[0] = out[1] = out[2] = 0;
+    let p: RigPart | undefined = part;
+    while (p) {
+      out[0] += p.rest[12]; out[1] += p.rest[13]; out[2] += p.rest[14];
+      p = p.parent >= 0 ? this.parts[p.parent] : undefined;
+    }
+    return out;
   }
 
   /** World-space point given in a part's local frame. */

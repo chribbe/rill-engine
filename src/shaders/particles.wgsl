@@ -15,7 +15,7 @@
 
 struct Particle {
   posSize: vec4f,   // xyz centre, w half size (m)
-  misc: vec4f,      // x rotation, y opacity, z kind (0 smoke, 1 dust, 2 flash, 3 spark), w seed
+  misc: vec4f,      // x rotation, y opacity, z kind (0 smoke, 1 dust, 2 flash, 3 spark, 4 debris), w seed
   color: vec4f,     // rgb albedo (lit kinds) or emission colour, w emissive (nits)
   vel: vec4f,       // xyz velocity (sparks stretch along it), w flags (1 viewmodel space, 2 stretch along velocity)
 };
@@ -131,7 +131,7 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
     T = fog.transmittance;
     o.inscatter = fog.inscatter * frame.exposure.x;
   }
-  if (k <= 1u) {
+  if (k <= 1u || k == 4u) {
     // Fake sphere normal across the puff for some volume in the shading.
     let n = normalize(toCam + (ax * corner.x + ay * corner.y) * 0.8);
     let viewDepth = -(frame.view * vec4f(wp, 1.0)).z;
@@ -152,10 +152,24 @@ fn sootShape(in: VOut) -> f32 {
   return saturate((n - 0.5) * 2.2 + falloff * 1.6 - 0.55) * falloff;
 }
 
+/** Hard, irregular chunk (debris): solid inside a noisy outline, darker towards the rim. */
+fn chunkShape(in: VOut) -> vec2f {
+  let r2 = dot(in.uv, in.uv);
+  let n = textureSample(cloudNoise, sampAniso, in.nuv * 1.7).r;
+  let edge = 0.42 + (n - 0.5) * 0.55;
+  let w = fwidth(r2) * 1.5;
+  return vec2f(1.0 - smoothstep(edge - w, edge + w, r2), 0.7 + 0.3 * (1.0 - r2 / max(edge, 0.05)));
+}
+
 @fragment
 fn fsAlpha(in: VOut) -> @location(0) vec4f {
-  let a = sootShape(in) * in.params.x;
-  return vec4f((in.color + in.inscatter) * a, a);
+  // Both shapes in uniform control flow (texture samples, derivatives), then pick.
+  let soot = sootShape(in);
+  let chunk = chunkShape(in);
+  let isChunk = in.params.y > 3.5;
+  let a = select(soot, chunk.x, isChunk) * in.params.x;
+  let shade = select(1.0, chunk.y, isChunk);
+  return vec4f((in.color * shade + in.inscatter) * a, a);
 }
 
 @fragment

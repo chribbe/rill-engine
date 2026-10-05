@@ -368,6 +368,37 @@ export class CollisionWorld {
     return contacts.count;
   }
 
+  /**
+   * Pushes a sphere fully out of the triangles it penetrates (all directions,
+   * one triangle at a time). Allocation-free. Returns the deepest contact's
+   * unit normal in `n` (and its depth), or 0 when nothing was touched.
+   */
+  pushSphereOut(p: number[], r: number, n: [number, number, number], iterations = 2): number {
+    const T = this.tris;
+    const set = this.query(p[0] - r, p[2] - r, p[0] + r, p[2] + r, this.tmp);
+    const q = SCRATCH;
+    let deepest = 0;
+    for (let iter = 0; iter < iterations; iter++) {
+      let any = false;
+      for (const t of set) {
+        const o = t * 9;
+        if (Math.min(T[o], T[o + 3], T[o + 6]) > p[0] + r || Math.max(T[o], T[o + 3], T[o + 6]) < p[0] - r) continue;
+        if (Math.min(T[o + 2], T[o + 5], T[o + 8]) > p[2] + r || Math.max(T[o + 2], T[o + 5], T[o + 8]) < p[2] - r) continue;
+        if (Math.min(T[o + 1], T[o + 4], T[o + 7]) > p[1] + r || Math.max(T[o + 1], T[o + 4], T[o + 7]) < p[1] - r) continue;
+        closestOnTriangle(p[0], p[1], p[2], T, o, q, 0);
+        const dx = p[0] - q[0], dy = p[1] - q[1], dz = p[2] - q[2];
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (!(d2 < r * r) || d2 < 1e-12) continue;
+        const d = Math.sqrt(d2), depth = r - d;
+        p[0] += (dx / d) * depth; p[1] += (dy / d) * depth; p[2] += (dz / d) * depth;
+        if (depth > deepest) { deepest = depth; n[0] = dx / d; n[1] = dy / d; n[2] = dz / d; }
+        any = true;
+      }
+      if (!any) break;
+    }
+    return deepest;
+  }
+
   /** True if the vertical capsule (as in pushCapsule) overlaps any triangle by more than `tolerance`. */
   capsuleBlocked(p: ArrayLike<number>, y0: number, y1: number, r: number, tolerance = 0.01): boolean {
     const T = this.tris;
