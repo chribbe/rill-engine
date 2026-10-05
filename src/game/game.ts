@@ -70,6 +70,17 @@ export class Game {
   /** A `bug_hole` marker bursts when you come within this distance (m), after this long into the run (s). */
   holeTrigger = 45;
   holeDelay = 6;
+  /**
+   * The director opens holes near you (in view when it can) whenever the horde runs low: this far
+   * away (m of path), at least this often (s), when fewer than `holeLow` are alive.
+   */
+  holeDirector = true;
+  holePath: [number, number] = [20, 38];
+  holeEvery = 10;
+  holeLow = 8;
+  /** The old way: packs brought in out of sight (off: everything comes out of holes). */
+  packs = false;
+  private holeT = 0;
   private holeMarkers: { pos: [number, number, number]; opened: boolean }[] = [];
   /** Draw tomato hit shapes. */
   showHitboxes = false;
@@ -216,6 +227,7 @@ export class Game {
     this.horde.begin(rt.player.feet, this.navKeep());
     this.respawnT = 1;
     this.group.left = 0;
+    this.holeT = this.holeEvery - 3;
     this.vitals.reset();
     this.kills = 0;
     this.runTime = 0;
@@ -289,7 +301,7 @@ export class Game {
   /** Opens a bug hole at ground point `at` (rumble, burst, then a pack pours out). */
   openHole(at: ArrayLike<number>): BugHole | null {
     const g = this.rt.world.collision.groundHeight(at[0], at[1] + 1.5, at[2], 4);
-    const h = this.holes.open([at[0], g > -Infinity ? g : at[1], at[2]]);
+    const h = this.holes.open([at[0], g > -Infinity ? g : at[1], at[2]], this.rt.player.feet);
     if (h) h.pending = this.holePack;
     return h;
   }
@@ -321,6 +333,13 @@ export class Game {
         this.openHole(m.pos);
       }
     }
+    // Running low and nothing coming: a new hole opens nearby.
+    this.holeT += dt;
+    const pouring = this.holes.holes.some((h) => h.active && (!h.open || h.pending > 0));
+    if (this.holeDirector && this.runTime > 3 && !pouring && H.alive < this.holeLow && this.holeT >= this.holeEvery) {
+      // In view if it can (the burst is the show): for a few seconds only spots you are looking at.
+      if (this.findHoleSpot(this.spawnAt, this.holeT < this.holeEvery + 4)) { this.openHole(this.spawnAt); this.holeT = 0; }
+    }
     for (const h of this.holes.holes) {
       if (!h.active || !h.open) continue;
       if (h.pending > 0) {
@@ -331,11 +350,39 @@ export class Game {
           h.nextT = h.pending > this.holePack - 6 ? 0.08 + Math.random() * 0.1 : 0.18 + Math.random() * 0.3;
         }
         h.idleT = 0;
-      } else if (Math.hypot(h.centre[0] - player.feet[0], h.centre[2] - player.feet[2]) < 90 && (h.idleT += dt) > this.holeRefill[0]) {
+      } else if (H.alive < H.maxAlive && Math.hypot(h.centre[0] - player.feet[0], h.centre[2] - player.feet[2]) < 90 && (h.idleT += dt) > this.holeRefill[0]) {
         h.idleT = 0;
         h.pending = Math.round(this.holeRefill[1] * (0.7 + Math.random() * 0.6));
       }
     }
+  }
+
+  /**
+   * Somewhere for the director's next hole: on open, level ground with sky above (room for the
+   * crater), `holePath` metres of path from you (from 12 m when in view), clear of other holes.
+   * `inView`: only within the view (±45°); otherwise the sides, then anywhere.
+   */
+  private findHoleSpot(out: [number, number, number], inView: boolean): boolean {
+    const nav = this.horde.nav, { player, camera } = this.rt, f = player.feet;
+    if (!nav || nav.target < 0) return false;
+    const D = this.holes.def, [p0, p1] = this.holePath, base = Math.atan2(camera.forward[2], camera.forward[0]);
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const spread = inView || attempt < 25 ? 1.55 : attempt < 45 ? 3.5 : Math.PI * 2;
+      const a = base + (Math.random() - 0.5) * spread;
+      const near = spread < 2 ? Math.min(p0, 12) : p0;
+      const r = near + Math.random() * (p1 - near);
+      const x = f[0] + Math.cos(a) * r, z = f[2] + Math.sin(a) * r;
+      const node = nav.nearestNode(x, f[1] + 0.5, z, 2, true);
+      if (node < 0) continue;
+      const cost = nav.dist[node] / 20;
+      if (cost < near * 0.8 || cost > p1 * 1.6) continue;
+      nav.nodeCentre(node, out);
+      if (this.holes.holes.some((h) => h.active && Math.hypot(h.centre[0] - out[0], h.centre[2] - out[2]) < D.outer * 2.5)) continue;
+      if (this.holeMarkers.some((m) => !m.opened && Math.hypot(m.pos[0] - out[0], m.pos[2] - out[2]) < D.outer * 2.5)) continue;
+      if (!nav.openArea(out[0], out[1], out[2], D.crest + 1, 0.4, 5)) continue;
+      return true;
+    }
+    return false;
   }
 
   /** Nobody walks into a crater (its rim is not in the collision): the player is held at the crest. */
@@ -362,7 +409,7 @@ export class Game {
 
   /** Keeps `horde.maxAlive` tomatoes coming: packs that pour out of one spot out of sight, one every 0.12 s. */
   private respawn(dt: number) {
-    if (!this.active || !this.horde.enabled) return;
+    if (!this.active || !this.horde.enabled || !this.packs) return;
     const H = this.horde, G = this.group, { player, camera } = this.rt;
     if (H.alive >= H.maxAlive) { this.respawnT = Math.max(this.respawnT, 0.8); G.left = 0; return; }
     if (G.left > 0) {
@@ -476,6 +523,7 @@ export class Game {
     this.horde.begin(rt.player.feet, this.navKeep());
     this.respawnT = 1;
     this.group.left = 0;
+    this.holeT = this.holeEvery - 3;
     this.vitals.reset();
     this.kills = 0;
     this.runTime = 0;

@@ -256,10 +256,21 @@ export class HoleField {
     this.renderer.instances.set(r.slot, m, null, -1, this.renderer.probeBits(r.worldMin, r.worldMax), 1, 0x401e);
   }
 
-  /** Starts a hole at ground point `at`: rumble, cracks, then the burst. */
-  open(at: ArrayLike<number>): BugHole | null {
+  /**
+   * Starts a hole at ground point `at`: rumble, cracks, then the burst. With all four in use, the
+   * one furthest from `near` (if more than 35 m away) closes to make room.
+   */
+  open(at: ArrayLike<number>, near?: ArrayLike<number>): BugHole | null {
     if (!this.mound || !this.throatMesh) return null;
     let h = this.holes.find((x) => !x.active);
+    if (!h && this.holes.length >= 4 && near) {
+      let bd = 35;
+      for (const x of this.holes) {
+        const d = Math.hypot(x.centre[0] - near[0], x.centre[2] - near[2]);
+        if (d > bd) { bd = d; h = x; }
+      }
+      if (h) this.close(h);
+    }
     if (!h) {
       if (this.holes.length >= 4) return null;
       h = new BugHole(this.def);
@@ -311,14 +322,18 @@ export class HoleField {
   }
 
   clear() {
-    for (const h of this.holes) {
-      h.active = false;
-      h.mound.visible = false;
-      h.throat.visible = false;
-      for (const p of h.parts) p.r.visible = false;
-      h.navUndo?.();
-      h.navUndo = null;
-    }
+    for (const h of this.holes) this.close(h);
+  }
+
+  /** Takes a hole away (its crater, its nav block). */
+  close(h: BugHole) {
+    h.active = false;
+    h.pending = 0;
+    h.mound.visible = false;
+    h.throat.visible = false;
+    for (const p of h.parts) p.r.visible = false;
+    h.navUndo?.();
+    h.navUndo = null;
   }
 
   update(dt: number, eye: ArrayLike<number>) {

@@ -665,3 +665,13 @@ performance) will need:
   - Bullets pass through the rim (not in the collision).
   - A mid-fight re-bake hitches ~0.2 s.
   - Thrown slabs don't paint or crush anything.
+
+**Everything out of holes (2026-10-05).** Your note: the hole didn't burst; try without the tomatoes that don't come from holes.
+- The statue hole didn't burst because its marker was still a pending editor changeset. `play.html` reads the saved map, so it needs accepting and saving. In the editor's play mode it is live.
+- **The hole director** replaces the out-of-sight packs (now "Packs from out of sight" in the panel, off by default).
+  - When fewer than 8 are alive and nothing is coming out of a hole, a new hole erupts 20–38 m of path away (from 12 m when in view), at most every 10 s.
+  - It needs open, level ground with sky above, room for the crater, away from other holes.
+  - For the first 4 s it only picks spots in view (the burst is the show), then the sides, then anywhere.
+  - Up to 4 holes; the one furthest away (past 35 m) closes to make room.
+  - Holes refill only while fewer than "alive at once" are up.
+- Panel → Bug holes: holes open near you, at most every (s), when fewer than (n) alive.

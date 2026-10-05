@@ -558,6 +558,30 @@ export class NavGrid {
     };
   }
 
+  /**
+   * Is the ground around (x, y, z) open: within `r` every column has walkable floor within `dh` of
+   * y, on the flow field, with at least `sky` metres free above it? (Room for a crater, say.)
+   */
+  openArea(x: number, y: number, z: number, r: number, dh: number, sky: number): boolean {
+    const cr = Math.ceil(r / this.cell);
+    const cx = Math.floor((x - this.x0) / this.cell), cz = Math.floor((z - this.z0) / this.cell);
+    for (let iz = cz - cr; iz <= cz + cr; iz++) {
+      for (let ix = cx - cr; ix <= cx + cr; ix++) {
+        const px = this.x0 + (ix + 0.5) * this.cell - x, pz = this.z0 + (iz + 0.5) * this.cell - z;
+        if (px * px + pz * pz > r * r) continue;
+        if (ix < 0 || iz < 0 || ix >= this.nx || iz >= this.nz) return false;
+        const c = iz * this.nx + ix;
+        let ok = false;
+        for (let l = 0; l < this.layerN[c] && !ok; l++) {
+          const node = c * MAXL + l, h = this.layerH[node];
+          ok = Math.abs(h - y) <= dh && this.dist[node] !== UNREACHED && this.layerTop[node] - h >= sky;
+        }
+        if (!ok) return false;
+      }
+    }
+    return true;
+  }
+
   /** Path cost (≈ metres × 20) from (x, y, z) to the target, or Infinity. */
   costAt(x: number, y: number, z: number) {
     const node = this.nodeAt(x, y, z);

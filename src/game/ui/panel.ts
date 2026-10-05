@@ -236,6 +236,7 @@ export class TuningPanel {
       set boxes(v: boolean) { g.showHitboxes = v; },
     };
     f.add(act, 'ai').name('Horde on (spawns, AI)');
+    f.add(g, 'packs').name('Packs from out of sight');
     f.add(act, 'max', 0, 160, 1).name('Alive at once');
     f.add(act, 'spawn').name('Spawn one in front');
     f.add(act, 'spawn5').name('Spawn 5 (spawn points)');
@@ -253,6 +254,9 @@ export class TuningPanel {
     f.add(dir, 'far', 7, 110, 1).name('Spawn path to (m)');
     const ho = f.addFolder('Bug holes');
     ho.add({ open: () => { const p = g.rt.player, a = g.rt.camera.yaw; g.openHole([p.feet[0] + Math.sin(a) * 16, p.feet[1], p.feet[2] - Math.cos(a) * 16]); } }, 'open').name('Open one ahead (16 m)');
+    ho.add(g, 'holeDirector').name('Holes open near you');
+    ho.add(g, 'holeEvery', 2, 60, 1).name('New hole at most every (s)');
+    ho.add(g, 'holeLow', 0, 60, 1).name('…when fewer than this alive');
     ho.add(g, 'holePack', 0, 100, 1).name('Tomatoes per hole');
     ho.add(g, 'holeTrigger', 5, 150, 1).name('Map holes burst within (m)');
     ho.add(g.holes.def, 'rumble', 0.3, 8, 0.1).name('Rumble before burst (s)');
