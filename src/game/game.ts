@@ -518,7 +518,6 @@ export class Game {
     player.enabled = false;
     player.velocity[0] = player.velocity[2] = 0;
     this.viewmodel.visible = false;
-    this.screenGore?.splash(1, 0.5, 0.45);
     this.recoil.kickView(-6, (Math.random() - 0.5) * 8, 10);
   }
 

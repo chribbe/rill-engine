@@ -5,7 +5,7 @@
   "scale": 1.35,
   "radius": 0.42,
   "rideHeight": 0.56,
-  "health": 70,
+  "health": 40,
   "move": {
     "speed": 3,
     "sprint": 4.6,
@@ -189,6 +189,6 @@
     "hitSplatReach": 3,
     "light": 0,
     "shake": 2.2,
-    "screenDistance": 5
+    "screenDistance": 0
   }
 }

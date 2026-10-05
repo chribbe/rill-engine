@@ -178,7 +178,7 @@ export class Tomato {
     this.stateT = 0;
     this.seed = seed | 1;
     this.individual();
-    this.health = d.health * this.sizeK * this.sizeK;
+    this.health = d.health * Math.pow(this.sizeK, 1.6);
     this.speedMul = (1 + (this.rand() * 2 - 1) * d.move.speedJitter) * Math.pow(this.sizeK, -0.6);
     this.pos[0] = at[0]; this.pos[1] = at[1] + this.ride; this.pos[2] = at[2];
     this.prev[0] = this.pos[0]; this.prev[1] = this.pos[1]; this.prev[2] = this.pos[2];
@@ -478,7 +478,7 @@ export class Tomato {
     if (li >= 0) {
       const leg = this.legs[li];
       leg.hp -= damage;
-      this.health -= damage * 0.35;
+      this.health -= damage * 0.7;
       if (leg.hp <= 0 && !leg.lost) { leg.lost = true; leg.upper.visible = leg.lower.visible = false; result = 'leg'; }
     } else {
       this.health -= damage;

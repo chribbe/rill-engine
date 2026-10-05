@@ -34,7 +34,7 @@ export interface TomatoDef {
     roll: number;
   };
   variety: {
-    /** Size × per tomato, and the odd big one (chance, size ×). Health goes with size², speed against it. */
+    /** Size × per tomato, and the odd big one (chance, size ×). Health goes with size^1.6, speed against it. */
     size: [number, number];
     bigChance: number;
     bigSize: [number, number];
@@ -145,7 +145,7 @@ export interface TomatoDef {
     /** Burst light (cd) and the camera shake when it bursts near the player (degrees at 1 m). */
     light: number;
     shake: number;
-    /** Screen splatter when one bursts within this distance in front of the camera (m). */
+    /** Screen splatter when one bursts within this distance in front of the camera (m); 0 = off. */
     screenDistance: number;
   };
 }
@@ -157,7 +157,7 @@ export const TOMATO_DEFAULTS: TomatoDef = {
   scale: 1.35,
   radius: 0.42,
   rideHeight: 0.56,
-  health: 70,
+  health: 40,
   move: { speed: 3.0, sprint: 4.6, sprintDistance: 18, accel: 10, turnRate: 240, speedJitter: 0.2 },
   gait: { stride: 0.62, lift: 0.12, duty: 0.56, bob: 0.018, sway: 2.5, lean: 1.2, roll: 8 },
   variety: { size: [0.72, 1.22], bigChance: 0.08, bigSize: [1.45, 1.8], width: [0.9, 1.14], height: [0.82, 1.12], spread: 1, colour: 1 },
@@ -175,6 +175,6 @@ export const TOMATO_DEFAULTS: TomatoDef = {
     red: [0.13, 0.004, 0.003],
     splats: 20, streaks: 14, splatSize: [0.8, 2.0], splatRadius: 6, wallSplats: 10, poolSize: [3.2, 4.6], mist: 0.3,
     juice: [0.045, 0.0015, 0.001], flesh: [0.32, 0.022, 0.009], seed: [0.42, 0.33, 0.15],
-    hitSpray: 18, hitSplatChance: 0.6, hitSplatReach: 3, light: 0, shake: 2.2, screenDistance: 5,
+    hitSpray: 18, hitSplatChance: 0.6, hitSplatReach: 3, light: 0, shake: 2.2, screenDistance: 0,
   },
 };

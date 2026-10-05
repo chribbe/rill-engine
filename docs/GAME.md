@@ -692,3 +692,9 @@ performance) will need:
 - FOV punch 0.9 → 0.65°.
 - Kick from a tomato bursting close by: 3 → 2.2 (it stacks up in a horde).
 - Aim recoil (where the bullets go) is unchanged.
+
+**Easier to kill, no screen splatter (2026-10-05).** Your note: not a fan of the splatter on the screen; trouble when there are many tomatoes.
+- Screen splatter off: `gore.screenDistance` 0. The code stays; death no longer splashes the screen either.
+- Tomato health 70 → 40, growing with size^1.6 (was size²).
+- Leg hits put 0.7 of their damage on the body (was 0.35).
+- Body hits to kill with the carbine (24 each), 200 tomatoes: 2 hits for 71%, 3 for 22%, 1 for the smallest; the big ones 4–5 (were 7–10).
