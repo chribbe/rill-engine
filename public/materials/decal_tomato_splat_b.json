@@ -1,1 +1,1 @@
-{ "texture": "decals/tomato_splat_b.png", "tint": [1, 1, 1], "roughness": 0.4, "opacity": 1, "crater": 0, "angleFade": 0.35, "notes": "Tomato gore splat (G2 horde): full-colour juice, pulp and seeds; wet." }
+{ "texture": "decals/tomato_splat_b.png", "tint": [1, 1, 1], "roughness": 0.45, "opacity": 1, "crater": 0, "angleFade": 0.35, "notes": "Tomato gore splat (G2 horde): full-colour juice, pulp and seeds; wet." }

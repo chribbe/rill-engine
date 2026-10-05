@@ -579,3 +579,8 @@ performance) will need:
 - Flat sheets are now only a quick pop: 2 burst sheets of up to 1.6 m that last under 0.15 s, 4 short sprays, and slim stream sheets that last ~0.1 s.
 - The size comes from particles: 10 jets × 95 blobs in a 46° cone at up to 14 m/s, 100 core blobs, 320 fine drops, 80 pulp blobs, slightly bigger drops.
 
+**Floor stains darker (2026-10-05).**
+- The splat bodies are fully opaque now. At ~76% alpha the grey paving showing through washed the near-black reds to pinkish grey; that, not the colour, was most of the "too light".
+- One step darker: juice ~0.04 linear, pulp ~0.1.
+- Roughness 0.45. Gloss made no visible difference here; fog and sky sheen lift the far stains as much as the paving.
+

@@ -1301,7 +1301,7 @@ recipes.decals = () => {
 // in satellite drops, thick orange-red pulp lumps in the body, pale seeds; three floor splats and a
 // wall splat whose drips run down the image (v grows downwards = world down on a wall decal).
 recipes.gore = () => {
-  const juice = [0.11, 0.003, 0.002], thin = [0.14, 0.005, 0.003], pulp = [0.24, 0.014, 0.006], seed = [0.42, 0.33, 0.15];
+  const juice = [0.04, 0.0012, 0.0009], thin = [0.052, 0.0017, 0.0012], pulp = [0.1, 0.005, 0.0026], seed = [0.24, 0.18, 0.08];
   const mk = (seedBase: number) => {
     let s = seedBase >>> 0;
     const rr = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
@@ -1361,7 +1361,8 @@ recipes.gore = () => {
       }
       for (let i = 0; i < 3; i++) c[i] = c[i] * (1 - sa2) + seed[i] * sa2;
       o[0] = c[0]; o[1] = c[1]; o[2] = c[2];
-      o[3] = clamp01(a * (0.85 + thick * 0.15) * (0.9 + fbm(u, v, 40, 2, sd + 15) * 0.1));
+      // Opaque where it lies: any grey paving left showing through washes a near-black red to pink.
+      o[3] = clamp01(a * (0.97 + fbm(u, v, 40, 2, sd + 15) * 0.03));
     });
   };
   // Streak: liquid flung across the ground along +u from a blob near the left edge.
@@ -1389,7 +1390,7 @@ recipes.gore = () => {
       const c = [0, 0, 0];
       for (let i = 0; i < 3; i++) c[i] = thin[i] + (pulp[i] - thin[i]) * thick;
       o[0] = c[0]; o[1] = c[1]; o[2] = c[2];
-      o[3] = clamp01(a * 0.95);
+      o[3] = clamp01(a);
     });
   };
   streak('tomato_streak', 0x7a55);
