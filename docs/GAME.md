@@ -551,3 +551,17 @@ performance) will need:
   - The frame-rate test is exact on repeat runs (the known first-run quirk aside).
   - The horde is kept out of the frame-rate test.
 
+**Gore, volume pass (2026-10-05).** Your note: less cartoony, more direction than just spray, a volume feel like Wolverine's blood.
+- **Liquid is lit in 3D** (engine particle shader):
+  - Drops are sphere / capsule impostors: a per-pixel normal, sun diffuse, hemisphere ambient, a sharp highlight, a Fresnel sky rim, a lighter thin rim. They stretch less than sparks: drops, not pills.
+  - Burst and spray sprites carry a baked thickness (atlas red channel: coverage blurred into a dome). Its gradient (screen derivatives mapped back to the quad's uv) gives a normal, so a sprite is lit as a glossy liquid sheet. Thicker reads darker.
+  - The bump is gentle and the sheets' gloss is low; otherwise the edges turn grey with Fresnel and small bumps sprinkle grey highlights like snow.
+- **Directional burst:** the killing shot sets the blast direction.
+  - Six thick jets blast out along it (34° cone): strings of glossy blobs at a spread of speeds, arcing under gravity, each with a lit stream sheet for its first frames.
+  - Three jets gush back out of the entry, plus a core of mid-size blobs, lit burst sheets and sprays along the blast, and a fine all-round spray.
+  - Mesh gibs are pushed along the shot.
+  - Ground streaks, splats and wall-paint rays go mostly along the blast.
+- **Bullet hits:** a jet back out of the entry; a jet plus a lit spray sheet out of the exit.
+- **Learned along the way:** big glossy spheres read as cherries and uniform jets as bead chains. Volume comes from lit sheets plus many small drops.
+- Renderer regression pixel-identical.
+

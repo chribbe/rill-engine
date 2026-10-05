@@ -53,6 +53,37 @@ export class TomatoGore {
     return a + Math.random() * (b - a);
   }
 
+  /** The blast direction: the killing shot's, lifted a little (or a random horizontal one). */
+  private mainDir(dir: ArrayLike<number> | null): V3 {
+    if (dir) return vec3.normalize([dir[0], Math.max(-0.2, dir[1]) + 0.18, dir[2]]) as V3;
+    const a = Math.random() * Math.PI * 2;
+    return vec3.normalize([Math.cos(a), 0.3, Math.sin(a)]) as V3;
+  }
+
+  /** A random direction within `cone` (radians) of `d`, lifted by `up`. */
+  private inCone(d: ArrayLike<number>, cone: number, up: number): V3 {
+    const ref = Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    const x = vec3.normalize(vec3.cross(d, ref)), y = vec3.cross(d, x);
+    const a = Math.random() * Math.PI * 2, t = Math.tan(cone * Math.sqrt(Math.random()));
+    return vec3.normalize([
+      d[0] + (x[0] * Math.cos(a) + y[0] * Math.sin(a)) * t,
+      d[1] + (x[1] * Math.cos(a) + y[1] * Math.sin(a)) * t + up,
+      d[2] + (x[2] * Math.cos(a) + y[2] * Math.sin(a)) * t,
+    ]) as V3;
+  }
+
+  /**
+   * A jet of liquid: blobs leaving one point in nearly the same direction at a spread of speeds, so
+   * they string out into a stream that arcs under gravity and breaks up into drops.
+   */
+  private jet(from: ArrayLike<number>, d: ArrayLike<number>, n: number, speed: [number, number], size: [number, number], color: [number, number, number], inherit: ArrayLike<number>, sheet = true) {
+    this.particles.emit('drop', { count: n, pos: from, dir: d, spread: 0.07, speed, life: [0.6, 1.4], size, color, alpha: 1, drag: 0.3, gravity: 9.8, stretch: true, addVel: inherit });
+    if (!sheet) return;
+    // The stream's body: a lit liquid sheet flung along the jet for its first few frames.
+    const L = (speed[0] + speed[1]) * 0.06, w = L * 0.16, sp = Math.max(0, (L * 0.5 - w) / 0.012);
+    this.particles.emit('splash', { pos: [from[0] + d[0] * L * 0.45, from[1] + d[1] * L * 0.45, from[2] + d[2] * L * 0.45], dir: d, spread: 0, speed: [sp, sp], life: [0.12, 0.22], size: [w * 0.7, w], color, alpha: 1, stretch: true, fixed: true });
+  }
+
   /** World centre and orientation of a rig part (its mesh bounds centre), for the gib that replaces it. */
   private partPose(t: Tomato, name: string, world: Mat4, outPos: V3, outRot: Quat) {
     const c = this.centres.get(name) ?? [0, 0, 0];
@@ -80,7 +111,7 @@ export class TomatoGore {
   burst(t: Tomato, point: ArrayLike<number> | null, dir: ArrayLike<number> | null, impulse: number) {
     const G = this.def.gore, P = this.particles, C = this.world.collision;
     const S = this.def.scale, c = t.shown, r = this.def.radius * S;
-    const push: V3 | null = dir ? [dir[0] * impulse * 0.06, dir[1] * impulse * 0.06, dir[2] * impulse * 0.06] : null;
+    const push: V3 | null = dir ? [dir[0] * impulse * 0.22, dir[1] * impulse * 0.1 + 0.6, dir[2] * impulse * 0.22] : null;
     const inherit = t.vel;
     const pos: V3 = [0, 0, 0];
     // Whole pieces: lid (and crown on it), every leg segment still on.
@@ -112,22 +143,35 @@ export class TomatoGore {
     spawnSet(this.model.chunks, G.chunks);
     spawnSet(this.model.pulp, G.pulp);
 
-    // The red explosion: expanding liquid bursts, sprays flung outward, a storm of glossy drops,
-    // chunky pulp blobs and seeds, a short dark mist.
+    // The red explosion, directional: thick glossy jets blasted out along the killing shot, a gush back
+    // out of the entry, big blobs bursting from the core, a fine all-round spray.
     const g = C.groundHeight(c[0], c[1] + 0.2, c[2], 4);
     const floor = g > -Infinity ? g : c[1] - 1;
     const hv: V3 = [inherit[0] * 0.5, inherit[1] * 0.3, inherit[2] * 0.5];
-    P.emit('splash', { count: G.pops, pos: c, dir: [0, 0.6, 0], spread: 1, speed: [0.2, 1.4], life: G.popLife, size: [G.popSize[0] * S, G.popSize[1] * S], color: G.red, alpha: 1, drag: 3, gravity: 1, addVel: hv });
-    P.emit('splash', { count: Math.ceil(G.pops / 2), pos: c, dir: [0, 0.6, 0], spread: 1, speed: [0.2, 1.0], life: G.popLife, size: [G.popSize[0] * S * 0.8, G.popSize[1] * S * 0.8], color: G.juice, alpha: 1, drag: 3, gravity: 1, addVel: hv });
-    for (let k = 0; k < G.sprays; k++) {
-      const d = vec3.normalize([Math.random() - 0.5, Math.random() * 0.9 - 0.15, Math.random() - 0.5]);
-      if (push) { d[0] += push[0] * 0.08; d[1] += push[1] * 0.08; d[2] += push[2] * 0.08; vec3.normalize(d, d); }
-      const L = this.rnd(G.sprayLength[0], G.sprayLength[1]) * S, w = L * this.rnd(0.18, 0.28);
-      const half = L * 0.5, sp = Math.max(0, (half - w) / 0.012);
-      P.emit('splash', { pos: [c[0] + d[0] * half * 0.8, c[1] + d[1] * half * 0.8, c[2] + d[2] * half * 0.8], dir: d, spread: 0, speed: [sp, sp], life: G.sprayLife, size: [w * 0.7, w], color: G.red, alpha: 1, stretch: true, fixed: true });
+    const main = this.mainDir(dir);
+    const cone = G.jetCone * Math.PI / 180, ma = Math.atan2(main[2], main[0]);
+    for (let k = 0; k < G.jets; k++) {
+      const d = this.inCone(main, cone, 0.12);
+      this.jet([c[0] + d[0] * r * 0.6, c[1] + d[1] * r * 0.6, c[2] + d[2] * r * 0.6], d, G.jetBlobs, G.jetSpeed, [G.jetSize[0] * S, G.jetSize[1] * S], k % 3 === 2 ? G.juice : G.red, hv);
     }
-    P.emit('drop', { count: Math.round(G.drops * 0.65), pos: c, dir: [0, 0.45, 0], spread: 1, speed: G.dropSpeed, life: [0.5, 1.3], size: [G.dropSize[0] * S, G.dropSize[1] * S], color: G.red, alpha: 1, drag: 0.5, gravity: 9.8, stretch: true, addVel: hv });
-    P.emit('drop', { count: Math.round(G.drops * 0.35), pos: c, dir: [0, 0.45, 0], spread: 1, speed: G.dropSpeed, life: [0.5, 1.3], size: [G.dropSize[0] * S, G.dropSize[1] * S], color: G.juice, alpha: 1, drag: 0.5, gravity: 9.8, stretch: true, addVel: hv });
+    const back: V3 = [-main[0], 0.35 - main[1] * 0.5, -main[2]];
+    vec3.normalize(back, back);
+    for (let k = 0; k < G.backJets; k++) {
+      const d = this.inCone(back, cone * 1.2, 0.1);
+      this.jet([c[0] + d[0] * r * 0.7, c[1] + d[1] * r * 0.7, c[2] + d[2] * r * 0.7], d, Math.round(G.jetBlobs * 0.55), [G.jetSpeed[0] * 0.5, G.jetSpeed[1] * 0.5], [G.jetSize[0] * S * 0.8, G.jetSize[1] * S * 0.8], G.red, hv);
+    }
+    // Core: big blobs leaving slowly, biased along the blast (the bursting volume).
+    P.emit('drop', { count: G.coreBlobs, pos: c, dir: [main[0] * 0.6, 0.35, main[2] * 0.6], spread: 0.9, speed: [0.5, 3.2], life: [0.35, 0.7], size: [G.coreSize[0] * S, G.coreSize[1] * S], color: G.red, alpha: 1, drag: 1.2, gravity: 6, stretch: true, addVel: hv });
+    P.emit('drop', { count: Math.round(G.coreBlobs * 0.4), pos: c, dir: [main[0] * 0.5, 0.3, main[2] * 0.5], spread: 0.9, speed: [0.4, 2.4], life: [0.3, 0.6], size: [G.coreSize[0] * S * 0.8, G.coreSize[1] * S * 0.8], color: G.juice, alpha: 1, drag: 1.2, gravity: 6, stretch: true, addVel: hv });
+    P.emit('drop', { count: G.drops, pos: c, dir: [0, 0.45, 0], spread: 1, speed: G.dropSpeed, life: [0.5, 1.2], size: [G.dropSize[0] * S, G.dropSize[1] * S], color: G.red, alpha: 1, drag: 0.5, gravity: 9.8, stretch: true, addVel: hv });
+    // A dark burst behind it all: the volume's silhouette for the first few frames.
+    if (G.pops > 0) P.emit('splash', { count: G.pops, pos: c, dir: [main[0] * 0.5, 0.5, main[2] * 0.5], spread: 0.8, speed: [0.3, 1.6], life: G.popLife, size: [G.popSize[0] * S, G.popSize[1] * S], color: G.red, alpha: 1, drag: 3, gravity: 1, addVel: hv });
+    for (let k = 0; k < G.sprays; k++) {
+      const d = this.inCone(main, cone * 1.4, 0.15);
+      const L = this.rnd(G.sprayLength[0], G.sprayLength[1]) * S, w = L * this.rnd(0.16, 0.24);
+      const half = L * 0.5, sp = Math.max(0, (half - w) / 0.012);
+      P.emit('splash', { pos: [c[0] + d[0] * half * 0.8, c[1] + d[1] * half * 0.8, c[2] + d[2] * half * 0.8], dir: d, spread: 0, speed: [sp, sp], life: G.sprayLife, size: [w * 0.7, w], color: k % 2 ? G.juice : G.red, alpha: 1, stretch: true, fixed: true });
+    }
     P.emit('debris', { count: G.blobs, pos: c, dir: [0, 0.6, 0], spread: 1, speed: [2, 7.5], life: [1.4, 2.8], size: [G.blobSize[0] * S, G.blobSize[1] * S], color: G.flesh, alpha: 1, drag: 0.4, gravity: 9.8, floor });
     P.emit('debris', { count: G.seeds, pos: c, dir: [0, 0.5, 0], spread: 1, speed: [1.5, 6.5], life: [1.0, 2.2], size: [0.006, 0.011], color: G.seed, alpha: 1, drag: 0.5, gravity: 9.8, floor });
     P.emit('smoke', { count: 4, pos: c, dir: [0, 0.4, 0], spread: 1, speed: [1.5, 4], life: [0.3, 0.7], size: [0.2, 0.9 * S], color: G.juice, alpha: G.mist, drag: 5, gravity: 1.5 });
@@ -135,21 +179,24 @@ export class TomatoGore {
     // Paint: a pool under it now, satellites timed to the drops' flight, drips on walls in reach.
     if (g > -Infinity) this.world.addDecal(this.pick(), [c[0], g, c[2]], [0, 1, 0], this.rnd(G.poolSize[0], G.poolSize[1]), true);
     for (let k = 0; k < G.splats; k++) {
-      const a = Math.random() * Math.PI * 2, d = 0.5 + Math.pow(Math.random(), 0.7) * G.splatRadius;
+      const a = k < G.splats * 0.6 ? ma + (Math.random() - 0.5) * cone * 2.5 : Math.random() * Math.PI * 2;
+      const d = 0.5 + Math.pow(Math.random(), 0.7) * G.splatRadius * (k < G.splats * 0.6 ? 1.3 : 0.7);
       const x = c[0] + Math.cos(a) * d, z = c[2] + Math.sin(a) * d;
       const gy = C.groundHeight(x, c[1] + 0.6, z, 4);
       if (gy > -Infinity) this.queue.push({ t: this.time + 0.08 + d * 0.09, mat: this.pick(), p: [x, gy, z], n: [0, 1, 0], size: this.rnd(G.splatSize[0], G.splatSize[1]) });
     }
     for (let k = 0; k < G.streaks; k++) {
-      const a = Math.random() * Math.PI * 2, d = 0.8 + Math.random() * G.splatRadius * 0.7;
+      // Mostly flung along the blast, a few all round.
+      const a = k < G.streaks * 0.7 ? ma + (Math.random() - 0.5) * cone * 2.2 : Math.random() * Math.PI * 2;
+      const d = 0.8 + Math.random() * G.splatRadius * 0.9;
       const x = c[0] + Math.cos(a) * d, z = c[2] + Math.sin(a) * d;
       const gy = C.groundHeight(x, c[1] + 0.6, z, 4);
       // The texture sprays along +u: roll it so +u points away from the burst.
       if (gy > -Infinity) this.queue.push({ t: this.time + 0.06 + d * 0.07, mat: 'decal_tomato_streak', p: [x, gy, z], n: [0, 1, 0], size: this.rnd(1.1, 2.0) * S, angle: Math.atan2(Math.cos(a), Math.sin(a)) });
     }
     for (let k = 0; k < G.wallSplats; k++) {
-      const a = Math.random() * Math.PI * 2, e = (Math.random() - 0.3) * 0.5;
-      const dir3 = vec3.normalize([Math.cos(a), e, Math.sin(a)]);
+      // Rays mostly along the blast: what is behind the tomato gets painted.
+      const dir3 = k < G.wallSplats * 0.7 ? this.inCone(main, cone * 1.3, -0.1) : vec3.normalize([Math.cos(k * 2.4), (Math.random() - 0.3) * 0.5, Math.sin(k * 2.4)]);
       const hit = C.raycast(c, dir3, G.splatRadius + 1);
       if (!hit) continue;
       const wall = hit.normal[1] < 0.5;
@@ -164,18 +211,16 @@ export class TomatoGore {
     const n = region === 'maw' ? 1.8 : 1;
     const leg = region === 'leg';
     const out: V3 = [normal[0] * 0.8, normal[1] * 0.8 + 0.25, normal[2] * 0.8];
-    P.emit('drop', { count: Math.round(G.hitSpray * 0.6 * n), pos: point, dir: out, spread: 0.5, speed: [1.2, 4.5], life: [0.35, 0.8], size: [0.012 * S, 0.03 * S], color: G.red, alpha: 1, drag: 0.8, gravity: 9.8, stretch: true, addVel: t.vel });
-    // Entry: a short spurt sprite back towards the shooter.
-    const L1 = this.rnd(0.35, 0.6) * S * n;
-    const v1 = vec3.normalize(out);
-    P.emit('splash', { pos: [point[0] + v1[0] * L1 * 0.4, point[1] + v1[1] * L1 * 0.4, point[2] + v1[2] * L1 * 0.4], dir: v1, spread: 0, speed: [L1 * 0.5 / 0.012, L1 * 0.5 / 0.012], life: [0.1, 0.16], size: [L1 * 0.18, L1 * 0.24], color: G.red, alpha: 0.95, stretch: true, fixed: true });
+    // Entry: a short gush back out towards the shooter.
+    this.jet(point, vec3.normalize(out), Math.round(10 * n), [1.2, 3.5], [0.014 * S, 0.03 * S], G.red, t.vel);
     if (!leg) {
-      // Exit: the bullet blows a spray out of the far side.
+      // Exit: the bullet blows a stream out of the far side.
       const rr = this.def.radius * S;
       const ex: V3 = [t.shown[0] + dir[0] * rr, t.shown[1] + dir[1] * rr, t.shown[2] + dir[2] * rr];
-      const L2 = this.rnd(0.8, 1.4) * S * n;
-      P.emit('splash', { pos: [ex[0] + dir[0] * L2 * 0.45, ex[1] + dir[1] * L2 * 0.45, ex[2] + dir[2] * L2 * 0.45], dir, spread: 0, speed: [L2 * 0.5 / 0.012, L2 * 0.5 / 0.012], life: [0.12, 0.2], size: [L2 * 0.18, L2 * 0.26], color: G.red, alpha: 0.95, stretch: true, fixed: true });
-      P.emit('drop', { count: Math.round(G.hitSpray * n), pos: ex, dir: [dir[0], dir[1] + 0.1, dir[2]], spread: 0.3, speed: [3, 8], life: [0.3, 0.8], size: [0.012 * S, 0.035 * S], color: G.red, alpha: 1, drag: 0.6, gravity: 9.8, stretch: true });
+      const d: V3 = vec3.normalize([dir[0], dir[1] + 0.08, dir[2]]) as V3;
+      this.jet(ex, d, Math.round(G.hitSpray * 1.4 * n), [3, 9], [0.016 * S, 0.04 * S], G.red, t.vel);
+      const L2 = this.rnd(0.6, 1.1) * S * n, sp2 = (L2 * 0.5 - L2 * 0.12) / 0.012;
+      P.emit('splash', { pos: [ex[0] + d[0] * L2 * 0.45, ex[1] + d[1] * L2 * 0.45, ex[2] + d[2] * L2 * 0.45], dir: d, spread: 0, speed: [sp2, sp2], life: [0.1, 0.18], size: [L2 * 0.1, L2 * 0.16], color: G.red, alpha: 1, stretch: true, fixed: true });
       if (Math.random() < G.hitSplatChance * n) {
         const hit = C.raycast(ex, dir, G.hitSplatReach) ?? C.raycast(ex, vec3.normalize([dir[0] * 0.5, -1, dir[2] * 0.5]), G.hitSplatReach + 1);
         if (hit) {

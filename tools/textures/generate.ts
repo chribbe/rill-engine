@@ -1403,7 +1403,7 @@ recipes.gore = () => {
 //   row 0: muzzle flash seen from behind the gun (hot core, five birdcage jets, ragged petals), 4 variants  } additive,
 //   row 1: muzzle flash plume from the side (root at the left edge, flame along +u), 4 variants              } premultiplied
 //   row 2: liquid burst splashes (core, radial fingers, flung drops)                                        } alpha + lit:
-//   row 3: liquid sprays flung along +u from a root blob at the left                                        } rgb shading, a coverage
+//   row 3: liquid sprays flung along +u from a root blob at the left                                        } r thickness, g shading, a coverage
 recipes.fx = () => {
   mkdirSync(join(OUT, 'fx'), { recursive: true });
   const ramp = (i: number): [number, number, number] => {
@@ -1481,13 +1481,57 @@ recipes.fx = () => {
       a *= smoothstep(1.0, 0.9, px);
       shade = 0.6 + 0.35 * px + (fbm(u, v, 18, 3, seed + 1) - 0.5) * 0.2;
     }
-    o[0] = o[1] = o[2] = linearToSrgb(clamp01(shade));
+    o[0] = clamp01(shade);
     o[3] = clamp01(a);
   };
+  // Liquid thickness: coverage blurred into a dome (thick cores, thin fingers and drops), so the
+  // particle shader can light the sprite as a glossy sheet (normal from the thickness gradient).
+  const blurBox = (src: Float32Array, r: number) => {
+    let a = src, b = new Float32Array(T * T);
+    for (let pass = 0; pass < 3; pass++) {
+      for (let y = 0; y < T; y++) {
+        let acc = 0;
+        for (let x = -r; x <= r; x++) acc += a[y * T + Math.min(T - 1, Math.max(0, x))];
+        for (let x = 0; x < T; x++) {
+          b[y * T + x] = acc / (2 * r + 1);
+          acc += a[y * T + Math.min(T - 1, x + r + 1)] - a[y * T + Math.max(0, x - r)];
+        }
+      }
+      [a, b] = [b, a];
+      for (let x = 0; x < T; x++) {
+        let acc = 0;
+        for (let y = -r; y <= r; y++) acc += a[Math.min(T - 1, Math.max(0, y)) * T + x];
+        for (let y = 0; y < T; y++) {
+          b[y * T + x] = acc / (2 * r + 1);
+          acc += a[Math.min(T - 1, y + r + 1) * T + x] - a[Math.max(0, y - r) * T + x];
+        }
+      }
+      [a, b] = [b, a];
+    }
+    return a;
+  };
+  const goreTiles: { a: Float32Array; h: Float32Array; s: Float32Array }[] = [];
+  for (let row = 2; row < 4; row++) for (let tile = 0; tile < 4; tile++) {
+    const A = new Float32Array(T * T), Sh = new Float32Array(T * T), tmp = [0, 0, 0, 0];
+    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+      goreSprite(row, tile, (x + 0.5) / T, (y + 0.5) / T, tmp);
+      A[y * T + x] = tmp[3]; Sh[y * T + x] = tmp[0];
+    }
+    const B = blurBox(A, 9);
+    let mx = 1e-6;
+    for (let i = 0; i < B.length; i++) { B[i] = Math.sqrt(B[i] * A[i]); mx = Math.max(mx, B[i]); }
+    for (let i = 0; i < B.length; i++) B[i] /= mx;
+    goreTiles.push({ a: A, h: B, s: Sh });
+  }
   writePng('fx/effects.png', 4 * T, 4 * T, (x, y, o) => {
     const tile = Math.floor(x / T), row = Math.floor(y / T);
     const u = (x % T + 0.5) / T, v = (y % T + 0.5) / T;
-    if (row >= 2) { goreSprite(row, tile, u, v, o); return; }
+    if (row >= 2) {
+      // r = thickness, g = shading variation, a = coverage.
+      const G = goreTiles[(row - 2) * 4 + tile], i = (y % T) * T + (x % T);
+      o[0] = linearToSrgb(G.h[i]); o[1] = linearToSrgb(G.s[i]); o[2] = 0; o[3] = G.a[i];
+      return;
+    }
     const seed = 900 + tile * 37 + row * 11;
     const rr = mulberry32(seed);
     let I = 0;

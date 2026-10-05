@@ -79,7 +79,19 @@ export interface TomatoDef {
     sprays: number;
     sprayLength: [number, number];
     sprayLife: [number, number];
-    /** Liquid droplets (count, size m at scale 1, speed m/s), chunky pulp blobs, seeds. */
+    /**
+     * Directional liquid: thick jets blasted out along the killing shot (count, blobs each, cone
+     * half-angle degrees, speed m/s, blob radius m at scale 1), jets gushing back out of the entry,
+     * big glossy blobs bursting from the core (count, radius), and a fine all-round spray.
+     */
+    jets: number;
+    jetBlobs: number;
+    jetCone: number;
+    jetSpeed: [number, number];
+    jetSize: [number, number];
+    backJets: number;
+    coreBlobs: number;
+    coreSize: [number, number];
     drops: number;
     dropSize: [number, number];
     dropSpeed: [number, number];
@@ -131,11 +143,12 @@ export const TOMATO_DEFAULTS: TomatoDef = {
   reactions: { knock: 0.09, squash: 0.18, springHz: 5, springDamping: 0.32, staggerThreshold: 40, staggerTime: 0.35, flinch: 0.5 },
   gore: {
     shells: [5, 7], chunks: [1, 2], pulp: [3, 5], gibSpeed: [2.5, 8], gibSpin: 16, gibScale: [1.0, 1.5], gibLife: 60, legsOff: 3,
-    pops: 6, popSize: [0.35, 1.25], popLife: [0.22, 0.42], sprays: 9, sprayLength: [0.9, 2.0], sprayLife: [0.16, 0.3],
-    drops: 220, dropSize: [0.018, 0.055], dropSpeed: [2.5, 11], blobs: 45, blobSize: [0.025, 0.075], seeds: 30,
-    red: [0.2, 0.006, 0.004],
+    pops: 5, popSize: [0.35, 1.1], popLife: [0.2, 0.38], sprays: 6, sprayLength: [0.9, 1.9], sprayLife: [0.16, 0.3],
+    jets: 6, jetBlobs: 60, jetCone: 34, jetSpeed: [2.5, 10], jetSize: [0.012, 0.034], backJets: 3, coreBlobs: 30, coreSize: [0.03, 0.07],
+    drops: 120, dropSize: [0.008, 0.022], dropSpeed: [2, 8.5], blobs: 40, blobSize: [0.025, 0.075], seeds: 30,
+    red: [0.13, 0.004, 0.003],
     splats: 12, streaks: 8, splatSize: [0.6, 1.4], splatRadius: 3.8, wallSplats: 6, poolSize: [2.4, 3.4], mist: 0.3,
-    juice: [0.09, 0.003, 0.002], flesh: [0.32, 0.022, 0.009], seed: [0.42, 0.33, 0.15],
+    juice: [0.045, 0.0015, 0.001], flesh: [0.32, 0.022, 0.009], seed: [0.42, 0.33, 0.15],
     hitSpray: 16, hitSplatChance: 0.55, hitSplatReach: 2.5, light: 0, shake: 2.4, screenDistance: 3.2,
   },
 };

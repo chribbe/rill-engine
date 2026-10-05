@@ -280,9 +280,14 @@ export class TuningPanel {
     b(re, d.reactions, 'reactions', 'flinch', 'Flinch speed ×', 0, 1, 0.01);
     re.close();
     const go = f.addFolder('Gore');
-    b(go, d.gore, 'gore', 'pops', 'Burst sprites', 0, 20, 1);
-    b(go, d.gore, 'gore', 'sprays', 'Sprays flung', 0, 30, 1);
-    b(go, d.gore, 'gore', 'drops', 'Droplets', 0, 600, 5);
+    b(go, d.gore, 'gore', 'jets', 'Jets along the shot', 0, 12, 1);
+    b(go, d.gore, 'gore', 'jetBlobs', 'Blobs per jet', 0, 120, 1);
+    b(go, d.gore, 'gore', 'jetCone', 'Jet cone (°)', 0, 90, 1);
+    b(go, d.gore, 'gore', 'backJets', 'Jets back out of the entry', 0, 6, 1);
+    b(go, d.gore, 'gore', 'coreBlobs', 'Core blobs', 0, 120, 1);
+    b(go, d.gore, 'gore', 'drops', 'Fine spray', 0, 600, 5);
+    b(go, d.gore, 'gore', 'pops', 'Flat burst sprites', 0, 20, 1);
+    b(go, d.gore, 'gore', 'sprays', 'Flat sprays', 0, 30, 1);
     b(go, d.gore, 'gore', 'blobs', 'Pulp blobs', 0, 200, 1);
     b(go, d.gore, 'gore', 'splats', 'Splats around', 0, 30, 1);
     b(go, d.gore, 'gore', 'streaks', 'Streaks on the ground', 0, 30, 1);

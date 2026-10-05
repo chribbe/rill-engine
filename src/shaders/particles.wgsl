@@ -34,6 +34,14 @@ struct VOut {
   @location(2) color: vec3f,
   @location(3) inscatter: vec3f,
   @location(4) @interpolate(flat) params: vec4f,  // x opacity, y kind, z seed, w flags
+  // Liquid drops (kind 6) are shaded per pixel as lit sphere / capsule impostors: sun radiance
+  // (shadowed), sky and ground ambient, albedo, and the quad's axes (pre-exposed, fogged).
+  @location(5) @interpolate(flat) sunc: vec3f,
+  @location(6) @interpolate(flat) alb: vec3f,
+  @location(7) @interpolate(flat) skyc: vec3f,
+  @location(8) @interpolate(flat) gndc: vec3f,
+  @location(9) @interpolate(flat) ax: vec3f,
+  @location(10) @interpolate(flat) ay: vec3f,
 };
 
 const CORNERS = array<vec2f, 6>(vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, 1.0));
@@ -115,7 +123,8 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
       ax = v / speed;
       ay = normalize(cross(ax, toCam));
     }
-    ext = vec2f(p.posSize.w + speed * 0.012, p.posSize.w);
+    // Liquid drops stretch less (a drop, not a pill).
+    ext = vec2f(p.posSize.w + speed * select(0.012, 0.008, k == 6u), p.posSize.w);
   } else {
     let cr = cos(p.misc.x);
     let sr = sin(p.misc.x);
@@ -160,6 +169,24 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
   } else {
     o.color = p.color.rgb * p.color.w * T * frame.exposure.x;
   }
+  o.sunc = vec3f(0.0); o.alb = vec3f(0.0); o.skyc = vec3f(0.0); o.gndc = vec3f(0.0);
+  o.ax = ax; o.ay = ay;
+  if (k == 6u || k == 7u) {
+    // Lighting split for the per-pixel liquid shading (at the particle's centre).
+    let c = p.posSize.xyz;
+    let viewDepth = -(frame.view * vec4f(c, 1.0)).z;
+    let ex = T * frame.exposure.x;
+    if (hasFlag(F_SUN)) {
+      o.sunc = frame.sunColor.rgb * sunShadow(c, frame.sunDir.xyz, 1.0, viewDepth).x * INV_PI * ex;
+    }
+    if (hasFlag(F_SKY_AMBIENT)) {
+      o.skyc = mix(shEval(vec3f(0.0, 1.0, 0.0)), shSky[9].rgb, 0.4) * frame.exposure.w * ex;
+      o.gndc = mix(shEval(vec3f(0.0, -1.0, 0.0)), shSky[9].rgb, 0.4) * frame.exposure.w * ex;
+    }
+    o.alb = p.color.rgb;
+    // The drop impostor needs the quad's half extents (length along ax, radius).
+    if (k == 6u) { o.nuv = ext; }
+  }
   return o;
 }
 
@@ -182,24 +209,68 @@ fn chunkShape(in: VOut) -> vec2f {
   return vec2f(1.0 - smoothstep(edge - w, edge + w, r2), 0.7 + 0.3 * (1.0 - r2 / max(edge, 0.05)));
 }
 
-/** Liquid droplet: a smooth ellipse, darker at the rim, a glossy highlight up-left. */
-fn dropShape(in: VOut) -> vec2f {
-  let r2 = dot(in.uv, in.uv);
+/**
+ * Liquid drop as a lit impostor: a sphere (or, stretched along its velocity, a capsule) with a
+ * per-pixel normal; sun diffuse, hemisphere ambient, a sharp sun highlight, a Fresnel sky
+ * reflection and a lighter translucent rim. Returns premultiplied-ready colour and coverage.
+ */
+fn dropShade(in: VOut) -> vec4f {
+  let ext = max(in.nuv, vec2f(1e-4));
+  let p = vec2f(in.uv.x * ext.x, in.uv.y * ext.y);
+  let half = max(ext.x - ext.y, 0.0);
+  let d = vec2f(p.x - clamp(p.x, -half, half), p.y) / ext.y;
+  let r2 = dot(d, d);
   let w = fwidth(r2) * 1.5;
-  let a = 1.0 - smoothstep(0.82 - w, 0.82 + w, r2);
-  let hl = exp(-dot(in.uv - vec2f(-0.28, 0.32), in.uv - vec2f(-0.28, 0.32)) * 9.0);
-  return vec2f(a, 0.7 + 0.25 * (1.0 - r2) + 1.6 * hl * hl);
+  let a = 1.0 - smoothstep(1.0 - w, 1.0, r2);
+  let nz = sqrt(max(0.0, 1.0 - r2));
+  let tc = normalize(cross(in.ay, in.ax));
+  let n = normalize(in.ax * d.x + in.ay * d.y + tc * nz);
+  return vec4f(liquidLight(in, n, tc, in.alb, pow(1.0 - nz, 2.0), 1.0), a);
 }
 
-/** Liquid sprite from atlas rows 2 (burst, rolled) / 3 (spray along the stretch axis). */
-fn splashShape(in: VOut) -> vec2f {
+/** Shared liquid lighting for a normal `n`: dark body, sharp wet highlights, a lighter thin rim. */
+fn liquidLight(in: VOut, n: vec3f, tc: vec3f, alb: vec3f, rim: f32, gloss: f32) -> vec3f {
+  let L = frame.sunDir.xyz;
+  let amb = mix(in.gndc, in.skyc, n.y * 0.5 + 0.5) * 0.6;
+  var c = alb * (amb + in.sunc * max(dot(n, L), 0.0));
+  let h = normalize(L + tc);
+  let spec = pow(max(dot(n, h), 0.0), 120.0);
+  let nv = max(dot(n, tc), 0.0);
+  let fres = 0.03 + 0.97 * pow(1.0 - nv, 5.0);
+  // A soft sky highlight up top (overcast has no sharp sun), sun glints when there is one.
+  let skyHl = pow(max(dot(n, normalize(vec3f(0.0, 1.0, 0.0) + tc)), 0.0), 60.0);
+  c += (in.sunc * spec * 2.5 + in.skyc * (skyHl * 0.35 + fres * 0.12)) * gloss;
+  return c + alb * in.skyc * rim * 0.25;
+}
+
+/**
+ * Liquid sheet from atlas rows 2 (burst, rolled) / 3 (spray along the stretch axis): coverage plus a
+ * baked thickness whose gradient (screen derivatives mapped back to the quad's uv) gives a normal,
+ * lit like the drops; thicker liquid is darker.
+ */
+fn splashShade(in: VOut) -> vec4f {
   let variant = floor(fract(in.params.z * 7.13) * 4.0);
   let stretched = (u32(in.params.w + 0.5) & 2u) != 0u;
   let tuv = in.uv * 0.5 + 0.5;
   let row = select(2.0, 3.0, stretched);
   let suv = vec2f((variant + clamp(tuv.x, 0.002, 0.998)) * 0.25, (row + clamp(1.0 - tuv.y, 0.002, 0.998)) * 0.25);
   let c = textureSample(fxAtlas, sampClamp, suv);
-  return vec2f(c.a, c.r);
+  let th = c.r;
+  let dhx = dpdx(th);
+  let dhy = dpdy(th);
+  let dux = dpdx(in.uv);
+  let duy = dpdy(in.uv);
+  let det = dux.x * duy.y - dux.y * duy.x;
+  let inv = 1.0 / select(det, 1e-6, abs(det) < 1e-9);
+  let gu = (duy.y * dhx - dux.y * dhy) * inv;
+  let gv = (-duy.x * dhx + dux.x * dhy) * inv;
+  let tc = normalize(cross(in.ay, in.ax));
+  // Thickness changes over a few texels at the edges: keep the bump gentle or the rim turns edge-on (grey Fresnel).
+  let nl = normalize(vec3f(-gu * 0.22, -gv * 0.22, 1.0));
+  let n = normalize(in.ax * nl.x + in.ay * nl.y + tc * nl.z);
+  let alb = in.alb * mix(1.3, 0.55, th) * (0.85 + 0.3 * c.g);
+  // Sheets: many small bumps; full gloss would sprinkle grey highlights over them like snow.
+  return vec4f(liquidLight(in, n, tc, alb, (1.0 - th) * 0.3, 0.25), pow(c.a, 0.7));
 }
 
 @fragment
@@ -207,20 +278,21 @@ fn fsAlpha(in: VOut) -> @location(0) vec4f {
   // Every shape in uniform control flow (texture samples, derivatives), then pick by kind.
   let soot = sootShape(in);
   let chunk = chunkShape(in);
-  let drop = dropShape(in);
-  let splash = splashShape(in);
+  let drop = dropShade(in);
+  let splash = splashShade(in);
   let k = in.params.y;
   let isChunk = k > 3.5 && k < 4.5;
   let isDrop = k > 5.5 && k < 6.5;
   let isSplash = k > 6.5;
   var a = select(soot, chunk.x, isChunk);
-  var shade = select(1.0, chunk.y, isChunk);
-  a = select(a, drop.x, isDrop);
-  shade = select(shade, drop.y, isDrop);
-  a = select(a, splash.x, isSplash);
-  shade = select(shade, splash.y, isSplash);
+  let shade = select(1.0, chunk.y, isChunk);
+  a = select(a, splash.a, isSplash);
+  a = select(a, drop.a, isDrop);
   a *= in.params.x;
-  return vec4f((in.color * shade + in.inscatter) * a, a);
+  var col = in.color * shade;
+  col = select(col, splash.rgb, isSplash);
+  col = select(col, drop.rgb, isDrop);
+  return vec4f((col + in.inscatter) * a, a);
 }
 
 @fragment
