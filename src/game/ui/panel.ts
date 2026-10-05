@@ -236,12 +236,28 @@ export class TuningPanel {
       set boxes(v: boolean) { g.showHitboxes = v; },
     };
     f.add(act, 'ai').name('Horde on (spawns, AI)');
-    f.add(act, 'max', 0, 32, 1).name('Alive at once');
+    f.add(act, 'max', 0, 160, 1).name('Alive at once');
     f.add(act, 'spawn').name('Spawn one in front');
     f.add(act, 'spawn5').name('Spawn 5 (spawn points)');
     f.add(act, 'clear').name('Remove all');
     f.add(act, 'boxes').name('Show hit shapes');
-    b(f, d, '', 'health', 'Health', 1, 500, 1);
+    const dir = {
+      get packMin() { return g.packSize[0]; }, set packMin(v: number) { g.packSize[0] = v; g.packSize[1] = Math.max(v, g.packSize[1]); },
+      get packMax() { return g.packSize[1]; }, set packMax(v: number) { g.packSize[1] = v; g.packSize[0] = Math.min(v, g.packSize[0]); },
+      get near() { return g.spawnPath[0]; }, set near(v: number) { g.spawnPath[0] = v; g.spawnPath[1] = Math.max(v + 2, g.spawnPath[1]); },
+      get far() { return g.spawnPath[1]; }, set far(v: number) { g.spawnPath[1] = Math.max(g.spawnPath[0] + 2, v); },
+    };
+    f.add(dir, 'packMin', 1, 20, 1).name('Pack size from');
+    f.add(dir, 'packMax', 1, 30, 1).name('Pack size to');
+    f.add(dir, 'near', 5, 80, 1).name('Spawn path from (m)');
+    f.add(dir, 'far', 7, 110, 1).name('Spawn path to (m)');
+    const pl = f.addFolder('Player health');
+    pl.add(g.vitals, 'god').name('Invulnerable');
+    pl.add(g.vitals, 'max', 10, 500, 5).name('Health');
+    pl.add(g.vitals, 'regenDelay', 0, 20, 0.5).name('Regen after (s)');
+    pl.add(g.vitals, 'regenRate', 0, 100, 1).name('Regen (hp/s)');
+    pl.close();
+    b(f, d, '', 'health', 'Tomato health', 1, 500, 1);
     const mv = f.addFolder('Movement');
     b(mv, d.move, 'move', 'speed', 'Chase (m/s)', 0, 12, 0.05);
     b(mv, d.move, 'move', 'sprint', 'Sprint far away (m/s)', 0, 16, 0.05);
@@ -259,6 +275,13 @@ export class TuningPanel {
     b(ga, d.gait, 'gait', 'lean', 'Lean (° per m/s²)', 0, 6, 0.05);
     b(ga, d.gait, 'gait', 'roll', 'Roll in turns (°)', 0, 40, 0.5);
     ga.close();
+    const cr = f.addFolder('Crowd');
+    b(cr, d.crowd, 'crowd', 'spacing', 'Body spacing ×', 0.5, 1.2, 0.01);
+    b(cr, d.crowd, 'crowd', 'climbAfter', 'Climb over others after (s)', 0, 2, 0.05);
+    b(cr, d.crowd, 'crowd', 'climbSpeed', 'Climb speed (m/s)', 0, 8, 0.1);
+    b(cr, d.crowd, 'crowd', 'ledgeSpeed', 'Ledge clamber (m/s)', 0.5, 10, 0.1);
+    b(cr, d.crowd, 'crowd', 'direct', 'Straight at player within (m)', 0, 10, 0.1);
+    cr.close();
     const at = f.addFolder('Attack');
     b(at, d.attack, 'attack', 'range', 'Bite range (m)', 0.5, 3, 0.05);
     b(at, d.attack, 'attack', 'windup', 'Wind-up (s)', 0.02, 1, 0.01);

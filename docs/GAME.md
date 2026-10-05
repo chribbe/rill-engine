@@ -584,3 +584,49 @@ performance) will need:
 - One step darker: juice ~0.04 linear, pulp ~0.1.
 - Roughness 0.45. Gloss made no visible difference here; fog and sky sheen lift the far stains as much as the paving.
 
+
+**Steps 3–4: nav grid, the horde, player health (2026-10-05).** Your go: "now lets do the horde!"
+- **Nav grid** (engine, `src/engine/nav/navgrid.ts`): a Recast-style layered heightfield baked from the collision triangles.
+  - 0.5 m columns with up to 4 walkable layers. Each layer stores its floor height and the free height above it.
+  - Floors are triangles flatter than 46°. Everything else is a blocking span, clipped to the cell (Sutherland–Hodgman). Before clipping, a stair soffit's full height range blocked every tread under it.
+  - Directed links to the 8 neighbours:
+    - walk within 0.5 m;
+    - climb up ledges up to 1.3 m (turnstiles, low fences, at extra cost);
+    - drop up to 2.5 m;
+    - diagonals only across open corners.
+  - Hässelby: 160 × 160 m around the player, ~135k nodes, baked in ~170 ms on `begin` (again when the map changed or you start far away).
+  - **Flow field:** Dijkstra backwards over the links from the player.
+    - A bucket queue (the costs are small integers): ~6 ms for everything within 120 m of path.
+    - Computed in slices of 12k nodes per tick into a back buffer, then swapped. A new one starts when you change cell (at most 5 per second).
+  - Agents move through `move` (follows links, slides along walls, steps off a pile onto a ledge) and `keepOff` (stays clear of blocked sides).
+  - An agent never drops into somewhere the flow field can't lead back out of (crowd-shoved off the platform onto the tracks, it got stuck).
+  - Verified: from the square to a player on the platform, the path goes through the hall door, over the turnstiles (the lanes are 0.6 m, too narrow for a bug), up flight 1, the landing, flight 2, onto the platform.
+- **Tomatoes on the nav** (`tomato.ts`): ground and walls from the grid; no triangle queries.
+  - Steering follows the flow field, or goes straight at you within 3.5 m when level.
+  - Steps follow the floor smoothly. Ledges are clambered at 3.5 m/s, at a quarter speed. Drops fall.
+- **Crowd** (`horde.ts`): spheres in a spatial hash, squashed vertically so stacks sit snug.
+  - Sideways pushes are shared. The higher body takes the whole vertical push, so one that climbs into another rides up and rests on its back.
+  - Held up behind others for 0.25 s, a tomato scrambles up and over their backs. It climbs no higher than it takes to reach you, so piles grow to your height, not into towers.
+  - Nobody stands in your column (or on your head). Every shove goes back through the nav, so none end inside a wall.
+  - Scenario run (32 spawned in the square, player held on the platform): all on the stairs by 6 s, 22 on the platform by 12 s, all 24 by 15 s. They pile at the stair top.
+- **Director** (`game.ts`): packs of 3–7 pour out of one spot 22–42 m of path away, out of sight (behind you, or behind something), one every 0.12 s, a pack every 1.5–3.5 s while below "alive at once" (default 24, pool 160).
+- **Player health** (`src/game/player/vitals.ts`, `src/game/ui/health.ts`):
+  - 100 hp; a bite does 12. Health regenerates at 8/s after 5 s without a hit.
+  - The bar (bottom left) shows only when hurt and pulses when low. A quiet kills and time tally sits under it.
+  - Death: the view drops to the ground and rolls, the gun goes, the horde keeps at it; a dim screen with the tally. Click / R / Space goes again from where the run started.
+  - "Invulnerable" in the panel for testing.
+- **LODs:** the Blender build adds collapse-decimated copies of every rig part after the bake (same UVs): 15.9k → 4.8k → 1.4k triangles, switching at 9 and 22 m.
+  - The rig passes part LOD chains to the renderer.
+  - The bake re-ran, so the tomato textures were regenerated too (same look, new UV layout).
+- **Sound:** at most 3 foot ticks a frame and one hiss at a time, rarer the bigger the horde.
+- **Panel:** pack size, spawn path distance, a Crowd folder (spacing, climb timing and speed, ledge speed, direct range), Player health.
+- **Cost** (CPU, 160 alive): horde tick ~0.05–0.1 ms per tick, posing ~0.65 ms per frame, the whole game update ~2.8 ms.
+  - GPU not measured: the browser pane caps at ~30 fps with or without tomatoes.
+- **Verification:** the frame-rate test passes (1.4e-5 m, float noise); the sandbox map works too. Renderer untouched (rig LOD pass-through only).
+- **Still to do:**
+  - Animation LOD (far tomatoes skip IK);
+  - shadows only from near tomatoes;
+  - hitscan through the spatial hash;
+  - a GPU measurement at 160 in a real window;
+  - the player being shoved by the crowd;
+  - waves and holes.

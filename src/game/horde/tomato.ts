@@ -1,6 +1,6 @@
 import { mat4, quat, vec3, type Mat4, type Quat } from 'wgpu-matrix';
 import type { Renderable, Renderer } from '../../engine/render/renderer';
-import type { CollisionWorld } from '../../engine/scene/collision';
+import type { NavGrid } from '../../engine/nav/navgrid';
 import { Rig, type RigPart } from '../../engine/scene/rig';
 import { rayCapsule, raySphere } from '../../engine/physics/shapes';
 import { spring, stepSpring } from '../../engine/core/spring';
@@ -55,8 +55,18 @@ export class Tomato {
   readonly vel: V3 = [0, 0, 0];
   yaw = 0;
   prevYaw = 0;
+  /** Feet on something (floor or the pile), on the nav floor itself, and the feet height. */
   grounded = true;
+  onFloor = true;
   ground = 0;
+  /** Nav node it stands over, the way it wants to go (unit XZ). */
+  node = -1;
+  readonly dir: [number, number] = [0, 1];
+  /** Crowd: another body in the way ahead (set by the horde), held up for, resting on others for, clambering a ledge for (s). */
+  blockedAhead = false;
+  stuckT = 0;
+  pileT = 0;
+  ledgeT = 0;
   speedMul = 1;
   cooldown = 0;
   stagger = 0;
@@ -87,6 +97,7 @@ export class Tomato {
   private inv: Mat4 = mat4.identity();
   private qa: Quat = quat.create();
   private qb: Quat = quat.create();
+  private flow: [number, number] = [0, 0];
   private tmp: V3 = [0, 0, 0];
   private tmp2: V3 = [0, 0, 0];
   private fresh = true;
@@ -119,7 +130,8 @@ export class Tomato {
     return n;
   }
 
-  reset(at: ArrayLike<number>, yawRad: number, seed: number) {
+  /** Revives the slot standing at `at` (a ground point) on nav `node`. */
+  reset(at: ArrayLike<number>, yawRad: number, seed: number, node: number) {
     const d = this.def;
     this.active = true;
     this.state = 'chase';
@@ -131,8 +143,11 @@ export class Tomato {
     this.prev[0] = this.pos[0]; this.prev[1] = this.pos[1]; this.prev[2] = this.pos[2];
     this.vel[0] = this.vel[1] = this.vel[2] = 0;
     this.yaw = this.prevYaw = yawRad;
-    this.grounded = true;
+    this.grounded = this.onFloor = true;
     this.ground = at[1];
+    this.node = node;
+    this.blockedAhead = false;
+    this.stuckT = this.pileT = this.ledgeT = 0;
     this.cooldown = 0.3 + this.rand() * 0.4;
     this.stagger = 0;
     this.flinchT = 0;
@@ -145,30 +160,42 @@ export class Tomato {
 
   // ------------------------------------------------------------------ simulation (fixed rate)
 
-  tick(h: number, prey: Prey, C: CollisionWorld, onBite: (t: Tomato) => void) {
+  tick(h: number, prey: Prey, nav: NavGrid, onBite: (t: Tomato) => void) {
     if (!this.alive) return;
-    const d = this.def, M = d.move, A = d.attack, S = d.scale, range = A.range * S, radius = d.radius * S, ride0 = d.rideHeight * S;
+    const d = this.def, M = d.move, A = d.attack, Cr = d.crowd, S = d.scale, range = A.range * S, radius = d.radius * S, ride0 = d.rideHeight * S;
     this.prev[0] = this.pos[0]; this.prev[1] = this.pos[1]; this.prev[2] = this.pos[2];
     this.prevYaw = this.yaw;
     this.stateT += h;
     this.cooldown = Math.max(0, this.cooldown - h);
     this.flinchT = Math.max(0, this.flinchT - h);
+    this.pileT = Math.max(0, this.pileT - h);
+    this.ledgeT = Math.max(0, this.ledgeT - h);
     this.stagger = Math.max(0, this.stagger - d.reactions.staggerThreshold * 0.6 * h);
+    this.grounded = this.onFloor || this.pileT > 0;
 
+    // Where to: straight at the prey when close (and level), else down the flow field.
     const dx = prey.feet[0] - this.pos[0], dz = prey.feet[2] - this.pos[2];
     const dist = Math.hypot(dx, dz) || 1e-6;
-    const ux = dx / dist, uz = dz / dist;
+    const level = Math.abs(prey.feet[1] + 0.9 - this.pos[1]) < 1.4;
+    let ux = dx / dist, uz = dz / dist, path = dist;
+    if (!(dist < Cr.direct && level) && nav.flowDirAt(this.node, this.pos[0], this.pos[2], this.flow)) {
+      ux = this.flow[0]; uz = this.flow[1];
+      path = nav.dist[this.node] / 20;
+    }
+    this.dir[0] = ux; this.dir[1] = uz;
     const legs = this.legsLeft, legMul = legs >= 6 ? 1 : 0.25 + 0.75 * (legs / 6) ** 1.6;
-    let want = (dist > M.sprintDistance ? M.sprint : M.speed) * this.speedMul * legMul * (this.flinchT > 0 ? d.reactions.flinch : 1);
+    let want = (path > M.sprintDistance ? M.sprint : M.speed) * this.speedMul * legMul * (this.flinchT > 0 ? d.reactions.flinch : 1);
+    if (this.ledgeT > 0) want *= 0.25;
     let face = true;
 
     switch (this.state) {
       case 'chase':
-        if (dist < range && this.cooldown <= 0 && this.grounded) this.enter('windup');
-        else if (this.grounded && this.cooldown <= 0 && dist > A.lungeRange[0] && dist < A.lungeRange[1] && legs >= 4 && this.rand() < A.lungeChance * h) {
+        if (dist < range && level && this.cooldown <= 0 && this.grounded) this.enter('windup');
+        else if (this.onFloor && level && this.cooldown <= 0 && dist > A.lungeRange[0] && dist < A.lungeRange[1] && legs >= 4 && this.rand() < A.lungeChance * h) {
           this.enter('lunge');
           const up = A.lungeUp, sp = A.lungeSpeed * this.speedMul;
-          this.vel[0] = ux * sp; this.vel[1] = up; this.vel[2] = uz * sp;
+          this.vel[0] = (dx / dist) * sp; this.vel[1] = up; this.vel[2] = (dz / dist) * sp;
+          this.onFloor = false;
           this.grounded = false;
           this.squash.v -= 4;
         }
@@ -181,7 +208,7 @@ export class Tomato {
         want = 0;
         if (!this.bitThisAttack) {
           this.bitThisAttack = true;
-          if (dist < range + 0.35) onBite(this);
+          if (dist < range + 0.35 && level) onBite(this);
           this.squash.v += 3;
         }
         if (this.stateT >= A.bite) this.enter('recover');
@@ -193,7 +220,7 @@ export class Tomato {
       case 'lunge':
         face = false;
         // Mid-air bite when it reaches the prey's body.
-        if (!this.bitThisAttack && Math.hypot(dx, dz) < radius + 0.55 && Math.abs(prey.feet[1] + 1.0 - this.pos[1]) < 1.0) {
+        if (!this.bitThisAttack && dist < radius + 0.55 && Math.abs(prey.feet[1] + 1.0 - this.pos[1]) < 1.0) {
           this.bitThisAttack = true;
           onBite(this);
         }
@@ -205,53 +232,75 @@ export class Tomato {
         break;
     }
 
-    // Steering (on the ground only): accelerate towards the wanted velocity, turn the heading.
-    if (this.grounded) {
+    // Steering (feet on something): accelerate towards the wanted velocity, turn to face the way it goes.
+    if (this.grounded && this.state !== 'lunge') {
       const tx = ux * want, tz = uz * want;
       const ax = tx - this.vel[0], az = tz - this.vel[2], al = Math.hypot(ax, az), amax = M.accel * h;
       const k = al > amax ? amax / al : 1;
       this.vel[0] += ax * k; this.vel[2] += az * k;
     }
     if (face) {
-      const target = Math.atan2(ux, -uz);
+      const close = dist < range * 2.5 && level;
+      const target = close ? Math.atan2(dx, -dz) : Math.atan2(ux, -uz);
       let dy = target - this.yaw;
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       const step = M.turnRate * RAD * h;
       this.yaw += Math.max(-step, Math.min(step, dy));
     }
 
-    // Integrate; gravity in the air.
-    if (!this.grounded) this.vel[1] -= 9.81 * h;
-    this.pos[0] += this.vel[0] * h; this.pos[1] += this.vel[1] * h; this.pos[2] += this.vel[2] * h;
-
-    // Walls: push the body sphere out of the world (horizontal part only kills velocity into it).
-    const n = this.tmp;
-    const depth = C.pushSphereOut(this.pos, radius * 0.85, n, 2);
-    if (depth > 0) {
-      const vn = this.vel[0] * n[0] + this.vel[2] * n[2];
-      if (vn < 0 && Math.abs(n[1]) < 0.7) { this.vel[0] -= vn * n[0]; this.vel[2] -= vn * n[2]; }
+    // Held up behind others for a while: scramble up over their backs.
+    const progress = this.vel[0] * ux + this.vel[2] * uz;
+    if (this.blockedAhead && this.state === 'chase' && want > 0.5 && progress < want * 0.4) this.stuckT += h;
+    else this.stuckT = Math.max(0, this.stuckT - h * 2);
+    // (No higher than it takes to reach the prey: the pile grows to its height, not into a tower.)
+    if (this.stuckT > Cr.climbAfter && this.blockedAhead && this.vel[1] < Cr.climbSpeed * 0.5 && this.pos[1] - ride0 < prey.feet[1] + 0.8) {
+      this.vel[1] = Cr.climbSpeed * (0.8 + this.rand() * 0.4);
+      this.onFloor = false;
+      this.stuckT = Cr.climbAfter * 0.5;
     }
 
-    // Ground: follow it up steps and kerbs while walking; land from the air.
-    const g = C.groundHeight(this.pos[0], this.pos[1] - ride0 + 0.55, this.pos[2], 4);
-    const ride = g > -Infinity ? g + ride0 : -Infinity;
-    if (this.grounded) {
-      if (ride === -Infinity || ride < this.pos[1] - 0.5) {
-        this.grounded = false;
-      } else {
-        this.ground = g;
-        this.pos[1] += (ride - this.pos[1]) * Math.min(1, h * 25);
-        this.vel[1] = 0;
-      }
-    } else if (ride > -Infinity && this.pos[1] <= ride && this.vel[1] <= 0) {
-      const impact = -this.vel[1];
-      this.pos[1] = ride;
-      this.ground = g;
+    // Across the ground: through the nav grid (walls stop it, it slides along them).
+    const out = this.flow;
+    const tx = this.pos[0] + this.vel[0] * h, tz = this.pos[2] + this.vel[2] * h;
+    this.node = nav.move(this.node, this.pos[0], this.pos[2], tx, tz, this.pos[1] - ride0, true, out);
+    nav.keepOff(this.node, radius * 0.4, out);
+    if (Math.abs(out[0] - tx) > 1e-4) this.vel[0] = (out[0] - this.pos[0]) / h;
+    if (Math.abs(out[1] - tz) > 1e-4) this.vel[2] = (out[1] - this.pos[2]) / h;
+    this.pos[0] = out[0]; this.pos[2] = out[1];
+
+    // Up and down: follow the floor over steps, clamber up ledges, fall (or rest on the pile below).
+    const floor = nav.layerH[this.node], rideY = floor + ride0, above = this.pos[1] - rideY;
+    if (this.pileT > 0 && above > 0.05) {
+      this.vel[1] -= 9.81 * h;
+      this.pos[1] = Math.max(rideY, this.pos[1] + this.vel[1] * h);
+      this.onFloor = this.pos[1] <= rideY;
+      this.ground = this.onFloor ? floor : this.pos[1] - ride0;
+    } else if (this.onFloor && this.vel[1] <= 0 && above > -0.3 && above < 0.55) {
+      this.pos[1] += (rideY - this.pos[1]) * Math.min(1, h * 20);
       this.vel[1] = 0;
-      this.grounded = true;
-      this.squash.v -= Math.min(8, impact * 1.2);
-      if (this.state === 'lunge') { this.enter('recover'); this.vel[0] *= 0.3; this.vel[2] *= 0.3; }
+      this.ground = floor;
+    } else if (this.onFloor && above <= -0.3) {
+      this.pos[1] = Math.min(rideY, this.pos[1] + Cr.ledgeSpeed * h);
+      this.vel[1] = 0;
+      this.ledgeT = 0.12;
+      this.ground = floor;
+    } else {
+      this.vel[1] -= 9.81 * h;
+      this.pos[1] += this.vel[1] * h;
+      this.ground = this.pos[1] - ride0;
+      if (this.pos[1] <= rideY) {
+        const impact = -this.vel[1];
+        this.pos[1] = rideY;
+        this.vel[1] = 0;
+        this.ground = floor;
+        if (!this.onFloor) this.squash.v -= Math.min(8, impact * 1.2);
+        this.onFloor = true;
+        if (this.state === 'lunge') { this.enter('recover'); this.vel[0] *= 0.3; this.vel[2] *= 0.3; }
+      } else {
+        this.onFloor = false;
+      }
     }
+    this.grounded = this.onFloor || this.pileT > 0;
     if (this.pos[1] < -50) this.health = 0;
   }
 
@@ -300,7 +349,7 @@ export class Tomato {
 
   // ------------------------------------------------------------------ presentation (per frame)
 
-  pose(dt: number, alpha: number, C: CollisionWorld) {
+  pose(dt: number, alpha: number) {
     if (!this.active) return;
     const d = this.def, G = d.gait, A = d.attack, R = d.reactions;
     const p = this.shown;
@@ -354,7 +403,7 @@ export class Tomato {
     quat.fromEuler(Math.max(-0.1, this.jaw.x), 0, 0, 'xyz', this.lid.rot);
     quat.fromEuler(this.wobX.x * 0.6, 0, this.wobZ.x * 0.6, 'xyz', this.crown.rot);
 
-    this.stepLegs(dt, M, C);
+    this.stepLegs(dt, M);
     this.rig.update(this.root);
   }
 
@@ -364,7 +413,7 @@ export class Tomato {
    * lifts early and reaches forward to where it will land (tracking the moving body). Front legs
    * lead their tripod slightly (a ripple, not a stamp). Standing still, feet only take corrective steps.
    */
-  private stepLegs(dt: number, M: Mat4, C: CollisionWorld) {
+  private stepLegs(dt: number, M: Mat4) {
     const d = this.def, G = d.gait, S = d.scale, legs = this.model.legs;
     const vx = this.vel[0], vz = this.vel[2], speed = Math.hypot(vx, vz);
     const stride = G.stride * S, D = G.duty;

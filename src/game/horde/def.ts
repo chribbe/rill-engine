@@ -33,6 +33,17 @@ export interface TomatoDef {
     lean: number;
     roll: number;
   };
+  crowd: {
+    /** Bodies keep this share of their diameter apart (lower packs them tighter). */
+    spacing: number;
+    /** Stuck behind others this long (s), a tomato climbs over them at this speed (m/s up). */
+    climbAfter: number;
+    climbSpeed: number;
+    /** Clambering up a ledge (turnstile, low wall) from the nav (m/s). */
+    ledgeSpeed: number;
+    /** Closer than this (m) it heads straight for the player instead of following the flow field. */
+    direct: number;
+  };
   attack: {
     /** Bite range (m from the body centre to the player's eye axis), windup, snap, recover, cooldown. */
     range: number;
@@ -136,6 +147,7 @@ export const TOMATO_DEFAULTS: TomatoDef = {
   health: 70,
   move: { speed: 3.0, sprint: 4.6, sprintDistance: 18, accel: 10, turnRate: 240, speedJitter: 0.2 },
   gait: { stride: 0.62, lift: 0.12, duty: 0.56, bob: 0.018, sway: 2.5, lean: 1.2, roll: 8 },
+  crowd: { spacing: 0.9, climbAfter: 0.25, climbSpeed: 3.2, ledgeSpeed: 3.5, direct: 3.5 },
   attack: {
     range: 1.25, windup: 0.18, bite: 0.08, recover: 0.35, cooldown: 0.5, damage: 12,
     lungeRange: [2.4, 5.5], lungeSpeed: 6.5, lungeUp: 3.2, lungeChance: 1.0, jawChase: 14, jawOpen: 52,

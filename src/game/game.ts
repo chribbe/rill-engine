@@ -18,6 +18,8 @@ import type { MarkerObject } from '../engine/scene/mapformat';
 import { TOMATO_DEFAULTS, type TomatoDef } from './horde/def';
 import { Horde } from './horde/horde';
 import { TomatoGore, GORE_DECALS } from './horde/gore';
+import { Vitals } from './player/vitals';
+import { HealthIndicator } from './ui/health';
 import type { Tomato } from './horde/tomato';
 import { DamageFlash } from './ui/damage';
 import { ScreenGore } from './ui/screengore';
@@ -65,6 +67,15 @@ export class Game {
   /** Seconds until the next respawn while below `horde.maxAlive`. */
   private respawnT = 1;
   damage: DamageFlash | null = null;
+  readonly vitals = new Vitals();
+  health: HealthIndicator | null = null;
+  /** This run: tomatoes killed, seconds survived. */
+  kills = 0;
+  runTime = 0;
+  /** Where the run started (a restart puts the player back there). */
+  private start = { pos: [0, 0, 0] as [number, number, number], yaw: 0, pitch: 0 };
+  private wasEnabled = true;
+  private restartWanted = false;
   screenGore: ScreenGore | null = null;
   impacts!: ImpactFx;
   private impactTable: ImpactTable = { fallback: 'concrete', surfaces: {} };
@@ -153,6 +164,7 @@ export class Game {
     this.ammo = new AmmoIndicator(overlay);
     this.damage = new DamageFlash(overlay);
     this.screenGore = new ScreenGore(overlay);
+    this.health = new HealthIndicator(overlay);
     document.getElementById('crosshair')?.remove();
     this.ready = true;
   }
@@ -182,7 +194,16 @@ export class Game {
     // Gun smoke and impact dust drift with only part of the map's wind (restored in end()).
     rt.renderer.particles.airScale = this.impactTable.wind ?? 1;
     this.horde.clear();
+    this.horde.begin(rt.player.feet);
     this.respawnT = 1;
+    this.group.left = 0;
+    this.vitals.reset();
+    this.kills = 0;
+    this.runTime = 0;
+    this.restartWanted = false;
+    this.start.pos = [...rt.player.feet] as [number, number, number];
+    this.start.yaw = (rt.camera.yaw * 180) / Math.PI;
+    this.start.pitch = (rt.camera.pitch * 180) / Math.PI;
     if (this.crosshair) this.crosshair.visible = true;
     if (this.hud) this.hud.el.style.visibility = '';
     this.active = true;
@@ -192,6 +213,8 @@ export class Game {
   end() {
     const { rt } = this;
     this.active = false;
+    if (this.vitals.dead) rt.camera.roll = 0;
+    this.vitals.reset();
     this.horde.clear();
     this.resetEffects();
     this.viewmodel.hide();
@@ -212,10 +235,11 @@ export class Game {
     return [{ position: [s.position[0] + Math.sin(a) * 14, s.position[1], s.position[2] - Math.cos(a) * 14], yaw: s.yaw + 180 }];
   }
 
-  /** Spawns a tomato at `at` (ground point), or at the spawn point farthest from the player. */
+  /** Spawns a tomato at `at` (ground point), or somewhere out of sight around the player, else at the spawn point farthest away. */
   spawnTomato(at?: ArrayLike<number>) {
-    const { player } = this.rt;
+    const { player, camera } = this.rt;
     let pos: ArrayLike<number> | undefined = at, yaw = 0;
+    if (!pos && this.horde.findSpawn(player.feet, camera.position, camera.forward, this.spawnPath[0], this.spawnPath[1], this.spawnAt)) pos = this.spawnAt;
     if (!pos) {
       let bd = -1;
       for (const p of this.spawnPoints()) {
@@ -229,34 +253,63 @@ export class Game {
     return this.horde.spawn([pos![0], g > -Infinity ? g : pos![1], pos![2]], yaw);
   }
 
-  /** Keeps `horde.maxAlive` tomatoes coming (one every ~1.2 s). */
+  /** Path distance (m) from the player that tomatoes are brought in at. */
+  spawnPath: [number, number] = [22, 42];
+  /** Tomatoes come in packs of this many, a pack every so often while below `horde.maxAlive`. */
+  packSize: [number, number] = [3, 7];
+  private spawnAt: [number, number, number] = [0, 0, 0];
+  private group = { at: [0, 0, 0] as [number, number, number], left: 0, t: 0 };
+
+  /** Keeps `horde.maxAlive` tomatoes coming: packs that pour out of one spot out of sight, one every 0.12 s. */
   private respawn(dt: number) {
     if (!this.active || !this.horde.enabled) return;
-    if (this.horde.alive >= this.horde.maxAlive) { this.respawnT = Math.max(this.respawnT, 0.6); return; }
+    const H = this.horde, G = this.group, { player, camera } = this.rt;
+    if (H.alive >= H.maxAlive) { this.respawnT = Math.max(this.respawnT, 0.8); G.left = 0; return; }
+    if (G.left > 0) {
+      G.t -= dt;
+      if (G.t <= 0) {
+        G.t = 0.12;
+        G.left--;
+        const a = Math.random() * Math.PI * 2, r = Math.random() * 1.2;
+        const p = [G.at[0] + Math.cos(a) * r, G.at[1], G.at[2] + Math.sin(a) * r];
+        H.spawn(p, Math.atan2(player.feet[0] - p[0], -(player.feet[2] - p[2])));
+      }
+      return;
+    }
     this.respawnT -= dt;
-    if (this.respawnT <= 0) {
-      this.spawnTomato();
-      this.respawnT = 1.2;
+    if (this.respawnT > 0) return;
+    if (H.findSpawn(player.feet, camera.position, camera.forward, this.spawnPath[0], this.spawnPath[1], G.at)) {
+      const [a, b] = this.packSize;
+      G.left = Math.min(H.maxAlive - H.alive, a + Math.floor(Math.random() * (b - a + 1)));
+      G.t = 0;
+      this.respawnT = 1.5 + Math.random() * 2;
+    } else {
+      this.respawnT = 0.3;
     }
   }
 
-  private hissT = new Float32Array(64);
+  private hissT = new Float32Array(160);
 
-  /** Thorn feet ticking on the ground near the player, and the odd hiss from the ones closing in. */
+  /**
+   * Thorn feet ticking on the ground near the player, and the odd hiss from the ones closing in.
+   * A pack would fire dozens a frame: only a few steps per frame and a few hisses at once (the
+   * nearest feet win; the rest of the crowd is the same sound anyway).
+   */
   private hordeSounds(dt: number) {
     const cam = this.rt.camera.position;
+    let steps = 0, hisses = 0;
     for (const t of this.horde.list) {
       if (!t.alive) { t.planted = 0; continue; }
       const d = Math.hypot(t.shown[0] - cam[0], t.shown[1] - cam[1], t.shown[2] - cam[2]);
       if (t.planted > 0) {
-        if (d < 14) this.audio.play('tomato_step', { pos: t.shown });
+        if (d < 14 && steps < 3 && (d < 5 || Math.random() < 3 / (1 + this.horde.alive * 0.25))) { this.audio.play('tomato_step', { pos: t.shown }); steps++; }
         t.planted = 0;
       }
       const i = t.index % this.hissT.length;
       this.hissT[i] -= dt;
       if (d < 12 && this.hissT[i] <= 0 && t.state === 'chase') {
-        this.hissT[i] = 2.5 + Math.random() * 4;
-        if (Math.random() < 0.6) this.audio.play('tomato_hiss', { pos: t.shown });
+        this.hissT[i] = 2.5 + Math.random() * 4 + this.horde.alive * 0.15;
+        if (Math.random() < 0.6 && hisses < 1) { this.audio.play('tomato_hiss', { pos: t.shown }); hisses++; }
       }
     }
   }
@@ -264,6 +317,7 @@ export class Game {
   /** A tomato burst: gore, a shake when it is close, the kill confirm on the crosshair. */
   private onTomatoKill(t: Tomato, point: ArrayLike<number> | null, dir: ArrayLike<number> | null, impulse: number) {
     this.gore.burst(t, point, dir, impulse);
+    if (!this.vitals.dead) this.kills++;
     const { camera } = this.rt;
     const d = Math.hypot(t.shown[0] - camera.position[0], t.shown[1] - camera.position[1], t.shown[2] - camera.position[2]);
     const G = this.hordeConfig.data.gore;
@@ -291,6 +345,40 @@ export class Game {
     player.velocity[2] += (dz / l) * 3;
     this.damage?.hit(this.hordeConfig.data.attack.damage, dx / l, dz / l, camera.yaw);
     this.audio.play('tomato_bite', { pos: t.shown, gain: 3 });
+    if (this.vitals.damage(this.hordeConfig.data.attack.damage)) this.die();
+  }
+
+  /** Overrun: the view drops to the ground, the gun goes, the horde keeps at it. */
+  private die() {
+    const { player } = this.rt;
+    this.wasEnabled = player.enabled;
+    player.enabled = false;
+    player.velocity[0] = player.velocity[2] = 0;
+    this.viewmodel.visible = false;
+    this.screenGore?.splash(1, 0.5, 0.45);
+    this.recoil.kickView(-6, (Math.random() - 0.5) * 8, 10);
+  }
+
+  /** Go again from where the run started: a clean slate. */
+  restart() {
+    const { rt } = this;
+    this.horde.clear();
+    this.resetEffects();
+    rt.player.enabled = this.wasEnabled;
+    rt.player.fly = false;
+    rt.player.teleport(this.start.pos, this.start.yaw, this.start.pitch);
+    rt.camera.roll = 0;
+    this.weapon.reset();
+    this.recoil.reset(rt.camera);
+    this.viewmodel.reset();
+    this.viewmodel.visible = true;
+    this.horde.begin(rt.player.feet);
+    this.respawnT = 1;
+    this.group.left = 0;
+    this.vitals.reset();
+    this.kills = 0;
+    this.runTime = 0;
+    this.restartWanted = false;
   }
 
   private onShot(e: ShotEvent) {
@@ -369,7 +457,7 @@ export class Game {
     const { player, input, world, sandbox, camera, renderer } = this.rt;
     const look = player.look();
     this.recoil.absorb(look[0], look[1], camera);
-    const armed = input.locked || input.scripted;
+    const armed = (input.locked || input.scripted) && !this.vitals.dead;
     player.sprintBlocked = false;
     this.weapon.aimOffset[0] = this.recoil.aimP;
     this.weapon.aimOffset[1] = this.recoil.aimY;
@@ -383,6 +471,11 @@ export class Game {
       this.recoil.tick(h, camera);
       player.tick(h);
       if (this.horde.enabled && this.active) this.horde.tick(h, { feet: player.feet, height: 1.7 });
+      if (this.active) {
+        this.vitals.tick(h);
+        if (!this.vitals.dead) this.runTime += h;
+        else if (this.vitals.deadT > 1.2 && (input.buttonPressed(0) || input.pressed('KeyR') || input.pressed('Space'))) this.restartWanted = true;
+      }
       input.endTick();
     });
     const sdt = dt * this.clock.timeScale;
@@ -393,6 +486,13 @@ export class Game {
     this.respawn(sdt);
     if (this.showHitboxes) this.drawHitboxes();
     this.recoil.frame(sdt, alpha, camera);
+    if (this.restartWanted) this.restart();
+    if (this.vitals.dead && this.active) {
+      // Down on the ground, rolled over.
+      const k = Math.min(1, this.vitals.deadT / 0.6), e = 1 - (1 - k) * (1 - k) * (1 - k);
+      camera.position[1] -= e * Math.max(0, camera.position[1] - player.feet[1] - 0.3);
+      camera.roll = e * 1.25;
+    }
     world.update(sdt, player.feet);
     sandbox.update(sdt);
     const W = this.weapon;
@@ -410,6 +510,7 @@ export class Game {
     this.gore.viewer = camera.position;
     this.gore.update(sdt);
     this.damage?.update(sdt);
+    this.health?.update(dt, this.vitals.hp, this.vitals.max, this.vitals.dead, this.vitals.deadT, this.kills, this.runTime, this.active);
     this.screenGore?.update(dt);
     this.impacts.update(sdt);
     this.audio.frame(dt, camera, world.collision);

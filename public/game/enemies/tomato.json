@@ -23,6 +23,13 @@
     "lean": 1.2,
     "roll": 8
   },
+  "crowd": {
+    "spacing": 0.9,
+    "climbAfter": 0.25,
+    "climbSpeed": 3.2,
+    "ledgeSpeed": 3.5,
+    "direct": 3.5
+  },
   "attack": {
     "range": 1.25,
     "windup": 0.18,

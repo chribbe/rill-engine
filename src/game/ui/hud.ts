@@ -32,7 +32,8 @@ export class DebugHud {
       (() => {
         const alive = g.horde.list.filter((t) => t.alive);
         const near = alive.reduce<typeof alive[number] | null>((b, t) => !b || Math.hypot(t.pos[0] - player.feet[0], t.pos[2] - player.feet[2]) < Math.hypot(b.pos[0] - player.feet[0], b.pos[2] - player.feet[2]) ? t : b, null);
-        return `horde ${alive.length} alive  debris ${g.debris?.moving ?? 0} moving` + (near ? `  nearest ${near.state} ${Math.max(0, near.health).toFixed(0)}hp ${near.legsLeft} legs ${Math.hypot(near.pos[0] - player.feet[0], near.pos[2] - player.feet[2]).toFixed(1)}m` : '');
+        const nav = g.horde.nav;
+        return `horde ${alive.length} alive  hp ${g.vitals.hp.toFixed(0)}  nav ${nav ? `${nav.nodes} nodes flow ${nav.flowMs.toFixed(1)}ms` : '-'}  debris ${g.debris?.moving ?? 0} moving` + (near ? `  nearest ${near.state} ${Math.max(0, near.health).toFixed(0)}hp ${near.legsLeft} legs ${Math.hypot(near.pos[0] - player.feet[0], near.pos[2] - player.feet[2]).toFixed(1)}m` : '');
       })(),
       `audio ${g.audio.engine.ctx.state}  ${(g.audio.engine.latency * 1000).toFixed(0)} ms out  voices ${g.audio.engine.activeVoices}  room ${(g.audio.environment.room * 100).toFixed(0)}%`,
       `frame ${lastFrameMs.toFixed(1)} ms  sim ${g.simMs.toFixed(2)} ms  ticks ${g.clock.ticks}  ×${g.clock.timeScale}`,
