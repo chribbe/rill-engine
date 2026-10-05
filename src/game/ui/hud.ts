@@ -7,13 +7,13 @@ export class DebugHud {
   visible = true;
   private n = 0;
 
-  constructor(private game: Game) {
+  constructor(private game: Game, parent: HTMLElement = document.body) {
     this.el = document.createElement('pre');
     Object.assign(this.el.style, {
-      position: 'fixed', left: '8px', bottom: '8px', margin: '0', padding: '6px 8px', pointerEvents: 'none',
+      position: 'absolute', left: '8px', bottom: '8px', zIndex: '5', margin: '0', padding: '6px 8px', pointerEvents: 'none',
       background: 'rgba(8,10,12,0.55)', borderRadius: '4px', font: '11px/1.35 ui-monospace, Menlo, monospace', color: '#dfe3e8',
     } as Partial<CSSStyleDeclaration>);
-    document.body.append(this.el);
+    parent.append(this.el);
   }
 
   update() {

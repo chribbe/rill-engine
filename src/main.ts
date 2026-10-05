@@ -46,6 +46,7 @@ async function main() {
   if (rt.params.get('game') !== '0') {
     game = new Game(rt);
     await game.init({ panel: column });
+    game.begin({ toSpawn: true });
     column.prepend(game.panel!.gui.domElement);
     gui.close();
     rt.hooks.update = game.update;

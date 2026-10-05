@@ -320,6 +320,13 @@ export class Viewmodel {
     return out;
   }
 
+  /** Hides the weapon now (leaving play mode: its instances must not linger). */
+  hide() {
+    this.visible = false;
+    this.rig.visible = false;
+    this.rig.commit(2 | 4);
+  }
+
   muzzle(out: [number, number, number] = [0, 0, 0]) {
     return this.receiver ? this.rig.point(this.receiver, this.muzzleLocal, out) : out;
   }

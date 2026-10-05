@@ -267,6 +267,24 @@ Game:
 
 Measured: about 0.27 ms of simulation per frame with an active ragdoll; it sleeps once it settles. The frame-rate test stays identical with the enemy present.
 
+**Step 7 — tuning tools and editor play (done, 2026-10-05).**
+- Recoil pattern plot (`ui/recoilplot.ts`, Debug › Recoil pattern plot): every round of the current pull, in degrees from the aim at the first shot. It shows pattern, spread and the player's compensation.
+- `Game` has `init` (load), `begin` (session: optional teleport to the player start, an enemy at a spawn marker, the gun shown) and `end` (enemies, casings, decals, traces and lights cleared, the gun hidden).
+- The editor's play mode (F5) now runs the game layer:
+  - it is loaded in the background at editor start; a session begins on Play and ends on Stop, and the map stays clean;
+  - a Gameplay tab holds the same tuning panel;
+  - the crosshair, readout and plot overlay the viewport only.
+- Controls hints updated (play page and editor).
+
+Panel summary (play page right column, editor Gameplay tab):
+- Player: look, movement, jump / crouch, camera feel, body.
+- Weapon: fire, spread, recoil, view punch, weapon kick, viewmodel motion (offset / rotation / pivot / crouch / sprint vectors), mechanics.
+- Enemy: health, movement, hit reactions, region damage, attack; AI on/off, hitboxes, spawn / remove.
+- Audio.
+- Debug: time scale, FPS cap, readout, traces, decals, crosshair spread, hit marker, recoil plot, spawn, fly, frame-rate test.
+
+Every config folder has Save (writes `public/game/*.json`), Revert to file and Code defaults. Values that differ from the file are marked •.
+
 ## 7. Known limits to carry into G2
 
 Written up as G1 progresses: skinning and clips, navigation, enemy broadphase (spatial hash),

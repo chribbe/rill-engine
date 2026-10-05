@@ -286,7 +286,10 @@ export class TuningPanel {
       get hitMarker() { return g.crosshair?.hitMarker ?? false; },
       set hitMarker(v: boolean) { if (g.crosshair) g.crosshair.hitMarker = v; },
       clear: () => g.resetEffects(),
+      get plot() { return g.recoilPlot?.visible ?? false; },
+      set plot(v: boolean) { if (g.recoilPlot) g.recoilPlot.visible = v; },
     };
+    f.add(dbg, 'plot').name('Recoil pattern plot');
     f.add(dbg, 'traces').name('Shot traces');
     f.add(dbg, 'decals').name('Bullet decals');
     f.add(dbg, 'spreadTicks').name('Crosshair spread');

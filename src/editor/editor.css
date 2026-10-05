@@ -229,3 +229,6 @@ input[type='color'] { width: 30px; height: 22px; padding: 0 2px; }
 .prefabbar .pb-sub { color: #a99bc9; font-size: 11px; }
 .insp-actions { display: flex; gap: 6px; padding: 4px 8px 6px; }
 .insp-actions button { font-size: 11px; }
+/* Gameplay tab: the game's tuning panel (lil-gui), embedded like the environment panel. */
+.ed-game-panel { overflow: auto; height: 100%; }
+.ed-game-panel .lil-gui { --width: 100%; width: 100% !important; max-width: 560px; --font-size: 11px; --widget-height: 18px; --background-color: var(--panel); position: static; }

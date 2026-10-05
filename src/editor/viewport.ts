@@ -1168,7 +1168,7 @@ export class Viewport {
     g.textBaseline = 'top';
     const lines: string[] = [];
     if (ed.mode === 'play') {
-      lines.push(document.pointerLockElement ? 'PLAY  ·  WASD move · Shift run · Space jump · F fly · L flashlight · X weapon · Esc release mouse' : 'PLAY  ·  click the view to capture the mouse · F5 or Esc to stop');
+      lines.push(document.pointerLockElement ? 'PLAY  ·  WASD move · Shift sprint · C crouch · Space jump · LMB fire · R reload · L flashlight · F fly · Esc release mouse' : 'PLAY  ·  click the view to capture the mouse · F5 or Esc to stop');
     } else {
       const c = ed.rt.camera.position;
       lines.push(`${ed.tool.toUpperCase()}  ${ed.space}  snap ${ed.snap.enabled ? `${ed.snap.grid} m / ${ed.snap.angle}°` : 'off'}   cam ${c[0].toFixed(1)} ${c[1].toFixed(1)} ${c[2].toFixed(1)}  ${this.flySpeed.toFixed(0)} m/s`);

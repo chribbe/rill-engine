@@ -14,6 +14,7 @@ import { ToolOptions } from './ui/tooloptions';
 import { PrefabBar } from './ui/prefabbar';
 import { AiLayer } from './ai';
 import { AiPanel } from './ui/aipanel';
+import { Game } from '../game/game';
 
 /**
  * Editor entry (index.html): the game runtime with the editor on top. The
@@ -76,11 +77,26 @@ async function main() {
     try { localStorage.setItem(camKey, JSON.stringify({ p: Array.from(c.position), yaw: c.yaw, pitch: c.pitch })); } catch { /* ignore */ }
   }, 1500);
 
+  // Game layer for play mode: loaded in the background, a session per Play (enemies, weapon, effects).
+  const gamePanel = h('div', { class: 'ed-game-panel' });
+  slots.addTab('Gameplay', gamePanel);
+  const game = new Game(rt);
+  game.init({ panel: gamePanel, overlay: slots.view }).then(() => game.end()).catch((e) => console.warn('[game] unavailable in the editor:', e));
+  ed.on('mode', () => {
+    if (ed.mode === 'play' && game.ready) game.begin();
+    else if (ed.mode !== 'play' && game.active) game.end();
+  });
+
   rt.hooks.update = (dt) => {
     if (ed.mode === 'play') {
-      rt.player.update(dt);
-      rt.world.update(dt, rt.player.feet);
-      rt.sandbox.update(dt);
+      if (game.ready) {
+        if (!game.active) game.begin();
+        game.update(dt);
+      } else {
+        rt.player.update(dt);
+        rt.world.update(dt, rt.player.feet);
+        rt.sandbox.update(dt);
+      }
     } else {
       vp.updateCamera(dt);
       rt.renderer.particles.update(dt);
@@ -102,6 +118,7 @@ async function main() {
 
   (window as unknown as { rill: unknown }).rill = {
     ...rt.api,
+    game,
     editor: { ed, vp, tools, bridge, ai, call: tools.call.bind(tools), exec: ed.exec.bind(ed), list: tools.list.bind(tools) },
   };
   await rt.prewarm();

@@ -14,7 +14,7 @@ export class Crosshair {
 
   constructor(parent: HTMLElement = document.body) {
     this.el = document.createElement('div');
-    Object.assign(this.el.style, { position: 'fixed', left: '50%', top: '50%', width: '0', height: '0', pointerEvents: 'none', zIndex: '5' });
+    Object.assign(this.el.style, { position: 'absolute', left: '50%', top: '50%', width: '0', height: '0', pointerEvents: 'none', zIndex: '5' });
     const dot = document.createElement('div');
     Object.assign(dot.style, { position: 'absolute', left: '-1.5px', top: '-1.5px', width: '3px', height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.8)', boxShadow: '0 0 1px rgba(0,0,0,0.6)' });
     this.el.append(dot);

@@ -19,6 +19,7 @@ import type { Enemy } from './enemy/enemy';
 import { TuningPanel } from './ui/panel';
 import { DebugHud } from './ui/hud';
 import { Crosshair } from './ui/crosshair';
+import { RecoilPlot } from './ui/recoilplot';
 
 /** Last shot's result, for the debug readout. */
 export interface HitInfo {
@@ -58,6 +59,7 @@ export class Game {
   panel: TuningPanel | null = null;
   hud: DebugHud | null = null;
   crosshair: Crosshair | null = null;
+  recoilPlot: RecoilPlot | null = null;
   /** Draw shot traces, normals and hit points. */
   showTraces = false;
   lastHit: HitInfo | null = null;
@@ -80,7 +82,7 @@ export class Game {
     this.enemies = new Enemies(rt.renderer, rt.world, this.hitscan, this.enemyConfig.data);
   }
 
-  async init(opts: { panel?: HTMLElement } = {}) {
+  async init(opts: { panel?: HTMLElement; overlay?: HTMLElement } = {}) {
     const { rt } = this;
     const impacts = fetch('/game/impacts.json', { cache: 'no-store' }).then((r) => r.json() as Promise<ImpactTable>);
     await Promise.all([this.playerConfig.load(), this.weaponConfig.load(), this.enemyConfig.load(), this.viewmodel.load(), this.shells.load(), this.audio.init(rt.gpu.canvas)]);
@@ -111,15 +113,57 @@ export class Game {
       e.onStrike.push((en) => this.onStrike(en));
       e.onBodyLand.push((en, pos, speed) => this.onBodyLand(en, pos, speed));
     });
-    if (opts.panel) {
-      this.panel = new TuningPanel(this, opts.panel);
-      this.hud = new DebugHud(this);
-      this.crosshair = new Crosshair();
-      document.getElementById('crosshair')?.remove();
+    if (opts.panel) this.panel = new TuningPanel(this, opts.panel);
+    // Overlays (crosshair, readout, recoil plot) centre on `overlay` (positioned), default the page.
+    const overlay = opts.overlay ?? document.body;
+    this.hud = new DebugHud(this, overlay);
+    this.crosshair = new Crosshair(overlay);
+    this.recoilPlot = new RecoilPlot(overlay);
+    document.getElementById('crosshair')?.remove();
+    this.ready = true;
+  }
+
+  /** Loaded and initialised (`init` finished). */
+  ready = false;
+  /** A play session is running (enemies, effects). */
+  active = false;
+
+  /**
+   * Starts a play session: optional teleport to the map's player start, an
+   * enemy at a spawn marker, the weapon shown.
+   */
+  begin(opts: { toSpawn?: boolean } = {}) {
+    const { rt } = this;
+    if (opts.toSpawn) {
+      const sp = rt.world.spawn();
+      rt.player.fly = false;
+      rt.player.teleport(sp.position, sp.yaw, sp.pitch);
     }
-    const sp = rt.world.spawn();
-    rt.player.teleport(sp.position, sp.yaw, sp.pitch);
+    rt.world.ensureCollision();
+    this.weapon.reset();
+    this.recoil.reset(rt.camera);
+    this.viewmodel.reset();
+    this.viewmodel.visible = true;
+    this.clock.reset();
+    this.enemies.clear();
     this.enemies.spawn(rt.player);
+    if (this.crosshair) this.crosshair.visible = true;
+    if (this.hud) this.hud.el.style.visibility = '';
+    this.active = true;
+  }
+
+  /** Ends the session: enemies, casings, decals, traces, lights cleared; the gun hidden. */
+  end() {
+    const { rt } = this;
+    this.active = false;
+    this.enemies.clear();
+    this.resetEffects();
+    this.viewmodel.hide();
+    this.recoil.reset(rt.camera);
+    rt.renderer.dynamicLights = [];
+    if (this.crosshair) { this.crosshair.visible = false; this.crosshair.el.style.display = 'none'; }
+    if (this.hud) this.hud.el.style.visibility = 'hidden';
+    if (this.recoilPlot) this.recoilPlot.el.style.display = 'none';
   }
 
   /**
@@ -181,6 +225,7 @@ export class Game {
   }
 
   private onShot(e: ShotEvent) {
+    this.recoilPlot?.shot(e, this.rt.camera.yaw, this.rt.camera.pitch);
     this.recoil.onShot(e.burstIndex);
     this.viewmodel.onShot(e);
     const st = this.audio.shotTime(e.time, this.weapon.interval);
@@ -267,6 +312,7 @@ export class Game {
     this.crosshair?.update(sdt, this.weapon.spread(player), camera.fovY, this.rt.gpu.canvas.clientHeight || window.innerHeight, this.recoil.punch);
     this.simMs = performance.now() - t0;
     this.hud?.update();
+    this.recoilPlot?.update();
   };
 
   private drawHitboxes() {
