@@ -6,6 +6,7 @@ import { Gizmo, type Handle } from './gizmo';
 import { Picker, viewRay, type PickHit, type Ray } from './picking';
 import { applyDelta, type Q4, type V3 } from './xform';
 import { decalRotation } from './commands';
+import { BlockTool } from './blocktool';
 
 /**
  * The editor viewport: the runtime's WebGPU canvas plus a 2D overlay canvas
@@ -22,13 +23,16 @@ export class Viewport {
   private g: CanvasRenderingContext2D;
   readonly picker: Picker;
   readonly gizmo = new Gizmo();
+  readonly blocks: BlockTool;
   private keys = new Set<string>();
   private looking = false;
   private panning = false;
   private orbiting: { pivot: V3; dist: number } | null = null;
   private lastMouse: [number, number] = [0, 0];
   private down: { x: number; y: number; button: number; moved: boolean } | null = null;
-  private gesture: { key: string; starts: Map<string, Transform>; label: string } | null = null;
+  private gesture: { key: string; starts: Map<string, Transform>; label: string; anchor?: V3; ignore?: Set<string> } | null = null;
+  /** Box selection (left-drag on empty space / without a handle), viewport CSS pixels. */
+  private marquee: { x0: number; y0: number; x1: number; y1: number } | null = null;
   private dropHit: PickHit | null = null;
   private painting: { id: string; key: string; last: [number, number] } | null = null;
   private pointDrag: { id: string; index: number; key: string; moved: boolean } | null = null;
@@ -46,6 +50,7 @@ export class Viewport {
     host.appendChild(this.overlay);
     this.g = this.overlay.getContext('2d')!;
     this.picker = new Picker(ed);
+    this.blocks = new BlockTool(this, ed);
     this.bind();
   }
 
@@ -87,10 +92,14 @@ export class Viewport {
     o.addEventListener('lostpointercapture', (e) => { if (e.buttons === 0) this.resetDrags(); });
     o.addEventListener('dblclick', (e) => {
       const hit = this.pickAt(e.offsetX, e.offsetY);
-      if (hit) {
-        this.ed.select(hit.id);
-        this.focus();
+      if (!hit) return;
+      // A prefab instance opens for editing in place; anything else is framed.
+      if (this.ed.scene.get(hit.id)?.type === 'prefab' && this.ed.tool !== 'block') {
+        void this.ed.prefabs.open(hit.id);
+        return;
       }
+      this.ed.select(hit.id);
+      this.focus();
     });
     o.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
     o.addEventListener('dragover', (e) => {
@@ -109,7 +118,12 @@ export class Viewport {
       if (asset) this.placeAt(asset, e.offsetX, e.offsetY);
       else if (material) {
         const hit = this.picker.pick(this.ray(e.offsetX, e.offsetY), { meshesOnly: true, includeLocked: false });
-        if (hit?.slot) {
+        if (hit?.face && this.ed.scene.get(hit.id)?.type === 'block') {
+          // Blocks: the face it lands on (Shift: the whole block).
+          this.ed.tryExec('set_block_material', { ids: [hit.id], ...(e.shiftKey ? {} : { face: hit.face }), material });
+          this.ed.select(hit.id);
+          if (!e.shiftKey) this.showHint('Material on one face · Shift-drop paints the whole block');
+        } else if (hit?.slot) {
           this.ed.tryExec('assign_material', { ids: [hit.id], slot: hit.slot, material });
           this.ed.select(hit.id);
         } else this.showHint('Drop materials onto an (unlocked) mesh');
@@ -150,6 +164,7 @@ export class Viewport {
       return;
     }
     if (this.ed.placing) return;
+    if (this.blocks.down(e)) return;
     if (this.ed.tool === 'paint') {
       this.beginPaint(e);
       return;
@@ -184,6 +199,9 @@ export class Viewport {
     }
     const h = this.gizmoVisible() ? this.gizmo.hit(e.offsetX, e.offsetY) : null;
     if (h) this.beginGizmo(h, e);
+    else if (this.ed.tool === 'select' || this.ed.tool === 'translate' || this.ed.tool === 'rotate' || this.ed.tool === 'scale') {
+      this.marquee = { x0: e.offsetX, y0: e.offsetY, x1: e.offsetX, y1: e.offsetY };
+    }
   }
 
   // ------------------------------------------------------------------ scatter painting
@@ -348,6 +366,8 @@ export class Viewport {
     this.pointDrag = null;
     this.stamping = null;
     this.sculpting = null;
+    this.marquee = null;
+    this.blocks.cancel();
     if (this.gizmo.dragging) this.endGizmo();
   }
 
@@ -381,6 +401,7 @@ export class Viewport {
       for (let i = 0; i < 3; i++) cam.position[i] = o.pivot[i] - f[i] * o.dist;
       return;
     }
+    if (this.ed.mode === 'edit' && this.blocks.move(e)) return;
     if (this.painting) {
       if (!(e.buttons & 1)) this.painting = null;
       else this.movePaint(e);
@@ -420,6 +441,12 @@ export class Viewport {
       this.updateGizmo(e);
       return;
     }
+    if (this.marquee) {
+      if (!(e.buttons & 1)) { this.marquee = null; return; }
+      this.marquee.x1 = x;
+      this.marquee.y1 = y;
+      return;
+    }
     if (this.ed.mode === 'edit' && this.gizmoVisible() && !this.down) this.gizmo.hover = this.gizmo.hit(x, y);
   }
 
@@ -434,6 +461,7 @@ export class Viewport {
     }
     if (e.button === 1) { this.panning = false; return; }
     if (this.orbiting) { this.orbiting = null; return; }
+    if (e.button === 0 && this.ed.mode === 'edit' && this.blocks.up(e)) return;
     if (this.gizmo.dragging) {
       this.endGizmo();
       return;
@@ -456,6 +484,12 @@ export class Viewport {
     if (this.sculpting) {
       this.sculpting = null;
       this.ed.history.seal();
+      return;
+    }
+    const mq = this.marquee;
+    this.marquee = null;
+    if (mq && d?.moved && e.button === 0) {
+      this.boxSelect(mq, e.shiftKey ? 'add' : e.ctrlKey || e.metaKey ? 'remove' : 'set');
       return;
     }
     if (e.button !== 0 || !d || d.moved || this.ed.mode !== 'edit') return;
@@ -532,6 +566,7 @@ export class Viewport {
       return;
     }
     if (mod) return;
+    if (this.blocks.key(e)) return;
     switch (e.code) {
       case 'KeyQ': ed.tool = 'select'; ed.emit('tool'); break;
       case 'KeyW': ed.tool = 'translate'; ed.emit('tool'); break;
@@ -541,7 +576,8 @@ export class Viewport {
       case 'KeyT': ed.tool = 'decal'; ed.pick.decals = true; ed.emit('tool'); this.showHint(`Decal ${ed.decalTool.material}: click a surface · drag to paint · [ ] size`, 3000); break;
       case 'KeyN': ed.tool = 'spline'; ed.emit('tool'); this.showHint(`Spline ${ed.splineTool.preset}: click points on the ground · Enter / Esc finishes`, 3000); break;
       case 'Enter': if (ed.tool === 'spline') { this.finishSpline(); this.showHint('Spline finished'); } break;
-      case 'KeyB': ed.tool = 'paint'; ed.emit('tool'); this.showHint(`Paint ${ed.brush.preset}: drag on the ground · Shift erases · [ ] brush size`, 3000); break;
+      case 'KeyB': ed.tool = 'block'; ed.emit('tool'); this.showHint(ed.blockTool.mode === 'opening' ? 'Openings: click a wall · O draws blocks' : `Block ${ed.blockTool.shape}: drag a footprint on any surface, then the height · 1-5 shapes · O openings`, 3500); break;
+      case 'KeyP': ed.tool = 'paint'; ed.emit('tool'); this.showHint(`Paint ${ed.brush.preset}: drag on the ground · Shift erases · [ ] brush size`, 3000); break;
       case 'KeyX': ed.space = ed.space === 'world' ? 'local' : 'world'; ed.emit('tool'); this.showHint(`Gizmo axes: ${ed.space}`); break;
       case 'KeyF': this.focus(); break;
       case 'KeyH': if (ed.selection.length) ed.tryExec('set_visibility', { ids: ed.selection, visible: false }); break;
@@ -572,7 +608,8 @@ export class Viewport {
         } else ed.tryExec('delete_entity', { ids: ed.selectionRoots });
         break;
       case 'Escape':
-        if (ed.tool === 'spline' && (ed.splineTool.drawing || ed.splineTool.pending)) this.finishSpline();
+        if (ed.tool === 'block' && ed.blockTool.mode === 'opening') { ed.blockTool.mode = 'draw'; ed.emit('tool'); }
+        else if (ed.tool === 'spline' && (ed.splineTool.drawing || ed.splineTool.pending)) this.finishSpline();
         else if (ed.placing) { ed.placing = null; ed.emit('tool'); }
         else ed.setSelection([]);
         break;
@@ -655,6 +692,12 @@ export class Viewport {
       pos = [r.o[0] + r.d[0] * 15, r.o[1] + r.d[1] * 15, r.o[2] + r.d[2] * 15];
     }
     if (ed.snap.enabled) pos = [Math.round(pos[0] / ed.snap.grid) * ed.snap.grid, pos[1], Math.round(pos[2] / ed.snap.grid) * ed.snap.grid];
+    if (asset.startsWith('prefab:')) {
+      const yaw = ed.snap.enabled ? 0 : undefined;
+      const r = ed.tryExec<{ id: string }>('place_prefab', { prefab: asset.slice(7), position: pos.map((v) => Math.round(v * 1000) / 1000), ...(yaw ? { yaw } : {}) });
+      if (r) ed.select(r.id);
+      return;
+    }
     const tpl = ENTITY_TEMPLATES[asset];
     if (tpl) {
       const ent = tpl(pos, ed);
@@ -673,11 +716,39 @@ export class Viewport {
     if (r) ed.select(r.id);
   }
 
+  /** Selects what lies entirely inside a screen rectangle (helpers: their icon point). */
+  private boxSelect(r: { x0: number; y0: number; x1: number; y1: number }, how: 'set' | 'add' | 'remove') {
+    const ed = this.ed;
+    const x0 = Math.min(r.x0, r.x1), x1 = Math.max(r.x0, r.x1), y0 = Math.min(r.y0, r.y1), y1 = Math.max(r.y0, r.y1);
+    const inside = (p: ArrayLike<number>) => { const q = this.project(p); return !!q && q[0] >= x0 && q[0] <= x1 && q[1] >= y0 && q[1] <= y1; };
+    const P = ed.pick;
+    const out: string[] = [];
+    for (const e of ed.scene.entities) {
+      if (!isSpatial(e) || e.type === 'scatter' || !ed.scene.effectiveVisible(e.id) || ed.scene.effectiveLocked(e.id)) continue;
+      const helper = { light: P.lights, marker: P.markers, decal: P.decals, sign: P.signs, reflectionProbe: P.probes, probeVolume: P.probes } as Record<string, boolean>;
+      if (e.type in helper) {
+        if (helper[e.type] && inside(e.transform.position)) out.push(e.id);
+        continue;
+      }
+      if (!P.meshes) continue;
+      const b = ed.boundsOf(e.id, false);
+      if (!b) continue;
+      let all = true;
+      for (let i = 0; i < 8 && all; i++) all = inside([i & 1 ? b.max[0] : b.min[0], i & 2 ? b.max[1] : b.min[1], i & 4 ? b.max[2] : b.min[2]]);
+      if (all) out.push(e.id);
+    }
+    if (how === 'set') ed.setSelection(out);
+    else if (how === 'add') ed.setSelection([...ed.selection, ...out]);
+    else ed.setSelection(ed.selection.filter((id) => !out.includes(id)));
+    this.showHint(`${out.length} in the box${how === 'add' ? ' added' : how === 'remove' ? ' removed' : ''} · Shift adds · Cmd/Ctrl removes`);
+  }
+
   // ------------------------------------------------------------------ gizmo
 
   gizmoVisible() {
     const ed = this.ed;
-    if (ed.mode !== 'edit' || ed.tool === 'select' || ed.tool === 'paint' || ed.tool === 'spline' || ed.tool === 'decal' || ed.tool === 'sculpt' || !ed.selection.length) return false;
+    if (ed.mode !== 'edit' || ed.tool === 'select' || ed.tool === 'block' || ed.tool === 'paint' || ed.tool === 'spline' || ed.tool === 'decal' || ed.tool === 'sculpt' || !ed.selection.length) return false;
+    if (this.blocks.replacesGizmo()) return false;
     return ed.selectionRoots.some((id) => !ed.scene.effectiveLocked(id));
   }
 
@@ -710,17 +781,40 @@ export class Viewport {
   }
 
   private beginGizmo(h: Handle, e: PointerEvent) {
-    const targets = this.dragTargets();
-    if (!targets.length) return;
+    const ed = this.ed;
+    if (!this.dragTargets().length) return;
     if (!this.gizmo.begin(h, this.ray(e.offsetX, e.offsetY), e.offsetX, e.offsetY)) return;
+    const key = `gizmo:${performance.now()}`;
+    const n = ed.selectionRoots.length;
+    const what = n === 1 ? ed.primary?.name ?? ed.primary?.id : `${n} entities`;
+    let verb = { translate: 'Move', rotate: 'Rotate', scale: 'Scale' }[ed.tool as 'translate' | 'rotate' | 'scale'] ?? 'Transform';
+    // Shift+drag: drag a copy (one undo step with the move).
+    if (e.shiftKey) {
+      const r = ed.tryExec<{ ids: string[] }>('duplicate_entity', { ids: ed.selectionRoots }, { merge: key, label: `Duplicate ${what}` });
+      if (!r) { this.gizmo.end(); return; }
+      ed.setSelection(r.ids);
+      verb = 'Duplicate';
+    }
+    const targets = this.dragTargets();
     const starts = new Map<string, Transform>();
     for (const id of targets) {
-      const ent = this.ed.scene.get(id);
+      const ent = ed.scene.get(id);
       if (ent && isSpatial(ent)) starts.set(id, structuredClone(ent.transform));
     }
-    const verb = { translate: 'Move', rotate: 'Rotate', scale: 'Scale' }[this.ed.tool as 'translate' | 'rotate' | 'scale'] ?? 'Transform';
-    const n = this.ed.selectionRoots.length;
-    this.gesture = { key: `gizmo:${performance.now()}`, starts, label: `${verb} ${n === 1 ? this.ed.primary?.name ?? this.ed.primary?.id : `${n} entities`}` };
+    this.gesture = { key, starts, label: `${verb} ${what}` };
+    // The centre square of the move gizmo slides the selection over the surfaces under the cursor.
+    if (h.kind === 'center' && ed.tool === 'translate') {
+      const ignore = new Set<string>();
+      let minY = Infinity;
+      for (const id of ed.selectionRoots) {
+        for (const d of [id, ...ed.scene.descendants(id)]) ignore.add(d);
+        const b = ed.boundsOf(id);
+        if (b) minY = Math.min(minY, b.min[1]);
+      }
+      const f = this.gizmoFrame();
+      if (f) this.gesture.anchor = [f.origin[0], Number.isFinite(minY) ? minY : f.origin[1], f.origin[2]];
+      this.gesture.ignore = ignore;
+    }
   }
 
   private updateGizmo(e: PointerEvent) {
@@ -728,7 +822,19 @@ export class Viewport {
     if (!g) return;
     const ed = this.ed;
     const doSnap = ed.snap.enabled !== (e.ctrlKey || e.metaKey);
-    const r = this.gizmo.update(this.ray(e.offsetX, e.offsetY), e.offsetX, e.offsetY, doSnap, ed.snap);
+    let r = this.gizmo.update(this.ray(e.offsetX, e.offsetY), e.offsetX, e.offsetY, doSnap, ed.snap);
+    if (g.anchor && g.ignore) {
+      // Surface drag: the selection's base lands on what is under the cursor.
+      const hit = this.surfaceAt(e.offsetX, e.offsetY, g.ignore);
+      if (hit) {
+        const a = g.anchor, gs = ed.snap.grid;
+        let dx = hit.point[0] - a[0], dz = hit.point[2] - a[2];
+        if (doSnap) { dx = Math.round(dx / gs) * gs; dz = Math.round(dz / gs) * gs; }
+        const dy = hit.point[1] - a[1];
+        const on = ed.rt.world.entityOf(hit.inner ?? hit.id);
+        r = { D: mat4.translation([dx, dy, dz]), info: `on ${on?.name ?? hit.id} · Δ ${dx.toFixed(2)}, ${dy.toFixed(2)}, ${dz.toFixed(2)} m` };
+      }
+    }
     if (!r) return;
     const transforms: Record<string, Transform> = {};
     for (const [id, t] of g.starts) transforms[id] = applyDelta(r.D, t);
@@ -1032,6 +1138,19 @@ export class Viewport {
         if (c) { g.fillStyle = erase ? '#ff6b6b' : '#5be37d'; g.fillRect(c[0] - 2, c[1] - 2, 4, 4); }
       }
     }
+    if (this.marquee && this.down?.moved) {
+      const m = this.marquee;
+      g.fillStyle = 'rgba(255,138,31,0.08)';
+      g.fillRect(Math.min(m.x0, m.x1), Math.min(m.y0, m.y1), Math.abs(m.x1 - m.x0), Math.abs(m.y1 - m.y0));
+      g.strokeStyle = 'rgba(255,138,31,0.9)';
+      g.lineWidth = 1;
+      g.setLineDash([4, 3]);
+      g.strokeRect(Math.min(m.x0, m.x1) + 0.5, Math.min(m.y0, m.y1) + 0.5, Math.abs(m.x1 - m.x0), Math.abs(m.y1 - m.y0));
+      g.setLineDash([]);
+    }
+    // Blockout: drawing preview, openings, face handles; material drops highlight the block face.
+    this.blocks.draw(g, (a, b) => line(a, b));
+    if (this.dropHit?.face) this.blocks.drawFace(g, line, this.dropHit.inner ?? this.dropHit.id, this.dropHit.face, 'rgba(255,210,63,0.9)');
     // Gizmo.
     if (this.gizmoVisible()) {
       const f = this.gizmoFrame();
@@ -1066,7 +1185,10 @@ export class Viewport {
         const t = this.paintTarget();
         lines.push(`PAINT ${t ? `into ${ed.scene.get(t)?.name ?? t}` : `new ${ed.brush.preset} scatter`} · radius ${ed.brush.radius} m ([ ]) · ${ed.brush.erase ? 'erase (Shift paints)' : 'Shift erases'}`);
       }
+      const bh = this.blocks.hud();
+      if (bh) lines.push(bh);
       if (this.info) lines.push(this.info);
+      if (this.blocks.info) lines.push(this.blocks.info);
     }
     if (performance.now() < this.hintUntil) lines.push(this.hint);
     let y = 8;

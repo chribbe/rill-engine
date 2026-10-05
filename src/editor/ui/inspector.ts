@@ -2,6 +2,8 @@ import { isSpatial, type Entity, type SpatialEntity, type Transform } from '../.
 import { transformMatrix } from '../../engine/scene/world';
 import type { Editor } from '../editor';
 import { editableProperties } from '../commands';
+import { BLOCK_MATERIAL, FACE_LABELS, faceIds } from '../../engine/scene/blocks';
+import { blockFrame } from '../blockedit';
 import { eulerToQuat, quatToEuler, type V3 } from '../xform';
 import { checkbox, clear, h, ICONS, numberField, select, textField } from './dom';
 
@@ -68,6 +70,11 @@ export class Inspector {
       row('Parent', h('span', { class: 'insp-ro' }, e.parent ? `${ed.scene.get(e.parent)?.name ?? e.parent}` : '—')),
       row('', checkbox(e.visible !== false, (v) => ed.tryExec('set_visibility', { ids, visible: v }), 'Visible'), checkbox(e.locked === true, (v) => ed.tryExec('set_locked', { ids, locked: v }), 'Locked', 'Not pickable in the viewport; transforms and delete refused')),
     );
+
+    if (!ed.prefabs.session) {
+      this.body.append(h('div', { class: 'insp-actions' },
+        h('button', { title: 'Save the selection (with children) as a reusable prefab and replace it by an instance', onclick: () => this.saveAsPrefab() }, ids.length > 1 ? `Save ${ids.length} as prefab…` : 'Save as prefab…')));
+    }
 
     if (isSpatial(e)) this.transformSection(e, sec, row);
 
@@ -155,7 +162,7 @@ export class Inspector {
           row('Slope max', this.num('°', sc.slopeMax ?? 40, 0.5, 1, (v, m) => this.prop([e.id], 'scatter.slopeMax', Math.max(1, Math.min(89, v)), m))),
           row('On', textField((sc.surfaces ?? ['terrain']).join(', '), (v) => set('scatter.surfaces', v.trim() ? v.split(',').map((x) => x.trim()).filter(Boolean) : null), { placeholder: 'ground semantics, e.g. terrain' })),
           row('', h('span', { class: 'insp-ro small' }, `${n} instances · ${brush.length} brush circles${sc.area ? ' · area polygon' : ''} · ${sc.exclude?.length ?? 0} removed${rto?.scatter ? ` · ${rto.scatter.ms.toFixed(1)} ms` : ''}`)),
-          row('', h('button', { onclick: () => { ed.tool = 'paint'; ed.emit('tool'); } }, 'Paint (B)'),
+          row('', h('button', { onclick: () => { ed.tool = 'paint'; ed.emit('tool'); } }, 'Paint (P)'),
             h('button', { disabled: !brush.length, onclick: () => set('scatter.brush', null) }, 'Clear brush'),
             h('button', { disabled: !sc.exclude?.length, onclick: () => set('scatter.exclude', null) }, 'Restore removed')),
           row('', h('button', { title: 'Replace the scatter by ordinary mesh entities (hand placement)', onclick: () => ed.tryExec('scatter_detach', { id: e.id }) }, 'Convert to entities')),
@@ -207,6 +214,12 @@ export class Inspector {
         );
         break;
       }
+      case 'block':
+        this.blockSection(e, sameType, sec, row, set);
+        break;
+      case 'prefab':
+        this.prefabSection(e, sec, row);
+        break;
       case 'group': {
         const n = ed.scene.descendants(e.id).length;
         sec('Group', row('Members', h('span', { class: 'insp-ro' }, `${ed.scene.children(e.id).length} children, ${n} descendants`)),
@@ -305,6 +318,86 @@ export class Inspector {
       return h('div', { class: 'insp-mat' }, h('div', { class: 'insp-mat-slot', title: `slot ${slot}` }, slot, ov !== undefined ? h('span', { class: 'ov' }, ' • override') : ''), h('div', { class: 'insp-mat-row' }, input, ci, reset));
     });
     sec('Materials', ...rows, h('div', { class: 'insp-note' }, 'Tip: drag a material from the Materials tab onto a surface in the view.'));
+  }
+
+  private async saveAsPrefab() {
+    const ed = this.ed;
+    const first = ed.primary;
+    const guess = (first?.name ?? first?.id ?? 'prefab').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'prefab';
+    const name = prompt('Prefab name (letters, digits, _ and -). It is saved to public/prefabs/<name>.json and the selection becomes an instance of it.', guess)?.trim();
+    if (!name) return;
+    try {
+      await ed.prefabs.create(name);
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg.includes('exists') && confirm(`A prefab '${name}' exists. Replace it? (Every instance of it changes.)`)) {
+        try { await ed.prefabs.create(name, { overwrite: true }); } catch (e2) { ed.log('error', `Save as prefab: ${(e2 as Error).message}`); }
+      } else ed.log('error', `Save as prefab: ${msg}`);
+    }
+  }
+
+  private materialInput(value: string, apply: (v: string) => void, placeholder = '') {
+    const ed = this.ed;
+    const input = h('input', { type: 'text', list: 'rill-materials', value, placeholder, title: 'Material (type to search; Enter to apply)' }) as HTMLInputElement;
+    const go = () => {
+      const v = input.value.trim();
+      if (!v || v === value) return;
+      if (!ed.materials.some((m) => m.name === v)) { ed.log('warn', `No material '${v}'`); return; }
+      apply(v);
+    };
+    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') go(); ev.stopPropagation(); });
+    input.addEventListener('change', go);
+    return input;
+  }
+
+  private blockSection(e: Extract<Entity, { type: 'block' }>, sameType: string[], sec: (t: string, ...r: (HTMLElement | null | false)[]) => void, row: (l: string, ...f: (HTMLElement | string)[]) => HTMLElement, set: (k: string, v: unknown) => void) {
+    const ed = this.ed;
+    const b = e.block;
+    const f = blockFrame(e);
+    const build = ed.rt.world.objects.get(e.id)?.block?.build;
+    const blk = (p: Record<string, unknown>, merge?: string) => ed.tryExec('set_block', { ids: sameType, ...p }, merge ? { merge, label: 'Block' } : {});
+    const shapes = ['box', 'wedge', 'stairs', 'cylinder'];
+    const names: Record<string, string> = { box: 'Box', wedge: 'Ramp (wedge)', stairs: 'Stairs', cylinder: 'Pillar (cylinder)' };
+    const baked = ed.rt.world.lightmaps?.doc.objects[e.id];
+    sec('Block',
+      row('Shape', select(shapes, b.shape, (v) => blk({ shape: v }), names)),
+      row('Size', ...[0, 1, 2].map((k) => this.num(['w', 'h', 'd'][k], f.size[k], 0.05, 3, (v, m) => { const sz = [...f.size]; sz[k] = Math.max(0.01, v); ed.tryExec('set_block', { ids: [e.id], size: sz }, m ? { merge: m, label: 'Resize block' } : {}); }))),
+      b.shape === 'stairs' ? row('Steps', this.num('', b.steps ?? Math.max(1, Math.round(f.size[1] / 0.17)), 1, 0, (v, m) => blk({ steps: Math.max(1, Math.round(v)) }, m)),
+        h('button', { class: 'mini', title: 'Steps from the height (17 cm risers)', onclick: () => ed.tryExec('fit_stairs', { id: e.id }) }, 'Fit'),
+        h('span', { class: 'insp-ro small' }, ` rise ${((f.size[1] / (b.steps ?? Math.max(1, Math.round(f.size[1] / 0.17)))) * 100).toFixed(1)} cm`)) : null,
+      b.shape === 'cylinder' ? row('Sides', this.num('', b.segments ?? 16, 1, 0, (v, m) => blk({ segments: Math.max(6, Math.min(64, Math.round(v))) }, m))) : null,
+      row('', checkbox(e.static ?? true, (v) => set('static', v), 'Static'), checkbox(e.castShadow ?? true, (v) => set('castShadow', v), 'Shadows'), checkbox(e.collision ?? e.static ?? true, (v) => set('collision', v), 'Collision')),
+      row('Lighting', h('span', { class: 'insp-ro small' }, `${(e.static ?? true) ? 'lightmapped' : 'probe lit (not static)'}${build ? ` · ${build.lightmapResolution.join('×')} texels` : ''}${(e.static ?? true) ? (baked ? (ed.rt.world.lightingStale ? ' · changed since the bake' : ' · baked') : ' · not baked yet') : ''}`)),
+    );
+    const faces = faceIds(b.shape);
+    const own = b.material ?? BLOCK_MATERIAL;
+    sec('Faces',
+      row('All', this.materialInput(own, (v) => ed.tryExec('set_block_material', { ids: sameType, material: v }))),
+      ...faces.map((fid) => row(FACE_LABELS[fid] ?? fid,
+        this.materialInput(b.faces?.[fid] ?? '', (v) => ed.tryExec('set_block_material', { ids: [e.id], face: fid, material: v }), own),
+        h('button', { class: 'mini', title: 'Back to the block material', disabled: !b.faces?.[fid], onclick: () => ed.tryExec('set_block_material', { ids: [e.id], face: fid, material: null }) }, '↺'))),
+      h('div', { class: 'insp-note' }, 'Drag a material onto a face in the view (Shift: whole block). Textures are world-aligned, so neighbouring blocks continue seamlessly.'),
+    );
+    sec('Blockout',
+      row('', h('button', { disabled: b.shape !== 'box', title: 'Floor, walls and ceiling (0.2 m) in a group', onclick: () => { const r = ed.tryExec<{ group: string }>('hollow_block', { id: e.id }); if (r) ed.select(r.group); } }, 'Hollow into room'),
+        h('button', { title: 'Cut doors / windows: Block tool, openings (O)', onclick: () => { ed.tool = 'block'; ed.blockTool.mode = 'opening'; ed.emit('tool'); } }, 'Doors & windows…')),
+      row('', h('button', { title: 'Carve this block\'s volume out of every box block it overlaps, then delete it', onclick: () => { const r = ed.tryExec<{ pieces: string[] }>('carve_blocks', { cutter: e.id }); if (r) ed.setSelection(r.pieces); } }, 'Carve with this'),
+        h('button', { title: 'Face handles: drag to push / pull, Shift+drag extrudes', onclick: () => { ed.tool = 'block'; ed.blockTool.mode = 'draw'; ed.emit('tool'); } }, 'Block tool (B)')),
+    );
+  }
+
+  private prefabSection(e: Extract<Entity, { type: 'prefab' }>, sec: (t: string, ...r: (HTMLElement | null | false)[]) => void, row: (l: string, ...f: (HTMLElement | string)[]) => HTMLElement) {
+    const ed = this.ed;
+    const rt = ed.rt.world.objects.get(e.id);
+    const n = rt?.prefab?.children.length ?? 0;
+    const others = ed.scene.entities.filter((x) => x.type === 'prefab' && x.prefab === e.prefab).length;
+    sec('Prefab',
+      row('Prefab', h('span', { class: 'insp-ro' }, e.prefab)),
+      row('', h('span', { class: 'insp-ro small' }, `${n} entities · ${others} instance${others === 1 ? '' : 's'} in this map`)),
+      row('', h('button', { title: 'Edit the prefab in place (double-click also works); Save writes it and updates every instance', onclick: () => void ed.prefabs.open(e.id) }, 'Edit prefab'),
+        h('button', { title: 'Replace the instance by its entities (no longer linked to the prefab)', onclick: () => { const r = ed.tryExec<{ group: string }>('unpack_prefab', { id: e.id }); if (r) ed.select(r.group); } }, 'Unpack')),
+      row('', h('button', { onclick: () => ed.setSelection(ed.scene.entities.filter((x) => x.type === 'prefab' && x.prefab === e.prefab).map((x) => x.id)) }, 'Select all instances')),
+    );
   }
 
   private markerFromCamera(id: string) {

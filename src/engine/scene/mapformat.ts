@@ -260,7 +260,55 @@ export interface TerrainLayerObject extends EntityCommon {
   };
 }
 
-export type Entity = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject | SignObject | GroupObject | ScatterObject | SplineObject | TerrainLayerObject;
+/**
+ * Blockout solid: a parametric shape in the entity's local frame (origin at the bottom
+ * centre). Materials per face (world-aligned UVs: textures line up across blocks).
+ * Collides, casts shadows and is lightmapped like static architecture.
+ */
+export interface BlockObject extends MapObjectBase {
+  type: 'block';
+  block: {
+    shape: 'box' | 'wedge' | 'stairs' | 'cylinder';
+    /** [width x, height y, depth z] in metres. */
+    size: [number, number, number];
+    /** Default material of every face. */
+    material?: string;
+    /** Per-face materials: px nx py ny pz nz (cylinder: side py ny). */
+    faces?: Record<string, string>;
+    /** Stairs: number of steps (default: height / 0.17 m). */
+    steps?: number;
+    /** Cylinder segments. */
+    segments?: number;
+    texelDensity?: number;
+  };
+  static?: boolean;
+  castShadow?: boolean;
+  collision?: boolean;
+}
+
+/**
+ * Prefab instance: places the entities of a prefab (public/prefabs/<name>.json, local
+ * to the prefab origin) at this transform. The contents are not stored in the map:
+ * editing the prefab updates every instance.
+ */
+export interface PrefabObject extends MapObjectBase {
+  type: 'prefab';
+  prefab: string;
+}
+
+/** Prefab file (public/prefabs/<name>.json). */
+export interface PrefabDocument {
+  format: 'rill.prefab';
+  version: 1;
+  name: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  /** Entities in prefab-local space (parents refer to IDs inside the prefab). */
+  entities: Entity[];
+}
+
+export type Entity = MeshObject | InstancesObject | LightObject | DecalObject | MarkerObject | ProbeVolumeObject | ReflectionProbeObject | SignObject | GroupObject | ScatterObject | SplineObject | TerrainLayerObject | BlockObject | PrefabObject;
 export type EntityType = Entity['type'];
 /** Entities with a transform (everything but groups). */
 export type SpatialEntity = Exclude<Entity, GroupObject | TerrainLayerObject>;

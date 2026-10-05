@@ -1,5 +1,8 @@
 import { mat4, quat, vec3, type Mat4 } from 'wgpu-matrix';
-import { isSpatial, type Entity, type SpatialEntity, type Transform } from '../engine/scene/mapformat';
+import { isSpatial, type BlockObject, type Entity, type PrefabDocument, type SpatialEntity, type Transform } from '../engine/scene/mapformat';
+import { fromPrefabSpace } from '../engine/scene/prefab';
+import { BLOCK_MATERIAL, faceIds, STAIR_RISE } from '../engine/scene/blocks';
+import { aabbIn, blockCorners, blockFrame, boxCorners, clampOpening, openingBox, resizeFace, subtractBox, wallCoords, wallFrame, type Piece } from './blockedit';
 import type { MaterialDef } from '../engine/render/materials';
 import type { DocKey, Patch, SceneStore } from '../engine/scene/scene';
 import type { AssetRegistry } from './assets';
@@ -23,6 +26,8 @@ export interface OpContext {
   assets: AssetRegistry | null;
   /** World-space pivot of an entity (bounds-based for world-anchored geometry); null = transform position. */
   pivot(id: string): V3 | null;
+  /** A loaded prefab document (instances in the scene have theirs loaded), or null. */
+  prefab?(name: string): PrefabDocument | null;
   /** Runtime results some operations turn into document data (scatter instances to entities). */
   runtime?: {
     scatterInstances(id: string): { key: string; asset: string; position: [number, number, number]; yawDeg: number; scale: number }[];
@@ -211,7 +216,8 @@ const count = (n: number) => `${n} entit${n === 1 ? 'y' : 'ies'}`;
 const IDS: ParamSpec = { type: 'string[]', description: 'Entity IDs (descendants follow).' };
 const PIVOT: ParamSpec = { type: 'any', optional: true, description: "'median' (default: centre of the selection), 'individual' (each about its own pivot) or a world point [x, y, z]." };
 
-const ENTITY_TYPES = ['mesh', 'instances', 'light', 'decal', 'marker', 'probeVolume', 'reflectionProbe', 'sign', 'group', 'scatter', 'spline', 'terrainLayer'];
+const ENTITY_TYPES = ['mesh', 'instances', 'light', 'decal', 'marker', 'probeVolume', 'reflectionProbe', 'sign', 'group', 'scatter', 'spline', 'terrainLayer', 'block', 'prefab'];
+const BLOCK_SHAPES = ['box', 'wedge', 'stairs', 'cylinder'];
 
 /** Minimal structural validation of a complete entity. */
 export function validateEntity(e: Entity): string | null {
@@ -231,6 +237,13 @@ export function validateEntity(e: Entity): string | null {
     case 'scatter': if (typeof e.scatter?.preset !== 'string' || typeof e.scatter.seed !== 'number') return 'scatter.preset and scatter.seed required'; break;
     case 'spline': if (!Array.isArray(e.spline?.points) || typeof e.spline.preset !== 'string') return 'spline.points and spline.preset required'; break;
     case 'terrainLayer': if (!Array.isArray(e.terrain?.strokes)) return 'terrain.strokes required'; break;
+    case 'block': {
+      const b = e.block;
+      if (!b || !BLOCK_SHAPES.includes(b.shape)) return `block.shape must be one of ${BLOCK_SHAPES.join(', ')}`;
+      if (!Array.isArray(b.size) || b.size.length !== 3 || !b.size.every((v) => typeof v === 'number' && v > 0 && Number.isFinite(v))) return 'block.size must be [x, y, z] > 0';
+      break;
+    }
+    case 'prefab': if (typeof e.prefab !== 'string' || !e.prefab) return 'prefab (name) required'; break;
   }
   return null;
 }
@@ -412,6 +425,8 @@ const PROPERTIES: Record<string, string[]> = {
   scatter: ['scatter.preset', 'scatter.density', 'scatter.seed', 'scatter.area', 'scatter.brush', 'scatter.exclude', 'scatter.surfaces', 'scatter.slopeMax'],
   terrainLayer: ['terrain.strokes', 'terrain.targets', 'terrain.cell'],
   spline: ['spline.points', 'spline.closed', 'spline.preset', 'spline.width', 'spline.drape', 'spline.texelDensity', 'castShadow', 'collision', 'lightmap'],
+  block: ['block.shape', 'block.size', 'block.material', 'block.faces', 'block.steps', 'block.segments', 'block.texelDensity', 'static', 'castShadow', 'collision'],
+  prefab: ['prefab'],
 };
 
 export function editableProperties(type: Entity['type']): string[] {
@@ -938,6 +953,441 @@ op<{ asset: string; position: number[]; onGround?: boolean; rotation?: [number, 
       kids.push(cid);
     }
     return { patches: ps.patches(), result: { id, children: kids }, label: `Place ${e.name}` };
+  },
+});
+
+// ------------------------------------------------------------------ blockout
+
+const SHAPE_NAMES: Record<string, string> = { box: 'Block', wedge: 'Ramp', stairs: 'Stairs', cylinder: 'Pillar' };
+const SIDE_NAMES: Record<string, string> = { ny: 'Floor', py: 'Ceiling', nx: 'Wall −X', px: 'Wall +X', nz: 'Wall −Z', pz: 'Wall +Z' };
+
+function needBlock(ps: PatchSet, id: string): BlockObject {
+  const e = need(ps, id);
+  if (e.type !== 'block') throw new OpError(`'${id}' is not a block`);
+  return e;
+}
+
+/** Block entity with its scale folded into the size. */
+function withSize(e: BlockObject, size: V3, transform?: Transform): BlockObject {
+  const t = transform ?? blockFrame(e).transform;
+  return { ...e, transform: t, block: { ...e.block, size: size.map(round3) as V3 } };
+}
+
+function pieceEntity(ctx: OpContext, src: BlockObject, pc: Piece, id: string, name?: string): BlockObject {
+  const t: Transform = { position: pc.position };
+  if (src.transform.rotation) t.rotation = [...src.transform.rotation] as Transform['rotation'];
+  return { ...structuredClone(src), id, ...(name ? { name } : {}), transform: t, block: { ...structuredClone(src.block), size: pc.size } };
+}
+
+/** Replaces block `id` by pieces; the largest keeps the ID. Returns the piece IDs. */
+function replaceWithPieces(ctx: OpContext, ps: PatchSet, e: BlockObject, pieces: Piece[], names?: (p: Piece) => string | undefined, parent?: string): string[] {
+  const order = pieces.map((_, i) => i).sort((a, b) => pieces[b].volume - pieces[a].volume);
+  const out: string[] = [];
+  ps.remove(e.id);
+  order.forEach((k, j) => {
+    const pc = pieces[k];
+    const name = names?.(pc);
+    const id = j === 0 && !parent ? e.id : ctx.scene.newId(name ? name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') : e.id.replace(/_\d+$/, ''));
+    const b = pieceEntity(ctx, e, pc, id, name);
+    if (parent) b.parent = parent;
+    ps.set(b);
+    out.push(id);
+  });
+  return out;
+}
+
+/** Box blocks (other than `skip`) sharing axes with the cutter and overlapping it, cut. */
+function cutAll(ctx: OpContext, ps: PatchSet, cutter: V3[], targets: string[] | null, skip: Set<string>): { cut: string[]; pieces: string[]; skipped: string[] } {
+  const cut: string[] = [], pieces: string[] = [], skipped: string[] = [];
+  const ids = targets ?? ctx.scene.entities.filter((e) => e.type === 'block').map((e) => e.id);
+  for (const id of ids) {
+    if (skip.has(id)) continue;
+    const e = ps.get(id);
+    if (!e || e.type !== 'block' || !ctx.scene.effectiveVisible(id)) continue;
+    if (ctx.scene.effectiveLocked(id)) { if (targets) skipped.push(`${id} (locked)`); continue; }
+    if (e.block.shape !== 'box') { if (targets) skipped.push(`${id} (${e.block.shape}: only boxes cut)`); continue; }
+    const r = subtractBox(e, cutter);
+    if (r === 'none') continue;
+    if (r === 'unaligned') { skipped.push(`${id} (rotated relative to the cut)`); continue; }
+    cut.push(id);
+    pieces.push(...replaceWithPieces(ctx, ps, e, r));
+  }
+  return { cut, pieces, skipped };
+}
+
+op<{ position: number[]; size: V3; shape?: string; yaw?: number; rotation?: [number, number, number, number]; material?: string; faces?: Record<string, string>; steps?: number; segments?: number; name?: string; parent?: string; onGround?: boolean }, { id: string }>({
+  name: 'create_block',
+  description: 'Creates a blockout block: shape box (default), wedge (ramp rising towards local -Z), stairs (climbing towards local -Z; steps default to ~17 cm risers) or cylinder. position is the bottom centre ([x, z] stands it on the ground). size [width x, height y, depth z] metres. Textures are world-aligned (measured dev grids: dev_wall default, dev_grey, dev_dark, dev_orange, dev_blue, dev_green; or any material). Returns { id }.',
+  params: {
+    position: { type: 'any', description: 'Bottom centre (world): [x, y, z], or [x, z] on the ground.' },
+    size: { type: 'vec3', description: '[width (x), height (y), depth (z)] metres.' },
+    shape: { type: 'string', optional: true, enum: BLOCK_SHAPES, description: 'box (default), wedge, stairs, cylinder.' },
+    yaw: { type: 'number', optional: true, description: 'Degrees about +Y.' },
+    rotation: { type: 'quat', optional: true, description: 'Quaternion (instead of yaw).' },
+    material: { type: 'string', optional: true, description: 'Material for all faces (default dev_wall).' },
+    faces: { type: 'object', optional: true, description: 'Per-face materials { py, ny, px, nx, pz, nz, side }.' },
+    steps: { type: 'number', optional: true, description: 'Stairs: number of steps.' },
+    segments: { type: 'number', optional: true, description: 'Cylinder: sides (default 16).' },
+    name: { type: 'string', optional: true, description: 'Display name.' },
+    parent: { type: 'string', optional: true, description: 'Outliner parent.' },
+    onGround: { type: 'boolean', optional: true, description: 'Stand on the ground under [x, z] even if y is given.' },
+  },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const shape = (p.shape ?? 'box') as BlockObject['block']['shape'];
+    if (p.parent && !ctx.scene.has(p.parent)) throw new OpError(`no parent '${p.parent}'`);
+    if (!p.size.every((v) => v > 0)) throw new OpError('create_block: size must be > 0');
+    const name = p.name ?? SHAPE_NAMES[shape];
+    const id = ctx.scene.newId(name.toLowerCase().replace(/[^a-z0-9]+/g, '_'));
+    const t: Transform = { position: resolvePoint(ctx, p.position, p.onGround, 'create_block').map(round3) as V3 };
+    const rot = p.rotation ?? (p.yaw ? axisAngleQuat([0, 1, 0], p.yaw) : undefined);
+    if (rot) t.rotation = rot;
+    const block: BlockObject['block'] = { shape, size: p.size.map(round3) as V3 };
+    if (p.material && p.material !== BLOCK_MATERIAL) block.material = p.material;
+    if (p.faces && Object.keys(p.faces).length) block.faces = { ...p.faces };
+    if (p.steps) block.steps = Math.round(p.steps);
+    if (p.segments) block.segments = Math.round(p.segments);
+    const e: BlockObject = { id, name, type: 'block', semantic: 'blockout', ...(p.parent ? { parent: p.parent } : {}), transform: t, block, static: true };
+    const err = validateEntity(e);
+    if (err) throw new OpError(`create_block: ${err}`);
+    ps.set(e);
+    return { patches: ps.patches(), result: { id }, label: `Create ${name.toLowerCase()}` };
+  },
+});
+
+op<{ ids: string[]; shape?: string; size?: V3; material?: string | null; steps?: number | null; segments?: number | null; texelDensity?: number | null }>({
+  name: 'set_block',
+  description: 'Changes block parameters: shape, size [x, y, z] (bottom centre stays put), material (all faces; null = dev_wall), steps (stairs, null = automatic), segments (cylinder), texelDensity (lightmap texels per metre).',
+  params: {
+    ids: IDS,
+    shape: { type: 'string', optional: true, enum: BLOCK_SHAPES, description: 'New shape.' },
+    size: { type: 'vec3', optional: true, description: 'New size [x, y, z] metres.' },
+    material: { type: 'string', optional: true, description: 'Material for all faces (clears per-face materials).' },
+    steps: { type: 'number', optional: true, description: 'Stairs: step count.' },
+    segments: { type: 'number', optional: true, description: 'Cylinder sides.' },
+    texelDensity: { type: 'number', optional: true, description: 'Lightmap texels per metre (default 8).' },
+  },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    for (const id of p.ids) {
+      const e = needBlock(ps, id);
+      assertUnlocked(ctx, id);
+      const f = blockFrame(e);
+      const b = { ...e.block, size: f.size };
+      if (p.shape) b.shape = p.shape as typeof b.shape;
+      if (p.size) {
+        if (!p.size.every((v) => v > 0)) throw new OpError('set_block: size must be > 0');
+        b.size = p.size;
+      }
+      if (p.material !== undefined) {
+        if (p.material && p.material !== BLOCK_MATERIAL) b.material = p.material;
+        else delete b.material;
+        delete b.faces;
+      }
+      for (const k of ['steps', 'segments', 'texelDensity'] as const) {
+        const v = p[k];
+        if (v === undefined) continue;
+        if (v === null || v <= 0) delete b[k];
+        else b[k] = k === 'texelDensity' ? v : Math.round(v);
+      }
+      if (b.faces) {
+        const valid = new Set(faceIds(b.shape));
+        b.faces = Object.fromEntries(Object.entries(b.faces).filter(([k]) => valid.has(k)));
+        if (!Object.keys(b.faces).length) delete b.faces;
+      }
+      ps.set(withSize({ ...e, block: b }, b.size as V3, f.transform));
+    }
+    return { patches: ps.patches(), label: p.shape ? `Shape ${p.shape}` : p.size ? 'Resize block' : 'Block settings' };
+  },
+});
+
+op<{ ids: string[]; face?: string; material?: string | null }>({
+  name: 'set_block_material',
+  description: "Sets a block face's material (face py top, ny bottom, px / nx, pz / nz, side for cylinders), or every face when face is omitted. null clears the face back to the block's material.",
+  params: { ids: IDS, face: { type: 'string', optional: true, description: 'Face ID (omit for the whole block).' }, material: { type: 'string', optional: true, description: 'Material name (null clears).' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    for (const id of p.ids) {
+      const e = needBlock(ps, id);
+      const b = structuredClone(e.block);
+      if (!p.face) {
+        if (p.material && p.material !== BLOCK_MATERIAL) b.material = p.material;
+        else delete b.material;
+        delete b.faces;
+      } else {
+        if (!faceIds(b.shape).includes(p.face)) throw new OpError(`set_block_material: ${b.shape} has no face '${p.face}' (${faceIds(b.shape).join(', ')})`);
+        const f = { ...(b.faces ?? {}) };
+        if (p.material && p.material !== (b.material ?? BLOCK_MATERIAL)) f[p.face] = p.material;
+        else delete f[p.face];
+        if (Object.keys(f).length) b.faces = f;
+        else delete b.faces;
+      }
+      ps.set({ ...e, block: b });
+    }
+    return { patches: ps.patches(), label: `Material ${p.face ?? 'block'} → ${p.material ?? 'default'}` };
+  },
+});
+
+op<{ id: string; face: string; distance?: number; size?: number }>({
+  name: 'resize_block',
+  description: 'Pushes / pulls one face of a block along its normal (the opposite face stays): distance in metres (+ outward), or the new size along that axis. Faces: px nx (width), py ny (height), pz nz (depth).',
+  params: { id: { type: 'string', description: 'Block ID.' }, face: { type: 'string', enum: ['px', 'nx', 'py', 'ny', 'pz', 'nz'], description: 'Face to move.' }, distance: { type: 'number', optional: true, description: 'Metres outward (negative = inward).' }, size: { type: 'number', optional: true, description: 'New size along the face axis (instead of distance).' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const e = needBlock(ps, p.id);
+    assertUnlocked(ctx, p.id);
+    const f = blockFrame(e);
+    const axis = { px: 0, nx: 0, py: 1, ny: 1, pz: 2, nz: 2 }[p.face]!;
+    const d = p.size !== undefined ? p.size - f.size[axis] : p.distance;
+    if (d === undefined) throw new OpError('resize_block: distance or size required');
+    const r = resizeFace(e, p.face, d);
+    ps.set(withSize(e, r.size, r.transform));
+    return { patches: ps.patches(), label: 'Resize block' };
+  },
+});
+
+const OPENING_PRESETS: Record<string, { size: [number, number]; bottom: number }> = {
+  door: { size: [0.9, 2.1], bottom: 0 },
+  double_door: { size: [1.6, 2.1], bottom: 0 },
+  window: { size: [1.2, 1.2], bottom: 0.9 },
+  wide_window: { size: [2.4, 1.2], bottom: 0.9 },
+  passage: { size: [1.8, 2.5], bottom: 0 },
+};
+
+op<{ id: string; face: string; preset?: string; size?: [number, number]; along?: number; bottom?: number; point?: number[]; offset?: [number, number] }, { pieces: string[]; cut: string[]; skipped: string[] }>({
+  name: 'cut_opening',
+  description: "Cuts a door / window opening through a box block (and any neighbouring blocks it overlaps, e.g. a wall already split by another opening). face: the face it is cut from (pz / nz / px / nx for walls, py / ny for floor and ceiling holes). preset: door (0.9 x 2.1), double_door, window (1.2 x 1.2, sill 0.9), wide_window, passage; or size [width, height]. Placement is relative to the whole wall (the block plus the coplanar pieces earlier openings left): along (m from the wall's centre, + to the right seen from outside, default 0) and bottom (m above the wall's base, e.g. the floor); or point (a world point on the face). Floors: offset [x, z] from the centre, or point. The block is replaced by pieces around the hole (the largest keeps its ID). Returns { pieces, cut, skipped }.",
+  params: {
+    id: { type: 'string', description: 'Block (box) to cut.' },
+    face: { type: 'string', enum: ['px', 'nx', 'py', 'ny', 'pz', 'nz'], description: 'Face the opening is on.' },
+    preset: { type: 'string', optional: true, enum: Object.keys(OPENING_PRESETS), description: 'Standard opening size.' },
+    size: { type: 'any', optional: true, description: '[width, height] metres (floors: [x, z]).' },
+    along: { type: 'number', optional: true, description: 'Walls: horizontal offset from the wall centre (m, + right seen from outside).' },
+    bottom: { type: 'number', optional: true, description: 'Walls: height of the opening\'s bottom above the wall base (m).' },
+    point: { type: 'any', optional: true, description: 'World point on the face: walls centre the opening horizontally on it (bottom still from preset / bottom), floors centre it.' },
+    offset: { type: 'any', optional: true, description: 'Floors: [x, z] from the face centre in the block frame.' },
+  },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const e = needBlock(ps, p.id);
+    assertUnlocked(ctx, p.id);
+    if (e.block.shape !== 'box') throw new OpError('cut_opening: only box blocks can be cut');
+    const pre = p.preset ? OPENING_PRESETS[p.preset] : undefined;
+    const size = (p.size ?? pre?.size ?? [0.9, 2.1]) as [number, number];
+    if (!Array.isArray(size) || size.length !== 2 || size.some((v) => !(v > 0))) throw new OpError('cut_opening: size must be [width, height] > 0');
+    const wall = p.face !== 'py' && p.face !== 'ny';
+    const others = ctx.scene.entities.filter((x): x is BlockObject => x.type === 'block' && x.id !== p.id && x.block.shape === 'box' && ctx.scene.effectiveVisible(x.id));
+    const wf = wallFrame(e, p.face, others);
+    const fc = p.point ? wallCoords(wf, p.point as V3) : null;
+    const off = clampOpening(wf, size, wall ? [p.along ?? fc?.[0] ?? 0, p.bottom ?? pre?.bottom ?? 0] : ((p.offset ?? fc ?? [0, 0]) as [number, number]));
+    const [cmin, cmax] = openingBox(wf, size, off);
+    const c = { min: cmin, max: cmax, axis: wf.axis, M: wf.M };
+    // Through the wall stack: thin aligned blocks right behind (back-to-back walls,
+    // a ceiling under a floor) that the opening also covers are cut as well.
+    const inv = wf.inv, k = c.axis, o = [0, 1, 2].filter((a) => a !== k);
+    const boxes = others.map((x) => aabbIn(x, inv)).filter((b): b is [V3, V3] => !!b);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const [mn, mx] of boxes) {
+        if (mx[k] - mn[k] > 0.6 || o.some((a) => Math.min(mx[a], c.max[a]) - Math.max(mn[a], c.min[a]) < 1e-3)) continue;
+        if (mn[k] < c.min[k] - 1e-4 && mx[k] >= c.min[k] - 0.02) { c.min[k] = mn[k] - 2e-4; grew = true; }
+        if (mx[k] > c.max[k] + 1e-4 && mn[k] <= c.max[k] + 0.02) { c.max[k] = mx[k] + 2e-4; grew = true; }
+      }
+    }
+    const r = cutAll(ctx, ps, boxCorners(c.min, c.max, c.M), null, new Set());
+    if (!r.cut.some((id) => wf.ids.includes(id))) throw new OpError(`cut_opening: the opening does not cut the wall of '${p.id}'${r.skipped.length ? ` (${r.skipped.join(', ')})` : ''}`);
+    return { patches: ps.patches(), result: r, label: `Cut ${p.preset?.replace('_', ' ') ?? 'opening'}` };
+  },
+});
+
+op<{ cutter: string; ids?: string[]; keepCutter?: boolean }, { pieces: string[]; cut: string[]; skipped: string[] }>({
+  name: 'carve_blocks',
+  description: 'Carves the volume of a cutter block out of every box block it overlaps (or only ids): corridors through several walls, notches, holes. The cutter is deleted unless keepCutter. Blocks rotated relative to the cutter (not by multiples of 90°) are skipped. Returns { pieces, cut, skipped }.',
+  params: { cutter: { type: 'string', description: 'Block whose box is carved out.' }, ids: { type: 'string[]', optional: true, description: 'Only these blocks (default: all overlapping).' }, keepCutter: { type: 'boolean', optional: true, description: 'Keep the cutter block.' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const c = needBlock(ps, p.cutter);
+    const r = cutAll(ctx, ps, blockCorners(c), p.ids ?? null, new Set([p.cutter, ...ctx.scene.descendants(p.cutter)]));
+    if (!r.cut.length) throw new OpError(`carve_blocks: '${p.cutter}' overlaps no box block${r.skipped.length ? ` (${r.skipped.join(', ')})` : ''}`);
+    if (!p.keepCutter) ps.remove(p.cutter);
+    return { patches: ps.patches(), result: r, label: `Carve ${count(r.cut.length)}` };
+  },
+});
+
+/** Hollows a block into floor, ceiling and walls in a new group (shared by hollow_block and create_room). */
+function hollow(ctx: OpContext, ps: PatchSet, e: BlockObject, thickness: number, open: string[], name: string, materials?: { floor?: string; walls?: string; ceiling?: string }) {
+  const f = blockFrame(e);
+  const t = Math.max(0.02, thickness);
+  if (f.size.some((s, k) => s <= 2 * t + (k === 1 ? 0 : 0.05))) throw new OpError(`hollow: ${f.size.map((v) => v.toFixed(2)).join(' x ')} m is too small for ${t} m walls`);
+  const min: V3 = [-f.size[0] / 2 + t, t, -f.size[2] / 2 + t], max: V3 = [f.size[0] / 2 - t, f.size[1] - t, f.size[2] / 2 - t];
+  const out = 0.5;
+  for (const o of open) {
+    const k = { px: 0, nx: 0, py: 1, ny: 1, pz: 2, nz: 2 }[o];
+    if (k === undefined) throw new OpError(`hollow: unknown face '${o}'`);
+    if (o[0] === 'p') max[k] += t + out;
+    else min[k] -= t + out;
+  }
+  const corners: V3[] = [];
+  for (let i = 0; i < 8; i++) {
+    const q: V3 = [i & 1 ? max[0] : min[0], i & 2 ? max[1] : min[1], i & 4 ? max[2] : min[2]];
+    const w = mat4.multiply(f.M, mat4.translation(q));
+    corners.push([w[12], w[13], w[14]]);
+  }
+  const pieces = subtractBox(withSize(e, f.size, f.transform), corners);
+  if (!Array.isArray(pieces)) throw new OpError('hollow: nothing left to hollow');
+  const gid = ctx.scene.newId(name.toLowerCase().replace(/[^a-z0-9]+/g, '_') || 'room');
+  ps.set({ id: gid, name, type: 'group', semantic: 'blockout', ...(e.parent ? { parent: e.parent } : {}) });
+  const src = { ...e, parent: gid } as BlockObject;
+  const ids = replaceWithPieces(ctx, ps, src, pieces, (pc) => SIDE_NAMES[pc.side], gid);
+  if (materials) {
+    for (const id of ids) {
+      const b = ps.get(id) as BlockObject;
+      const m = b.name === 'Floor' ? materials.floor : b.name === 'Ceiling' ? materials.ceiling : materials.walls;
+      if (m) ps.set({ ...b, block: { ...b.block, material: m, faces: undefined } });
+    }
+  }
+  ps.remove(e.id);
+  return { group: gid, pieces: ids };
+}
+
+op<{ id: string; thickness?: number; open?: string[]; name?: string }, { group: string; pieces: string[] }>({
+  name: 'hollow_block',
+  description: 'Hollows a box block into a room: floor, ceiling and four walls of the given thickness (default 0.2 m), grouped. open: faces to leave out (e.g. ["py"] for no ceiling). The pieces keep the block\'s outer size and materials. Returns { group, pieces }.',
+  params: { id: { type: 'string', description: 'Box block.' }, thickness: { type: 'number', optional: true, description: 'Wall / floor thickness (m, default 0.2).' }, open: { type: 'string[]', optional: true, description: 'Faces to leave open (py nz ...).' }, name: { type: 'string', optional: true, description: 'Group name (default: the block name).' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const e = needBlock(ps, p.id);
+    assertUnlocked(ctx, p.id);
+    if (e.block.shape !== 'box') throw new OpError('hollow_block: only box blocks can be hollowed');
+    const r = hollow(ctx, ps, e, p.thickness ?? 0.2, p.open ?? [], p.name ?? (e.name && e.name !== 'Block' ? e.name : 'Room'));
+    return { patches: ps.patches(), result: r, label: 'Hollow block' };
+  },
+});
+
+op<{ position: number[]; size: V3; yaw?: number; thickness?: number; ceiling?: boolean; open?: string[]; name?: string; parent?: string; materials?: { floor?: string; walls?: string; ceiling?: string } }, { group: string; pieces: string[] }>({
+  name: 'create_room',
+  description: 'Creates a blockout room: floor, walls and (unless ceiling: false) ceiling as blocks in a group. position: floor centre at the bottom (world; [x, z] on the ground). size: outer [width x, height y, depth z]. thickness: walls (default 0.2 m). open: walls to leave out (px nx pz nz). materials: { floor, walls, ceiling }. Doors / windows: cut_opening on the wall pieces afterwards. Returns { group, pieces }.',
+  params: {
+    position: { type: 'any', description: 'Bottom centre (world): [x, y, z] or [x, z].' },
+    size: { type: 'vec3', description: 'Outer size [x, y, z] metres (height includes floor and ceiling).' },
+    yaw: { type: 'number', optional: true, description: 'Degrees about +Y.' },
+    thickness: { type: 'number', optional: true, description: 'Wall thickness (m).' },
+    ceiling: { type: 'boolean', optional: true, description: 'Include a ceiling (default true).' },
+    open: { type: 'string[]', optional: true, description: 'Walls to leave out.' },
+    name: { type: 'string', optional: true, description: 'Group name.' },
+    parent: { type: 'string', optional: true, description: 'Outliner parent.' },
+    materials: { type: 'object', optional: true, description: '{ floor, walls, ceiling } material names.' },
+  },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    if (p.parent && !ctx.scene.has(p.parent)) throw new OpError(`no parent '${p.parent}'`);
+    const t: Transform = { position: resolvePoint(ctx, p.position, false, 'create_room').map(round3) as V3 };
+    if (p.yaw) t.rotation = axisAngleQuat([0, 1, 0], p.yaw);
+    const tmp: BlockObject = { id: ctx.scene.newId('room_block'), type: 'block', ...(p.parent ? { parent: p.parent } : {}), transform: t, block: { shape: 'box', size: p.size }, static: true, semantic: 'blockout' };
+    const open = [...(p.open ?? []), ...(p.ceiling === false ? ['py'] : [])];
+    const r = hollow(ctx, ps, tmp, p.thickness ?? 0.2, open, p.name ?? 'Room', p.materials);
+    return { patches: ps.patches(), result: r, label: `Create ${p.name ?? 'room'}` };
+  },
+});
+
+op<{ id: string; height?: number; rise?: number }>({
+  name: 'fit_stairs',
+  description: 'Stairs: sets the step count from the height for a comfortable rise (default 0.17 m), optionally changing the height first.',
+  params: { id: { type: 'string', description: 'Stairs block.' }, height: { type: 'number', optional: true, description: 'New height (m).' }, rise: { type: 'number', optional: true, description: 'Target riser height (m).' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const e = needBlock(ps, p.id);
+    const f = blockFrame(e);
+    const size = [...f.size] as V3;
+    if (p.height) size[1] = p.height;
+    const steps = Math.max(1, Math.round(size[1] / (p.rise ?? STAIR_RISE)));
+    ps.set(withSize({ ...e, block: { ...e.block, shape: 'stairs', steps } }, size, f.transform));
+    return { patches: ps.patches(), label: 'Fit stairs' };
+  },
+});
+
+// ------------------------------------------------------------------ prefabs
+
+const PREFAB_NAME = /^[\w-]+$/;
+
+op<{ prefab: string; position: number[]; onGround?: boolean; yaw?: number; rotation?: [number, number, number, number]; scale?: number | V3; parent?: string; name?: string }, { id: string }>({
+  name: 'place_prefab',
+  description: 'Places an instance of a prefab (public/prefabs/<name>.json, see list_prefabs) at a world position: its pivot lands there ([x, z] or onGround: on the ground). Editing the prefab later updates every instance. Returns { id }.',
+  params: {
+    prefab: { type: 'string', description: 'Prefab name.' },
+    position: { type: 'any', description: 'Pivot position (world): [x, y, z], or [x, z] on the ground.' },
+    onGround: { type: 'boolean', optional: true, description: 'Ground height under [x, z] even if y is given.' },
+    yaw: { type: 'number', optional: true, description: 'Degrees about +Y.' },
+    rotation: { type: 'quat', optional: true, description: 'Quaternion (instead of yaw).' },
+    scale: { type: 'any', optional: true, description: 'Uniform or [x, y, z].' },
+    parent: { type: 'string', optional: true, description: 'Outliner parent.' },
+    name: { type: 'string', optional: true, description: 'Display name (default: the prefab\'s).' },
+  },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    if (!PREFAB_NAME.test(p.prefab)) throw new OpError(`place_prefab: bad prefab name '${p.prefab}'`);
+    if (p.parent && !ctx.scene.has(p.parent)) throw new OpError(`no parent '${p.parent}'`);
+    const pd = ctx.prefab?.(p.prefab);
+    const id = ctx.scene.newId(p.prefab);
+    const t: Transform = { position: resolvePoint(ctx, p.position, p.onGround, 'place_prefab').map(round3) as V3 };
+    const rot = p.rotation ?? (p.yaw ? axisAngleQuat([0, 1, 0], p.yaw) : undefined);
+    if (rot) t.rotation = rot;
+    if (p.scale !== undefined) t.scale = typeof p.scale === 'number' ? [p.scale, p.scale, p.scale] : p.scale;
+    ps.set({ id, name: p.name ?? pd?.name ?? p.prefab, type: 'prefab', semantic: 'prefab', ...(p.parent ? { parent: p.parent } : {}), prefab: p.prefab, transform: t });
+    return { patches: ps.patches(), result: { id }, label: `Place ${pd?.name ?? p.prefab}` };
+  },
+});
+
+op<{ ids: string[]; prefab: string; position: V3; rotation?: [number, number, number, number]; name?: string }, { id: string }>({
+  name: 'replace_with_prefab',
+  description: 'Replaces entities (with their descendants) by one instance of a prefab whose pivot is at position (used after saving them as that prefab). Returns { id }.',
+  params: { ids: IDS, prefab: { type: 'string', description: 'Prefab name.' }, position: { type: 'vec3', description: 'Instance pivot (world).' }, rotation: { type: 'quat', optional: true, description: 'Instance rotation.' }, name: { type: 'string', optional: true, description: 'Instance name.' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    if (!PREFAB_NAME.test(p.prefab)) throw new OpError(`replace_with_prefab: bad prefab name '${p.prefab}'`);
+    const rs = roots(ps, p.ids);
+    if (!rs.length) throw new OpError('replace_with_prefab: nothing to replace');
+    const parent = ctx.scene.get(rs[0])?.parent;
+    for (const id of rs) {
+      assertUnlocked(ctx, id);
+      for (const d of [id, ...ctx.scene.descendants(id)].reverse()) ps.remove(d);
+    }
+    const id = ctx.scene.newId(p.prefab);
+    const t: Transform = { position: p.position.map(round3) as V3 };
+    if (p.rotation) t.rotation = p.rotation;
+    ps.set({ id, name: p.name ?? p.prefab, type: 'prefab', semantic: 'prefab', ...(parent && !rs.includes(parent) ? { parent } : {}), prefab: p.prefab, transform: t });
+    return { patches: ps.patches(), result: { id }, label: `Make prefab ${p.prefab}` };
+  },
+});
+
+op<{ id: string; name?: string }, { group: string; ids: string[]; map: Record<string, string> }>({
+  name: 'unpack_prefab',
+  description: 'Replaces a prefab instance by ordinary copies of its entities (in a group named after it); they no longer follow the prefab. Nested prefab instances stay instances. Returns { group, ids, map } (prefab entity ID -> new ID).',
+  params: { id: { type: 'string', description: 'Prefab instance.' }, name: { type: 'string', optional: true, description: 'Group name.' } },
+  run(ctx, p) {
+    const ps = new PatchSet(ctx.scene);
+    const inst = need(ps, p.id);
+    if (inst.type !== 'prefab') throw new OpError(`'${p.id}' is not a prefab instance`);
+    assertUnlocked(ctx, p.id);
+    const pd = ctx.prefab?.(inst.prefab);
+    if (!pd) throw new OpError(`unpack_prefab: prefab '${inst.prefab}' is not loaded`);
+    const gid = ctx.scene.newId(`${inst.prefab}_group`);
+    ps.set({ id: gid, name: p.name ?? inst.name ?? pd.name ?? inst.prefab, type: 'group', ...(inst.parent ? { parent: inst.parent } : {}), ...(inst.semantic && inst.semantic !== 'prefab' ? { semantic: inst.semantic } : {}) });
+    const map: Record<string, string> = {};
+    for (const c of pd.entities) map[c.id] = ctx.scene.newId(c.id);
+    const placed = fromPrefabSpace(pd.entities, inst.transform);
+    const ids: string[] = [];
+    placed.forEach((c, i) => {
+      const src = pd.entities[i];
+      const e = { ...c, id: map[src.id], parent: src.parent ? map[src.parent] ?? gid : gid } as Entity;
+      if (inst.visible === false && !src.parent) e.visible = false;
+      const err = validateEntity(e);
+      if (err) throw new OpError(`unpack_prefab: ${src.id}: ${err}`);
+      ps.set(e);
+      ids.push(e.id);
+    });
+    ps.remove(p.id);
+    return { patches: ps.patches(), result: { group: gid, ids, map }, label: `Unpack ${inst.name ?? inst.prefab}` };
   },
 });
 

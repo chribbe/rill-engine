@@ -82,6 +82,13 @@ export class EditorTools {
         return g ? { x: v[0], z: v[v.length === 3 ? 2 : 1], height: Math.round(g.height * 1000) / 1000, id: g.id, semantic: g.semantic } : { x: v[0], z: v[v.length === 3 ? 2 : 1], height: null };
       }),
     });
+    T({ name: 'list_prefabs', description: 'Prefab files (public/prefabs): name, title, entity count, category. Place one with place_prefab.', params: { query: S('Substring of name / title / tags.') }, run: async (p) => { await ed.prefabs.refresh(); return ed.prefabs.list.filter((x) => !p.query || `${x.name} ${x.title ?? ''} ${(x.tags ?? []).join(' ')}`.toLowerCase().includes(String(p.query).toLowerCase())); } });
+    T({ name: 'get_prefab', description: 'A prefab document: its entities in prefab space (origin = the instance pivot, bottom centre).', params: { name: S('Prefab name.', 'string', false) }, run: async (p) => ed.rt.world.prefabDoc(p.name) });
+    T({
+      name: 'create_prefab', description: 'Saves entities (with their descendants) as a prefab file public/prefabs/<name>.json, pivot at the bottom centre of their bounds, and replaces them by an instance (replace: false keeps them). The file write is not part of the changeset (reverting puts the entities back but keeps the file). Returns { id, prefab, entities }.',
+      params: { name: S('File name: letters, digits, _ and -.', 'string', false), ids: S('Entities (default: the selection).', 'string[]'), title: S('Display name.'), description: S('What it is.'), category: S('Category (e.g. street, interior, cover).'), overwrite: S('Replace an existing prefab of that name (every instance changes).', 'boolean'), replace: S('Replace the entities by an instance (default true).', 'boolean') },
+      run: (p) => ed.prefabs.create(p.name, { ids: p.ids, title: p.title, description: p.description, category: p.category, overwrite: p.overwrite, replace: p.replace }),
+    });
     T({
       name: 'describe_area', description: 'What is around a point: entities within radius grouped by semantic (nearest first), the ground cover (share of terrain / road / path / building...), height range. Good first look before editing a place.',
       params: { center: S('[x, z] or [x, y, z].', 'any', false), radius: S('Metres (default 25).', 'number') },
@@ -232,6 +239,8 @@ export class EditorTools {
   /** capture_view: renders an exact-size frame from a camera without editor overlays. */
   async captureView(o: CaptureOptions = {}) {
     const ed = this.ed, rt = ed.rt, cam = rt.camera;
+    // Background tabs run no frames: bring the world up to date with the document first.
+    await rt.world.settle();
     const saved = { p: [cam.position[0], cam.position[1], cam.position[2]], yaw: cam.yaw, pitch: cam.pitch, fov: cam.fovY };
     try {
       const c = o.camera;

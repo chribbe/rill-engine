@@ -5,11 +5,12 @@ import type { Editor } from '../editor';
 import { ENTITY_TEMPLATES, type Viewport } from '../viewport';
 import type { EditorTools } from '../api';
 import { checkbox, clear, h } from './dom';
+import type { ThumbSource } from '../thumbs';
 
 /** Bottom tab panels: assets, materials, environment & rendering, debug, console. */
 
 const CAT_ICON: Record<string, string> = {
-  entities: '✦', scatter: '❦', splines: '〰', decals: '▧', buildings: '▥', structural: '▤', props: '◇', vegetation: '♣', roads: '═', lighting: '✸', vehicles: '▬', terrain: '◢', environment: '◠', reference: '⚲',
+  blockout: '■', prefabs: '❖', entities: '✦', scatter: '❦', splines: '〰', decals: '▧', buildings: '▥', structural: '▤', props: '◇', vegetation: '♣', roads: '═', lighting: '✸', vehicles: '▬', terrain: '◢', environment: '◠', reference: '⚲',
 };
 
 const TEMPLATE_NAMES: Record<string, string> = {
@@ -42,20 +43,68 @@ export class AssetsPanel {
 
   private render() {
     const ed = this.ed;
-    const cats = ['all', 'entities', 'scatter', 'splines', 'decals', ...ed.assets.doc.categories.filter((c) => ed.assets.all.some((a) => a.category === c && (this.unique || !a.unique)))];
+    const cats = ['all', 'blockout', 'prefabs', 'entities', 'scatter', 'splines', 'decals', ...ed.assets.doc.categories.filter((c) => ed.assets.all.some((a) => a.category === c && (this.unique || !a.unique)))];
     clear(this.cats);
     for (const c of cats) {
       this.cats.append(h('div', { class: `as-cat${c === this.cat ? ' on' : ''}`, onclick: () => { this.cat = c; this.render(); } }, `${CAT_ICON[c] ?? '•'} ${c}`));
     }
     clear(this.grid);
-    const tile = (id: string, name: string, sub: string, cat: string) => {
+    /** Glyph, replaced by the thumbnail once it is drawn. */
+    const pic = (cat: string, src?: ThumbSource) => {
+      const el = h('div', { class: 'as-glyph' }, CAT_ICON[cat] ?? '•');
+      if (!src) return el;
+      const show = (url: string | null | undefined) => {
+        if (!url) return;
+        el.textContent = '';
+        el.classList.add('as-thumb');
+        el.append(h('img', { src: url, alt: '', draggable: false }));
+      };
+      const now = ed.thumbs.peek(src);
+      if (now) show(now);
+      else {
+        // Drawn when the tile scrolls into view.
+        const io = new IntersectionObserver((es) => {
+          if (!es.some((x) => x.isIntersecting)) return;
+          io.disconnect();
+          void ed.thumbs.get(src).then((u) => { if (el.isConnected) show(u); });
+        });
+        io.observe(el);
+      }
+      return el;
+    };
+    const tile = (id: string, name: string, sub: string, cat: string, src?: ThumbSource) => {
       const t = h('div', { class: `as-tile${ed.placing === id ? ' on' : ''}`, draggable: true, title: `${id}\n${sub}` },
-        h('div', { class: 'as-glyph' }, CAT_ICON[cat] ?? '•'), h('div', { class: 'as-name' }, name), h('div', { class: 'as-sub' }, sub));
+        pic(cat, src), h('div', { class: 'as-name' }, name), h('div', { class: 'as-sub' }, sub));
       t.addEventListener('click', () => { ed.placing = ed.placing === id ? null : id; ed.emit('tool'); });
       t.addEventListener('dragstart', (e) => { e.dataTransfer!.setData('application/x-rill-asset', id); e.dataTransfer!.effectAllowed = 'copy'; });
       this.grid.append(t);
     };
     const q = this.query.toLowerCase();
+    if (this.cat === 'all' || this.cat === 'blockout') {
+      const bt = ed.blockTool;
+      const shapes: [string, string, string][] = [['box', 'Box', 'block'], ['wedge', 'Ramp', 'wedge'], ['stairs', 'Stairs', '17 cm steps'], ['cylinder', 'Pillar', 'cylinder'], ['room', 'Room', 'floor + walls']];
+      for (const [k, l, sub] of shapes) {
+        if (q && !`${k} ${l} blockout`.toLowerCase().includes(q)) continue;
+        const t = h('div', { class: `as-tile${ed.tool === 'block' && bt.mode === 'draw' && bt.shape === k ? ' on' : ''}`, title: `${l}: drag a footprint on any surface, then set the height (Block tool, B)` },
+          pic('blockout', { kind: 'block', shape: k as typeof bt.shape }), h('div', { class: 'as-name' }, l), h('div', { class: 'as-sub' }, `blockout · ${sub}`));
+        t.addEventListener('click', () => { bt.shape = k as typeof bt.shape; bt.mode = 'draw'; ed.tool = 'block'; ed.emit('tool'); });
+        this.grid.append(t);
+      }
+      for (const [k, l] of [['door', 'Door'], ['window', 'Window'], ['double_door', 'Double door'], ['wide_window', 'Wide window'], ['passage', 'Passage'], ['custom', 'Custom opening']]) {
+        if (q && !`${k} ${l} opening`.toLowerCase().includes(q)) continue;
+        const t = h('div', { class: `as-tile${ed.tool === 'block' && bt.mode === 'opening' && bt.opening === k ? ' on' : ''}`, title: `${l}: click a wall (box block) to cut it` },
+          h('div', { class: 'as-glyph' }, '▯'), h('div', { class: 'as-name' }, l), h('div', { class: 'as-sub' }, 'opening · click a wall'));
+        t.addEventListener('click', () => { bt.opening = k as typeof bt.opening; bt.mode = 'opening'; ed.tool = 'block'; ed.emit('tool'); });
+        this.grid.append(t);
+      }
+    }
+    if (this.cat === 'all' || this.cat === 'prefabs') {
+      for (const p of ed.prefabs.list) {
+        if (q && !`${p.name} ${p.title ?? ''} ${p.category ?? ''} ${(p.tags ?? []).join(' ')} ${p.description ?? ''}`.toLowerCase().includes(q)) continue;
+        tile(`prefab:${p.name}`, p.title ?? p.name, `prefab · ${p.entities} entities${p.category ? ` · ${p.category}` : ''}`, 'prefabs', { kind: 'prefab', name: p.name, version: p.modified });
+      }
+      if (this.cat === 'prefabs' && !ed.prefabs.list.length) this.grid.append(h('div', { class: 'insp-empty' }, 'No prefabs yet: select entities and use “Save as prefab…” in the Inspector.'));
+    }
     if (this.cat === 'all' || this.cat === 'entities') {
       for (const id of Object.keys(ENTITY_TEMPLATES)) if (!q || TEMPLATE_NAMES[id].toLowerCase().includes(q)) tile(id, TEMPLATE_NAMES[id], 'entity', 'entities');
     }
@@ -105,12 +154,12 @@ export class AssetsPanel {
         this.grid.append(t);
       }
     }
-    if (this.cat !== 'entities' && this.cat !== 'scatter' && this.cat !== 'splines' && this.cat !== 'decals') {
+    if (!['entities', 'scatter', 'splines', 'decals', 'blockout', 'prefabs'].includes(this.cat)) {
       const list = ed.assets.search(this.query, { category: this.cat === 'all' ? undefined : this.cat, includeUnique: this.unique });
       for (const a of list.slice(0, 400)) {
         const b = a.bounds;
         const size = b ? `${(b.max[0] - b.min[0]).toFixed(1)}×${(b.max[1] - b.min[1]).toFixed(1)}×${(b.max[2] - b.min[2]).toFixed(1)} m` : '';
-        tile(a.id, a.name, `${a.id.split('/')[0]} · ${size}`, a.category);
+        tile(a.id, a.name, `${a.id.split('/')[0]} · ${size}`, a.category, a.path ? { kind: 'asset', path: a.path } : undefined);
       }
     }
   }

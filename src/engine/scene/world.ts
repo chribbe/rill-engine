@@ -12,7 +12,9 @@ import { CollisionWorld, Surface } from './collision';
 import type { DecalObject, Entity, LightObject, MapDocument, MarkerObject, MeshObject, ReflectionProbeObject, ScatterObject, SignObject, Transform } from './mapformat';
 import { evaluateScatter, type ScatterInstance, type ScatterPreset } from './scatter';
 import { buildSpline, type SplineBuild, type SplinePreset } from './splines';
-import type { SplineObject, TerrainLayerObject } from './mapformat';
+import type { BlockObject, PrefabDocument, PrefabObject, SplineObject, TerrainLayerObject } from './mapformat';
+import { blockExtent, buildBlock, type BlockBuild } from './blocks';
+import { expandPrefab } from './prefab';
 import { TerrainFields, deformPrimitive } from './terrainedit';
 import type { MeshData, PrimitiveData } from '../render/geometry';
 import { SceneStore, type SceneChange } from './scene';
@@ -42,6 +44,12 @@ export interface RuntimeObject {
   scatter?: { preset: ScatterPreset; species: Lods[]; instances: ScatterInstance[]; ms: number; groundRev: number };
   /** Terrain chunks under a terrain layer: original data, original mesh, current deformed primitives (null = original). */
   terrain?: { base: MeshData; orig: GpuMesh; deformed: PrimitiveData[] | null };
+  /** Block entities: the last build and its uploaded mesh. */
+  block?: { build: BlockBuild; mesh: GpuMesh | null; version: number };
+  /** Prefab instances: the prefab and the virtual child IDs it expanded into. */
+  prefab?: { name: string; children: string[] };
+  /** Virtual entities (inside a prefab instance): the instance in the map document they belong to. */
+  owner?: string;
   /** Spline entities: preset, repeated-part models, the last build and its uploaded mesh. */
   spline?: { preset: SplinePreset; assets: Map<string, Lods>; build: SplineBuild | null; mesh: GpuMesh | null; version: number; ms: number };
 }
@@ -318,10 +326,22 @@ export class World {
       if (rt.spline) void this.populateSpline(rt);
       return;
     }
-    if (prev.type !== e.type || (e.type === 'mesh' && meshIdentity(prev as MeshObject) !== meshIdentity(e)) || e.type === 'instances' || e.type === 'scatter' || e.type === 'spline') {
+    if (e.type === 'block' && prev.type === 'block') {
+      rt.doc = e;
+      void this.populateBlock(rt);
+      return;
+    }
+    if (e.type === 'prefab' && prev.type === 'prefab' && prev.prefab === e.prefab) {
+      // Moved / hidden: carry the contents along in place.
+      rt.doc = e;
+      void this.placePrefabChildren(rt);
+      return;
+    }
+    if (prev.type !== e.type || (e.type === 'mesh' && meshIdentity(prev as MeshObject) !== meshIdentity(e)) || e.type === 'instances' || e.type === 'scatter' || e.type === 'spline' || e.type === 'prefab') {
       // New mesh, materials or instance list: re-create.
+      const owner = rt.owner;
       this.removeRuntime(e.id);
-      void this.addObject(e);
+      void this.addObject(e, owner);
       return;
     }
     rt.doc = e;
@@ -338,7 +358,7 @@ export class World {
     inst.setFlags(r.slot, meshFlags(o));
     transformAabb(model, r.mesh.aabb.min, r.mesh.aabb.max, r.worldMin, r.worldMax);
     r.castShadow = o.castShadow ?? true;
-    r.visible = this.scene.effectiveVisible(o.id);
+    r.visible = this.isVisible(o.id);
     const sc = o.transform.scale ?? [1, 1, 1];
     if (rt.lods) r.lods = World.lodChain(rt.lods, Math.max(sc[0], sc[1], sc[2]));
     this.setupTurnstile(o, r, model);
@@ -356,6 +376,21 @@ export class World {
       this.renderer.instances.free(r.slot);
     }
     if (rt.terrain?.deformed && rt.renderables[0] && rt.renderables[0].mesh !== rt.terrain.orig) this.renderer.arena.free(rt.renderables[0].mesh);
+    if (rt.block) {
+      if (rt.block.mesh) this.renderer.arena.free(rt.block.mesh);
+      rt.block.mesh = null;
+      rt.block.version++;
+      this.collisionDirty = true;
+    }
+    if (rt.prefab) {
+      for (const c of rt.prefab.children) {
+        const k = this.virtual.get(c)?.type;
+        this.removeRuntime(c);
+        this.virtual.delete(c);
+        if (k) this.dirtyKinds.add(k);
+      }
+      rt.prefab.children = [];
+    }
     if (rt.spline?.mesh) {
       this.renderer.arena.free(rt.spline.mesh);
       rt.spline.mesh = null;
@@ -438,7 +473,35 @@ export class World {
   // ------------------------------------------------------------------ derived sets
 
   private visibleOfType<T extends Entity['type']>(type: T): Extract<Entity, { type: T }>[] {
-    return this.doc.entities.filter((e): e is Extract<Entity, { type: T }> => e.type === type && this.scene.effectiveVisible(e.id));
+    const out = this.doc.entities.filter((e): e is Extract<Entity, { type: T }> => e.type === type && this.isVisible(e.id));
+    for (const e of this.virtual.values()) if (e.type === type && this.isVisible(e.id)) out.push(e as Extract<Entity, { type: T }>);
+    return out;
+  }
+
+  // ------------------------------------------------------------------ virtual entities (prefab contents)
+
+  /** Entities expanded from prefab instances (not in the document): virtual ID -> entity in world space. */
+  readonly virtual = new Map<string, Entity>();
+
+  /** A document entity or a virtual one. */
+  entityOf(id: string): Entity | undefined {
+    return this.scene.get(id) ?? this.virtual.get(id);
+  }
+
+  /** The document entity a (virtual) ID belongs to: itself, or its outermost prefab instance. */
+  ownerOf(id: string): string {
+    let rt = this.objects.get(id);
+    let cur = id;
+    while (rt?.owner) { cur = rt.owner; rt = this.objects.get(cur); }
+    return cur;
+  }
+
+  /** Visible in the scene (virtual entities: their own flag and their instance's visibility). */
+  isVisible(id: string): boolean {
+    const v = this.virtual.get(id);
+    if (!v) return this.scene.effectiveVisible(id);
+    if (v.visible === false) return false;
+    return this.isVisible(this.objects.get(id)?.owner ?? '');
   }
 
   /** Map lamps from the light entities. */
@@ -523,14 +586,19 @@ export class World {
     this.collision.clear();
     for (const rt of this.objects.values()) {
       const o = rt.doc;
-      if (o.type === 'spline' && rt.spline?.build && (o.collision ?? rt.spline.preset.collision ?? true) && this.scene.effectiveVisible(o.id)) {
+      if (o.type === 'spline' && rt.spline?.build && (o.collision ?? rt.spline.preset.collision ?? true) && this.isVisible(o.id)) {
         for (const p of rt.spline.build.primitives) this.collision.addMesh(p.positions, p.indices, mat4.identity(), Surface.Default, o.id);
         for (const r of rt.renderables.slice(rt.spline.mesh ? 1 : 0)) {
           for (const p of r.mesh.primitives) this.collision.addMesh(p.positions, p.indices, this.renderer.instances.model(r.slot), Surface.Default, o.id);
         }
         continue;
       }
-      if (o.type !== 'mesh' || !(o.collision ?? o.static ?? true) || !this.scene.effectiveVisible(o.id)) continue;
+      if (o.type === 'block' && rt.block?.build && (o.collision ?? o.static ?? true) && this.isVisible(o.id)) {
+        const m = transformMatrix(blockExtent(o).transform);
+        for (const p of rt.block.build.primitives) this.collision.addMesh(p.positions, p.indices, m, Surface.Default, o.id);
+        continue;
+      }
+      if (o.type !== 'mesh' || !(o.collision ?? o.static ?? true) || !this.isVisible(o.id)) continue;
       const r = rt.renderables[0];
       if (!r) continue;
       const model = transformMatrix(o.transform);
@@ -574,8 +642,8 @@ export class World {
     this.ensureCollision(true);
     const m = transformMatrix({ position: e.transform.position, rotation: e.transform.rotation });
     const toWorld = (x: number, z: number): [number, number] => [m[0] * x + m[8] * z + m[12], m[2] * x + m[10] * z + m[14]];
-    const inst = evaluateScatter(e, sc.preset, toWorld, (x, z) => this.collision.groundHit(x, 1e4, z, 2e4), (id) => this.scene.get(id)?.semantic);
-    const vis = this.scene.effectiveVisible(e.id);
+    const inst = evaluateScatter(e, sc.preset, toWorld, (x, z) => this.collision.groundHit(x, 1e4, z, 2e4), (id) => this.entityOf(id)?.semantic);
+    const vis = this.isVisible(e.id);
     const semantic = e.semantic ?? sc.preset.semantic ?? 'vegetation';
     const flags = 2 | (semantic === 'vegetation' ? 8 : 0);
     const shadow = sc.preset.castShadow ?? true;
@@ -628,7 +696,7 @@ export class World {
 
   private async applyTerrainOnce() {
     const layer = this.doc.entities.find((e): e is TerrainLayerObject => e.type === 'terrainLayer');
-    const active = layer && this.scene.effectiveVisible(layer.id) ? layer : undefined;
+    const active = layer && this.isVisible(layer.id) ? layer : undefined;
     const targets = new Set(active?.terrain.targets ?? layer?.terrain.targets ?? ['terrain']);
     const chunks = [...this.objects.values()].filter((rt) => rt.doc.type === 'mesh' && targets.has(rt.doc.semantic ?? '') && rt.renderables[0] && !rt.doc.transform.rotation);
     if (!chunks.length) return;
@@ -716,6 +784,127 @@ export class World {
     return out;
   }
 
+  // ------------------------------------------------------------------ blocks
+
+  /** Rebuilds a block's mesh (cheap: called on every edit, gizmo drags included). */
+  async populateBlock(rt: RuntimeObject) {
+    const e = rt.doc as BlockObject;
+    rt.block ??= { build: null as unknown as BlockBuild, mesh: null, version: 0 };
+    const v = ++rt.block.version;
+    const model = transformMatrix(blockExtent(e).transform);
+    const build = buildBlock(e, model);
+    this.pendingLoads++;
+    let mats: Material[];
+    try {
+      mats = await Promise.all(build.primitives.map((p) => this.renderer.materials.get(p.material)));
+    } finally {
+      this.pendingLoads--;
+    }
+    if (rt.block.version !== v || this.objects.get(e.id) !== rt) return;
+    for (const r of rt.renderables) {
+      this.removed.add(r);
+      this.renderer.instances.free(r.slot);
+    }
+    if (rt.block.mesh) this.renderer.arena.free(rt.block.mesh);
+    rt.renderables = [];
+    const mesh = this.renderer.arena.upload({ name: e.id, primitives: build.primitives });
+    const r = this.makeRenderable(e.id, mesh, mats, model, e.castShadow ?? true, 0, fnv1a(e.id));
+    r.visible = this.isVisible(e.id);
+    this.applyLightmapTo(e.id, r);
+    this.renderer.instances.setProbes(r.slot, this.renderer.probeBits(r.worldMin, r.worldMax));
+    rt.renderables.push(r);
+    const prev = rt.block.build;
+    if (prev && this.lightmaps?.doc.objects[e.id] && JSON.stringify(prev.lightmapResolution) !== JSON.stringify(build.lightmapResolution)) this.lightingStale = true;
+    else if (prev && (e.static ?? true)) this.lightingStale = true;
+    rt.block.build = build;
+    rt.block.mesh = mesh;
+    this.compactRenderables();
+    this.collisionDirty = true;
+  }
+
+  /**
+   * Applies queued scene changes and waits until every load they started has
+   * finished (assets, prefabs, block materials): for exports and captures that
+   * must see the current document even when no frames run (a background tab).
+   */
+  async settle(timeoutMs = 15000) {
+    const t0 = performance.now();
+    this.flush();
+    while (this.pendingLoads > 0 && performance.now() - t0 < timeoutMs) {
+      await new Promise((r) => setTimeout(r, 16));
+      this.flush();
+    }
+    this.flush();
+  }
+
+  /** Face ID of a block triangle (primitive index, triangle index), for picking. */
+  blockFace(id: string, prim: number, tri: number): string | null {
+    return this.objects.get(id)?.block?.build?.faceOfTri[prim]?.[tri] ?? null;
+  }
+
+  // ------------------------------------------------------------------ prefabs
+
+  private prefabDocs = new Map<string, Promise<PrefabDocument>>();
+  private prefabBust = new Map<string, number>();
+  /** Prefab documents loaded so far (synchronous access for editor operations). */
+  readonly prefabsLoaded = new Map<string, PrefabDocument>();
+
+  prefabDoc(name: string): Promise<PrefabDocument> {
+    let p = this.prefabDocs.get(name);
+    if (!p) {
+      const bust = this.prefabBust.get(name);
+      p = fetch(`/prefabs/${encodeURIComponent(name)}.json${bust ? `?v=${bust}` : ''}`, { cache: 'no-store' }).then(async (r) => {
+        if (!r.ok) throw new Error(`prefab '${name}' not found`);
+        const d = (await r.json()) as PrefabDocument;
+        this.prefabsLoaded.set(name, d);
+        return d;
+      });
+      p.catch(() => this.prefabDocs.delete(name));
+      this.prefabDocs.set(name, p);
+    }
+    return p;
+  }
+
+  /** The prefab file changed (saved in the editor): every instance re-expands. */
+  async reloadPrefab(name: string) {
+    this.forgetPrefab(name);
+    const insts = [...this.objects.values()].filter((rt) => rt.doc.type === 'prefab' && rt.doc.prefab === name);
+    for (const rt of insts) {
+      const id = rt.doc.id, doc = rt.doc;
+      this.removeRuntime(id);
+      void this.addObject(doc, rt.owner);
+    }
+    this.compactRenderables();
+  }
+
+  /** Drops a cached prefab document (the file changed): the next use fetches it again. */
+  forgetPrefab(name: string) {
+    this.prefabDocs.delete(name);
+    this.prefabsLoaded.delete(name);
+    this.prefabBust.set(name, Date.now());
+  }
+
+  /** (Re)places the virtual children of an instance after it moved / changed visibility. */
+  private async placePrefabChildren(rt: RuntimeObject) {
+    const inst = rt.doc as PrefabObject;
+    let pd: PrefabDocument;
+    try { pd = await this.prefabDoc(inst.prefab); } catch { return; }
+    if (this.objects.get(inst.id) !== rt) return;
+    for (const v of expandPrefab(inst, pd)) {
+      this.virtual.set(v.id, v);
+      const crt = this.objects.get(v.id);
+      if (crt) this.syncEntity(crt, v);
+      this.dirtyKinds.add(v.type);
+    }
+  }
+
+  /** All renderables of a prefab instance (nested prefabs included). */
+  prefabRenderables(id: string): Renderable[] {
+    const rt = this.objects.get(id);
+    if (!rt?.prefab) return rt?.renderables ?? [];
+    return rt.prefab.children.flatMap((c) => this.prefabRenderables(c));
+  }
+
   // ------------------------------------------------------------------ splines
 
   private splinePresets = new Map<string, Promise<SplinePreset>>();
@@ -756,7 +945,7 @@ export class World {
     if (sp.mesh) this.renderer.arena.free(sp.mesh);
     rt.renderables = [];
     sp.mesh = null;
-    const vis = this.scene.effectiveVisible(e.id);
+    const vis = this.isVisible(e.id);
     const shadow = e.castShadow ?? sp.preset.castShadow ?? true;
     if (build.primitives.length) {
       const mesh = this.renderer.arena.upload({ name: e.id, primitives: build.primitives });
@@ -957,8 +1146,8 @@ export class World {
     if (lm && entry) this.renderer.instances.setLightmap(r.slot, entry.scaleOffset, entry.page * lm.doc.components.length);
   }
 
-  async addObject(o: Entity) {
-    const rt: RuntimeObject = { doc: o, renderables: [] };
+  async addObject(o: Entity, owner?: string) {
+    const rt: RuntimeObject = { doc: o, renderables: [], ...(owner ? { owner } : {}) };
     this.objects.set(o.id, rt);
     switch (o.type) {
       case 'mesh':
@@ -976,7 +1165,7 @@ export class World {
         if (!lods || this.objects.get(o.id) !== rt) return;
         rt.lods = lods;
         const d = rt.doc; // latest document (transforms may have changed during the load)
-        const vis = this.scene.effectiveVisible(d.id);
+        const vis = this.isVisible(d.id);
         if (d.type === 'mesh') {
           const model = transformMatrix(d.transform);
           const r = this.makeRenderable(d.id, lods[0].mesh, lods[0].materials, model, d.castShadow ?? true, meshFlags(d), fnv1a(d.id));
@@ -1013,6 +1202,33 @@ export class World {
           if (this.objects.get(o.id) !== rt) return;
           rt.scatter = { preset, species, instances: [], ms: 0, groundRev: -1 };
           if (!this.building) this.populateScatter(rt);
+        } catch (e) {
+          console.warn(`[world] ${o.id}: ${(e as Error).message}`);
+        } finally {
+          this.pendingLoads--;
+        }
+        break;
+      }
+      case 'block':
+        await this.populateBlock(rt);
+        break;
+      case 'prefab': {
+        this.pendingLoads++;
+        try {
+          // Nesting: a prefab inside itself (directly or further up) would never end.
+          for (let up = owner; up; up = this.objects.get(up)?.owner) {
+            const d = this.objects.get(up)?.doc;
+            if (d?.type === 'prefab' && d.prefab === o.prefab) throw new Error(`prefab '${o.prefab}' contains itself`);
+          }
+          if (o.id.split('/').length > 8) throw new Error('prefabs nested too deep');
+          const pd = await this.prefabDoc(o.prefab);
+          if (this.objects.get(o.id) !== rt) return;
+          const kids = expandPrefab(o, pd);
+          rt.prefab = { name: o.prefab, children: kids.map((k) => k.id) };
+          for (const k of kids) this.virtual.set(k.id, k);
+          await Promise.all(kids.map((k) => this.addObject(k, o.id)));
+          for (const k of kids) this.dirtyKinds.add(k.type);
+          this.collisionDirty = true;
         } catch (e) {
           console.warn(`[world] ${o.id}: ${(e as Error).message}`);
         } finally {

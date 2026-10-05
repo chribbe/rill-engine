@@ -241,6 +241,10 @@ n_objects = 0
 # Entities the editor exported as generated geometry (sculpted terrain) bake from the export.
 EXTRA = arg('--extra', '')
 extra_ids = {m['id'] for m in load_json(EXTRA).get('meshes', [])} if EXTRA else set()
+# Prefab instances expand into entities in the editor; the export lists them (world space,
+# IDs '<instance>/<child>') so they bake like the map's own.
+if EXTRA:
+    doc['objects'] += load_json(EXTRA).get('entities', [])
 for o in doc['objects']:
     if o['id'] in extra_ids:
         continue
@@ -265,8 +269,8 @@ for o in doc['objects']:
             ob.matrix_world = Matrix.Translation((x, -z, y)) @ Matrix.Rotation(math.radians(-yaw), 4, 'Z') @ Matrix.Diagonal((s, s, s, 1))
             scene.collection.objects.link(ob)
             n_objects += 1
-# Generated geometry from the editor (--extra build/bake/<map>/extra.json): spline meshes in world
-# space (lightmapped, keyed by entity ID) and scatter instances (occluders).
+# Generated geometry from the editor (--extra build/bake/<map>/extra.json): spline and block
+# meshes in world space (lightmapped, keyed by entity ID) and scatter instances (occluders).
 if EXTRA:
     extra = load_json(EXTRA)
     C4 = Matrix(((1, 0, 0, 0), (0, 0, -1, 0), (0, 1, 0, 0), (0, 0, 0, 1)))

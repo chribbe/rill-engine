@@ -44,6 +44,8 @@ export const AI_CONVENTIONS = [
   'Workflow: get_ai_context and get_scene_summary first; describe_area / query_entities / ground_height to understand a place; begin_changeset before editing; then operations; capture_view to look at the result (frame with { target } or { ids }); iterate; commit_changeset with a short summary. The human accepts or reverts it in the editor.',
   'Respect the scope in get_ai_context: refused operations explain why. Locked entities cannot be moved or deleted.',
   'Content: search_assets for props / vegetation / lighting; scatter presets (scatter_vegetation) for forests, shrubs, rocks; splines (create_spline) for paths, roads, kerbs, fences, rail; place_decal for dirt, streaks, cracks; modify_terrain to sculpt; assign_material / set_material_parameter for surfaces.',
+  'Blockout (playable spaces before art): create_block (box / wedge ramp / stairs / cylinder; position = bottom centre, size [x, y, z]), create_room (floor + walls + ceiling as blocks), cut_opening on a wall piece (door / window presets, placed along the whole wall), carve_blocks, resize_block, set_block_material (dev_wall default, dev_grey, dev_dark, dev_orange, dev_blue, dev_green measured grids). Player scale: eye 1.65 m, doors 0.9 x 2.1 m, corridors 1.2-2 m, storeys ~3 m, stairs ~17 cm risers. Stairs and ramps climb towards local -Z (yaw turns them).',
+  'Prefabs: list_prefabs / place_prefab to reuse; create_prefab to turn entities into a prefab; unpack_prefab to make an instance ordinary entities. Prefab contents are not separate map entities (pick and move the instance).',
 ].join('\n');
 
 export class AiLayer {

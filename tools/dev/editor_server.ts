@@ -4,7 +4,10 @@
 //   POST /__editor/save?map=<name>      writes public/maps/<name>/map.json (canonical formatting);
 //                                       the previous version goes to backups/maps/<name>/ first
 //   POST /__editor/save-as?map=<new>&from=<map>   new map from a document (lightmaps referenced from <map>)
-//   POST /__editor/bake-extra?map=<name>   generated geometry for the bake (spline GLBs, scatter instances)
+//   POST /__editor/bake-extra?map=<name>   generated geometry for the bake (spline / block GLBs, scatter instances, prefab entities)
+//   GET  /__editor/prefabs              prefab files (public/prefabs/*.json)
+//   POST /__editor/prefab-save?name=<n>[&create=1]  writes a prefab (previous version to backups/prefabs/)
+//   GET  /prefabs/<name>.json           prefab files straight from disk (fresh after a save)
 //   GET  /__editor/backups?map=<name>   saved versions, newest first
 //   GET  /__editor/backup?map=<name>&file=<f>     one saved version
 //   GET  /__editor/materials            material library summary (public/materials/*.json)
@@ -59,6 +62,21 @@ function backupMap(map: string) {
   const src = join(PUBLIC, 'maps', map, 'map.json');
   if (!existsSync(src)) return null;
   const dir = join(BACKUPS, map);
+  mkdirSync(dir, { recursive: true });
+  const file = `${stamp()}.json`;
+  copyFileSync(src, join(dir, file));
+  const auto = readdirSync(dir).filter((f) => /^\d{8}-\d{6}(-\d{3})?\.json$/.test(f)).sort();
+  for (const f of auto.slice(0, Math.max(0, auto.length - KEEP_BACKUPS))) unlinkSync(join(dir, f));
+  return file;
+}
+
+const PREFAB_BACKUPS = join(ROOT, 'backups', 'prefabs');
+
+/** Same for prefab files (backups/prefabs/<name>/). */
+function backupPrefab(name: string) {
+  const src = join(PUBLIC, 'prefabs', `${name}.json`);
+  if (!existsSync(src)) return null;
+  const dir = join(PREFAB_BACKUPS, name);
   mkdirSync(dir, { recursive: true });
   const file = `${stamp()}.json`;
   copyFileSync(src, join(dir, file));
@@ -171,6 +189,15 @@ export function editorServer(): Plugin {
       server.middlewares.use(async (req, res, next) => {
         const url = new URL(req.url ?? '', 'http://x');
         const path = url.pathname;
+        // Prefab files straight from disk: just-saved ones are served before vite's public-file watcher sees them.
+        if (path.startsWith('/prefabs/') && path.endsWith('.json') && req.method === 'GET') {
+          const name = decodeURIComponent(path.slice('/prefabs/'.length, -'.json'.length));
+          const file = join(PUBLIC, 'prefabs', `${name}.json`);
+          if (!NAME.test(name) || !existsSync(file)) return json(res, 404, { error: `no prefab '${name}'` });
+          res.setHeader('content-type', 'application/json');
+          res.setHeader('cache-control', 'no-store');
+          return res.end(readFileSync(file, 'utf8'));
+        }
         if (!path.startsWith('/__editor/') && !path.startsWith('/__blender/')) return next();
         try {
           if (path === '/__editor/maps' && req.method === 'GET') {
@@ -202,18 +229,20 @@ export function editorServer(): Plugin {
             // Generated geometry the bake can't derive from map.json alone (splines, scatter instances).
             const map = url.searchParams.get('map') ?? '';
             if (!NAME.test(map)) return json(res, 400, { error: 'bad map name' });
-            const body = JSON.parse(await readBody(req)) as { meshes: { id: string; glb: string; resolution: [number, number] }[]; instances: { asset: string; matrix: number[] }[] };
+            // Prefab contents: their entities (baked like map entities) and IDs '<instance>/<child>'.
+            const body = JSON.parse(await readBody(req)) as { meshes: { id: string; glb: string; resolution: [number, number] }[]; instances: { asset: string; matrix: number[] }[]; entities?: unknown[] };
             const dir = join(ROOT, 'build', 'bake', map);
             rmSync(dir, { recursive: true, force: true });
             mkdirSync(dir, { recursive: true });
-            const meshes = body.meshes.filter((m) => /^[\w.-]+$/.test(m.id)).map((m) => {
-              const file = join(dir, `${m.id}.glb`);
+            const meshes = body.meshes.filter((m) => /^[\w.\/-]+$/.test(m.id) && !m.id.includes('..')).map((m) => {
+              const file = join(dir, `${m.id.replace(/\//g, '__')}.glb`);
               writeFileSync(file, Buffer.from(m.glb, 'base64'));
               return { id: m.id, file, resolution: m.resolution };
             });
             const extra = join(dir, 'extra.json');
-            writeFileSync(extra, JSON.stringify({ meshes, instances: body.instances }));
-            return json(res, 200, { extra, meshes: meshes.length, instances: body.instances.length });
+            const entities = body.entities ?? [];
+            writeFileSync(extra, JSON.stringify({ meshes, instances: body.instances, entities }));
+            return json(res, 200, { extra, meshes: meshes.length, instances: body.instances.length, entities: entities.length });
           }
           if (path === '/__editor/save-as' && req.method === 'POST') {
             const map = url.searchParams.get('map') ?? '', from = url.searchParams.get('from') ?? '';
@@ -272,6 +301,33 @@ export function editorServer(): Plugin {
               return { name: n.replace(/\.json$/, ''), title: d.name, description: d.description };
             }) : [];
             return json(res, 200, list);
+          }
+          if (path === '/__editor/prefabs' && req.method === 'GET') {
+            const dir = join(PUBLIC, 'prefabs');
+            const list = existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith('.json')).sort().map((n) => {
+              const d = JSON.parse(readFileSync(join(dir, n), 'utf8'));
+              return { name: n.replace(/\.json$/, ''), title: d.name, description: d.description, category: d.category, tags: d.tags, entities: d.entities?.length ?? 0, bounds: d.bounds, modified: statSync(join(dir, n)).mtimeMs };
+            }) : [];
+            return json(res, 200, list);
+          }
+          if (path === '/__editor/prefab-save' && req.method === 'POST') {
+            const name = url.searchParams.get('name') ?? '';
+            if (!NAME.test(name)) return json(res, 400, { error: 'prefab names: letters, digits, _ and -' });
+            const doc = JSON.parse(await readBody(req));
+            if (doc?.format !== 'rill.prefab' || doc.version !== 1 || !Array.isArray(doc.entities)) return json(res, 400, { error: 'not a rill.prefab v1 document' });
+            const ids = new Set<string>();
+            for (const e of doc.entities) {
+              if (!e?.id || ids.has(e.id)) return json(res, 400, { error: `missing or duplicate entity id '${e?.id}'` });
+              ids.add(e.id);
+            }
+            const dir = join(PUBLIC, 'prefabs');
+            mkdirSync(dir, { recursive: true });
+            const file = join(dir, `${name}.json`);
+            if (url.searchParams.get('create') === '1' && existsSync(file)) return json(res, 409, { error: `prefab '${name}' exists` });
+            const text = formatMapJson(doc);
+            const backup = existsSync(file) && readFileSync(file, 'utf8') !== text ? backupPrefab(name) : null;
+            writeAtomic(file, text);
+            return json(res, 200, { file: relative(ROOT, file), bytes: text.length, entities: doc.entities.length, backup: backup && relative(ROOT, join(PREFAB_BACKUPS, name, backup)) });
           }
           if (path === '/__editor/asset-files' && req.method === 'GET') {
             const dir = join(PUBLIC, 'assets');

@@ -5,6 +5,10 @@ import { World } from '../engine/scene/world';
 import type { Runtime } from '../app/runtime';
 import { EditorHistory, OpError, type OpContext } from './commands';
 import type { AssetRegistry } from './assets';
+import { defaultBlockTool } from './blocktool';
+import { blockCorners } from './blockedit';
+import { PrefabEditor } from './prefabs';
+import { Thumbnails } from './thumbs';
 import type { V3 } from './xform';
 
 /**
@@ -14,7 +18,7 @@ import type { V3 } from './xform';
  * `exec`).
  */
 
-export type Tool = 'select' | 'translate' | 'rotate' | 'scale' | 'paint' | 'spline' | 'decal' | 'sculpt';
+export type Tool = 'select' | 'translate' | 'rotate' | 'scale' | 'block' | 'paint' | 'spline' | 'decal' | 'sculpt';
 
 export interface MaterialInfo {
   name: string;
@@ -64,6 +68,12 @@ export class Editor {
   decalTool = { material: 'decal_stain', size: 1.5, jitter: 0.3, randomRoll: true, spacing: 1.2 };
   /** Spline tool: preset for new splines; the spline being drawn (clicks append points). */
   splineTool: { preset: string; drawing: string | null; pending: V3 | null; key: string } = { preset: 'path_asphalt', drawing: null, pending: null, key: '' };
+  /** Block tool: draw mode / openings, shape, material, room walls, last sizes. */
+  blockTool = defaultBlockTool();
+  /** Prefab files: create, place, edit in place. */
+  readonly prefabs: PrefabEditor;
+  /** Asset browser thumbnails (CPU-drawn, cached). */
+  readonly thumbs: Thumbnails;
   private handlers = new Map<EventName, Set<() => void>>();
   private editorCamera: { position: V3; yaw: number; pitch: number } | null = null;
 
@@ -71,16 +81,19 @@ export class Editor {
     this.scene = rt.world.scene;
     this.ctx = {
       scene: this.scene, assets, pivot: (id) => this.pivotOf(id),
+      prefab: (name) => rt.world.prefabsLoaded.get(name) ?? null,
       runtime: {
         scatterInstances: (id) => rt.world.scatterInstances(id),
         ground: (x, z) => {
           rt.world.ensureCollision(true);
           const g = rt.world.collision.groundHit(x, 1e4, z, 2e4);
-          return g ? { height: g.height, id: g.owner, semantic: this.scene.get(g.owner)?.semantic } : null;
+          return g ? { height: g.height, id: rt.world.ownerOf(g.owner), semantic: rt.world.entityOf(g.owner)?.semantic } : null;
         },
       },
     };
     this.history = new EditorHistory(this.ctx);
+    this.prefabs = new PrefabEditor(this);
+    this.thumbs = new Thumbnails((name) => rt.world.prefabDoc(name));
     this.history.onChange(() => this.emit('history'));
     this.scene.subscribe((c) => {
       // Drop selected IDs that no longer exist (deleted, undone creation).
@@ -207,8 +220,7 @@ export class Editor {
     const add = (id: string) => {
       if (seen.has(id)) return;
       seen.add(id);
-      const rt = this.rt.world.objects.get(id);
-      if (rt) out.push(...rt.renderables);
+      out.push(...this.renderablesOf(id));
     };
     for (const id of this.selection) {
       if (this.scene.get(id)?.type === 'scatter') {
@@ -230,8 +242,9 @@ export class Editor {
 
   // ------------------------------------------------------------------ geometry queries
 
+  /** Renderables of an entity (prefab instances: everything they expand into). */
   renderablesOf(id: string): Renderable[] {
-    return this.rt.world.objects.get(id)?.renderables ?? [];
+    return this.rt.world.prefabRenderables(id);
   }
 
   /** World AABB of an entity (meshes: render bounds; helpers: their extent). Groups: union of descendants. */
@@ -243,8 +256,16 @@ export class Editor {
       for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], a[k]); max[k] = Math.max(max[k], b[k]); }
     };
     const own = (x: Entity) => {
-      if (x.type === 'mesh' || x.type === 'instances' || x.type === 'scatter' || x.type === 'spline') {
-        for (const r of this.renderablesOf(x.id)) grow(r.worldMin, r.worldMax);
+      // Blocks: exact, from their parameters (no wait for the mesh build).
+      if (x.type === 'block') {
+        for (const c of blockCorners(x)) grow(c, c);
+        return;
+      }
+      if (x.type === 'mesh' || x.type === 'instances' || x.type === 'scatter' || x.type === 'spline' || x.type === 'prefab') {
+        const rs = this.renderablesOf(x.id);
+        for (const r of rs) grow(r.worldMin, r.worldMax);
+        // Still loading: at least its position.
+        if (!rs.length && (x.type === 'mesh' || x.type === 'prefab')) grow(x.transform.position, x.transform.position);
         return;
       }
       if (!isSpatial(x)) return;
@@ -312,7 +333,10 @@ export class Editor {
       return false;
     }
     try {
-      const r = await fetch(`/__editor/save?map=${encodeURIComponent(this.mapName)}`, { method: 'POST', body: JSON.stringify(this.scene.doc) });
+      // An open prefab edit: write the prefab too; the map keeps the instance in place of the edit group.
+      if (this.prefabs.session && this.prefabs.changed && !(await this.prefabs.save())) return false;
+      const doc = this.prefabs.docForSave(this.scene.doc);
+      const r = await fetch(`/__editor/save?map=${encodeURIComponent(this.mapName)}`, { method: 'POST', body: JSON.stringify(doc) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
       this.history.markSaved();

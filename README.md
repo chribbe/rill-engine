@@ -31,6 +31,12 @@ or materials from the bottom tabs into the view. **F5** plays the edited world i
 person (click to capture the mouse, Esc to release, F5 to return). **Bake lighting**
 runs Blender/Cycles in the background and reloads the lightmaps. Full table: EDITOR.md §5.
 
+**Blockout (B)**: drag a footprint on any surface, then the height, click (1 box, 2 ramp,
+3 stairs, 4 pillar, 5 room); drag a selected block's face handles to push / pull, Shift to
+extrude; **O** cuts doors and windows. **Prefabs**: select things, *Save as prefab…* in the
+inspector, place it from Assets › prefabs, double-click an instance to edit it in place
+(every instance updates on save). EDITOR.md §14–15.
+
 ## Working with Claude in the editor
 
 With `npm run dev` running and the editor open, start Claude Code in this repository and

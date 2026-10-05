@@ -118,4 +118,5 @@ export function select(options: string[], value: string, onChange: (v: string) =
 
 export const ICONS: Record<string, string> = {
   group: '▸', mesh: '◆', instances: '⁂', light: '✸', decal: '▧', marker: '⚑', probeVolume: '⋮', reflectionProbe: '◎', sign: '▭',
+  block: '■', prefab: '❖', spline: '〰', scatter: '❦', terrainLayer: '◢',
 };

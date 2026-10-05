@@ -8,10 +8,11 @@ the plan towards AI tools. The renderer is documented in [ENGINE.md](ENGINE.md).
 (`public/maps/<name>/map.json`) are authored in the web editor. Blender creates
 and processes assets and bakes lighting; it no longer owns levels.
 
-**Current milestone:** E2 world-building tools. Done: vegetation / rock scatter with a paint brush,
-splines (paths, roads, kerbs, fences, walls, rail track), decal placement / painting, terrain
-sculpting and ground painting, surface-aware light placement, bake export of generated geometry with
-progress, map backups. E1 (editor foundation) is complete, see §11.
+**Current milestone:** level-building tools: blockout (blocks, rooms, stairs, doors and windows,
+face push / pull, §14) and prefabs (reusable groups with edit in place, §15), plus box select,
+surface drag, Shift-drag copies and asset thumbnails. Before that: E3 AI layer (§9), E2
+world-building tools (scatter, splines, decals, terrain sculpting, bake export, §12), E1 editor
+foundation (§11).
 
 ---
 
@@ -189,10 +190,12 @@ and remembered.
 | Input | Action |
 |---|---|
 | LMB | select (Shift add, Cmd/Ctrl toggle); locked geometry occludes but deselects |
-| B / N / T / G | paint scatter / draw spline / place decals / sculpt terrain (§12) |
+| LMB drag on empty space | box select: everything entirely inside (Shift adds, Cmd/Ctrl removes) |
+| B | blockout: draw blocks, rooms, stairs; **O** doors and windows (§14) |
+| P / N / T / G | paint scatter / draw spline / place decals / sculpt terrain (§12) |
 | RMB drag + WASD / Q E | fly (Shift fast, Alt slow, wheel while held = fly speed) |
 | MMB drag | pan · **wheel** dolly to the point under the cursor · **Alt+LMB** orbit |
-| Double-click / F | frame selection |
+| Double-click / F | frame selection (double-click a prefab instance: edit it in place, §15) |
 | Q / W / E / R | select / move / rotate / scale; **X** world / local axes |
 | Snap toggle, grid select, `[` `]` | grid 1/64 m … 16 m; angle 1°–90°; Cmd/Ctrl while dragging inverts snap |
 | Arrows / PgUp / PgDn | nudge one grid step (camera-aligned; Shift ×10) |
@@ -201,9 +204,12 @@ and remembered.
 | F5 (Shift+F5 from player start) | play / stop; in play: click to capture the mouse, Esc to release, L flashlight, X weapon |
 
 * **Gizmos** are drawn on a 2D overlay and hit-tested in screen space:
-  axis arrows, plane squares and a screen-plane centre for moving; rings for
+  axis arrows, plane squares and a centre square for moving; rings for
   rotating (drag along the ring's tangent); axis boxes and a uniform centre for
-  scaling (always local axes). A drag records one undo entry.
+  scaling (always local axes). A drag records one undo entry. The **centre
+  square slides the selection over the surfaces under the cursor** (its base
+  lands on the ground, a roof, another block; grid-snapped in X/Z).
+  **Shift+drag** on any handle drags a copy (duplicate + move, one undo step).
 * **Picking** is a CPU ray cast over LOD0 triangles in each entity's local
   space, plus helper shapes: lights, markers and probes are screen-sized
   spheres, decals and signs are boxes. Debug tab toggles what is pickable
@@ -211,11 +217,14 @@ and remembered.
 * **Selection outline:** the renderer's depth-tested wireframe, limited to the
   selected objects (`Renderer.highlight`), the only renderer addition the
   editor needed.
-* **Assets tab:** registry assets by category with search, plus entity
-  templates (point / spot light, decal, sign, viewpoint, reflection probe,
-  group). Click then click in the view to place (Shift keeps placing), or drag
-  into the view. Placement lands on the surface under the cursor (snapped to
-  the grid in X/Z).
+* **Assets tab:** registry assets by category with search and thumbnails,
+  plus Blockout (shapes, openings), Prefabs and entity templates (point / spot
+  light, decal, sign, viewpoint, reflection probe, group). Click then click in
+  the view to place (Shift keeps placing), or drag into the view. Placement
+  lands on the surface under the cursor (snapped to the grid in X/Z).
+  Thumbnails are drawn on the CPU (`thumbs.ts`: flat-shaded orthographic 3/4
+  view, colours from each material's average albedo in the texture manifest,
+  depth-edge outlines), lazily as tiles scroll into view, cached in IndexedDB.
 * **Materials tab:** drag a material onto a surface to assign it to that slot.
   The inspector lists every slot with a searchable material field and a
   per-object tint.
@@ -419,7 +428,7 @@ instanced in 8.7 ms; a mixed forest over 12,000 m² reproduces the 40 / 30 / 15
 Presets: `stockholm_mixed_forest`, `pine_heath`, `spruce_forest`, `birch_grove`,
 `shrubs`, `park_trees`, `rock_outcrops`.
 
-Editor: **Paint** tool (B, or click a preset in Assets › scatter): drag on the
+Editor: **Paint** tool (P, or click a preset in Assets › scatter): drag on the
 ground to paint into the selected scatter (or start a new one with the chosen
 preset), Shift erases, `[` `]` brush radius; one drag = one undo entry. Clicking
 a tree selects its scatter with that instance: Del removes just that tree,
@@ -541,7 +550,7 @@ until it is baked itself. Pristine copies of the three maps as migrated:
 ### Bake flow
 
 **Bake lighting**: saves, exports generated geometry (splines, scatters,
-sculpted terrain), runs Cycles in the background and shows passes done / total
+sculpted terrain, blocks, prefab contents), runs Cycles in the background and shows passes done / total
 in the toolbar (7 passes per atlas page), then reloads the lightmaps in place.
 
 ### Remaining E2 / next
@@ -554,6 +563,125 @@ in the toolbar (7 passes per atlas page), then reloads the lightmaps in place.
 4. **Hot reload** of assets / materials / shaders from disk.
 5. Then the AI milestone: MCP server, scope / lock enforcement per call,
    changeset review UI.
+
+## 14. Blockout (blocks)
+
+Grey-boxing playable space before art: parametric **block** entities
+(`type: "block"`), edited in the viewport and through operations, rendered,
+collided with and lightmapped like any static geometry.
+
+```json
+{ "id": "wall_z_7", "name": "Wall +Z", "type": "block", "semantic": "blockout", "parent": "room_4",
+  "transform": { "position": [0, 0.2, 2.4] },
+  "block": { "shape": "box", "size": [5.6, 2.8, 0.2], "material": "dev_wall", "faces": { "pz": "brick_red" } },
+  "static": true }
+```
+
+* **Shapes** (`src/engine/scene/blocks.ts`): `box`, `wedge` (ramp rising
+  towards local -Z), `stairs` (climbing towards -Z; `steps` default to ~17 cm
+  risers, walkable), `cylinder` (`segments`, default 16). Origin at the
+  bottom centre; `size` = [x, y, z] metres; transform scale folds into the
+  size (scaled blocks keep their texel density).
+* **Faces** have IDs (`px nx py ny pz nz`, cylinders `side py ny`) so
+  materials can be set per face (`block.faces`) and picking reports which face
+  was hit. **UV0 is world-aligned** (planar per face, metres, divided by the
+  material's `physicalSize`): textures stay locked to the world when blocks
+  move and continue seamlessly across neighbours. UV1 packs every face into
+  one lightmap chart (8 texels / m, `texelDensity`).
+* **Dev materials**: `dev_wall` (default: light warm grey, reads against the
+  floor), `dev_grey` (= the sandbox floor), `dev_dark`, `dev_orange`,
+  `dev_blue`, `dev_green`: 25 cm / 1 m / 4 m measured grids.
+
+**Block tool (B)**
+
+* **Draw**: drag a footprint on any surface, release, move the mouse to set
+  the height, click (or Enter). The footprint snaps to the grid in the
+  surface's frame: floors and ceilings (extrude up / down), walls (the block
+  sticks out of the wall), other blocks (their faces; rotated blocks keep
+  their own grid). Live dimensions at the nearest corner. A plain click
+  stamps the last size of that shape. Esc cancels.
+* **Shapes**: 1 box · 2 ramp · 3 stairs · 4 pillar · 5 room (floor, walls and
+  optional ceiling of the drawn box, wall thickness in the tool options).
+  Stairs and ramps **climb in the direction you drag**; Tab turns them.
+* **Face handles** (select tool, scale tool and block tool, one block
+  selected): coloured squares on each face; drag to push / pull that face (the
+  opposite face stays; world-aligned faces land on the grid), **Shift+drag
+  extrudes a new block** from the face. In the scale tool they replace the
+  gizmo for blocks.
+* **Openings (O)**: hover a wall (a box block): a preview of the door /
+  window follows the cursor along the wall (snapped); click to cut. Presets:
+  door 0.9 × 2.1, double door, window 1.2 × 1.2 at 0.9 m, wide window,
+  passage; **Custom** drags a rectangle. Openings are placed relative to the
+  whole wall (the block plus the coplanar pieces earlier openings left) and cut
+  through back-to-back walls (two rooms sharing a wall).
+* **Materials**: drag a material onto a block face (Shift: the whole block);
+  the inspector lists every face.
+
+**How cutting works**: no CSG. A box block minus an aligned box (any multiple
+of 90° apart) becomes up to six box pieces: below / above first (floors and
+lintels span the full width), then left / right, then front / back. The
+largest piece keeps the block's ID; world-aligned UVs keep the texture
+continuous. `hollow_block` / `create_room` subtract an inner box (walls stand
+on the floor); `carve_blocks` subtracts a cutter block from everything it
+overlaps (corridors through several walls).
+
+| Operation | |
+|---|---|
+| `create_block` | shape, position (bottom centre; `[x, z]` on the ground), size, yaw / rotation, material, faces, steps, segments |
+| `set_block` | shape, size, material (all faces), steps, segments, texelDensity |
+| `set_block_material` | one face, or the whole block |
+| `resize_block` | push / pull a face by `distance` or to a `size` |
+| `cut_opening` | face, preset or size, `along` (from the wall centre, + right seen from outside) and `bottom` (above the wall's base), or a world `point` |
+| `carve_blocks` | cutter block out of every overlapping box block |
+| `hollow_block`, `create_room` | rooms of blocks in a group (thickness, open faces, materials) |
+| `fit_stairs` | step count from the height |
+
+Runtime: `World.populateBlock` rebuilds the mesh on every change (cheap; a
+gizmo drag rebuilds per frame), collision includes blocks, and the bake
+exports them as world-space meshes with their charts (`bridge.ts`). Editor
+code: `src/editor/blockedit.ts` (resize, subtraction, wall frames),
+`blocktool.ts` (tool, handles, overlay).
+
+## 15. Prefabs
+
+Reusable groups of entities in `public/prefabs/<name>.json`, placed as
+**instances** (`type: "prefab"`). Editing a prefab updates every instance.
+
+```json
+{ "format": "rill.prefab", "version": 1, "name": "kiosk", "category": "street",
+  "entities": [ { "id": "body", "type": "block", "transform": { "position": [0, 0, 0] }, "block": { "shape": "box", "size": [2, 2.4, 2] } },
+                { "id": "lamp", "type": "light", "transform": { "position": [0, 2.2, 1.05] }, "light": { "kind": "point", "color": [1, 0.8, 0.6], "intensity": 200, "range": 6 } } ] }
+```
+
+* Entities are in **prefab space**: the origin is the instance's pivot
+  (bottom centre of the contents when saved). Any entity type except terrain
+  layers; prefabs may contain prefab instances (a prefab containing itself is
+  refused).
+* **Runtime**: the World expands an instance into *virtual* entities with
+  IDs `<instance>/<child>` (nested: `a/b/c`): rendered, lit, collided with and
+  baked like map entities, but not in the map document. Moving or hiding the
+  instance carries them along; saving the prefab re-expands every instance.
+  Picking maps them to their instance (`PickHit.inner` tells what was hit).
+  The bake exports them (`extra.json` `entities`, blocks as meshes), so
+  lightmaps are per instance.
+* **Save as prefab…** (Inspector, any selection): writes the file and replaces
+  the selection by an instance. Names: letters, digits, `_`, `-`.
+* **Edit in place**: double-click an instance (or *Edit prefab* in the
+  inspector). It unpacks into an ordinary group (`✎ name`) with everything
+  else around it; edit with any tool. The banner over the viewport: **Save
+  prefab** (writes the file; every instance updates; entity IDs stay stable
+  across edits), **Save & close**, **Close** (puts the instance back; asks
+  about unsaved changes). Saving the map while a prefab is open writes the
+  instance, not the edit group (and saves the prefab too).
+* **Unpack**: the instance becomes ordinary entities for good.
+* Prefab saves keep the previous file in `backups/prefabs/<name>/`. The dev
+  server serves `/prefabs/*.json` straight from disk so a just-saved prefab
+  loads immediately.
+
+Operations: `place_prefab`, `replace_with_prefab`, `unpack_prefab`. Tools
+(AI / console): `list_prefabs`, `get_prefab`, `create_prefab` (the file write
+is outside the changeset: reverting brings the entities back but keeps the
+file).
 
 ## 13. Files
 
@@ -573,3 +701,6 @@ in the toolbar (7 passes per atlas page), then reloads the lightmaps in place.
 | Scatter / splines / terrain | `src/engine/scene/scatter.ts`, `splines.ts`, `terrainedit.ts`, `public/scatter/*.json`, `public/splines/*.json` |
 | Tool options panel | `src/editor/ui/tooloptions.ts` |
 | GLB export (bake extras) | `src/engine/assets/glbwrite.ts`, `src/editor/bridge.ts` |
+| Blockout | `src/engine/scene/blocks.ts` (geometry), `src/editor/blockedit.ts`, `blocktool.ts`, `public/materials/dev_*.json` |
+| Prefabs | `src/engine/scene/prefab.ts` (expand / reframe), `src/editor/prefabs.ts`, `ui/prefabbar.ts`, `public/prefabs/*.json` |
+| Asset thumbnails | `src/editor/thumbs.ts` |

@@ -191,6 +191,8 @@ recipes.dev_orange = () => devGrid('dev_orange', '#c8692a', '#e8a066');
 recipes.dev_dark = () => devGrid('dev_dark', '#3b3e43', '#61666e');
 recipes.dev_blue = () => devGrid('dev_blue', '#356aa6', '#78a6d6');
 recipes.dev_green = () => devGrid('dev_green', '#4c8a3a', '#86ba72');
+// Blockout default: a light warm grey that reads against the grey dev floor.
+recipes.dev_wall = () => devGrid('dev_wall', '#b3aea4', '#8c877e');
 
 recipes.debug_checker = () => {
   const S = 1024, P = 2, ppm = S / P;

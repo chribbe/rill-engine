@@ -11,6 +11,7 @@ import { Inspector } from './ui/inspector';
 import { AssetsPanel, ConsolePanel, DebugPanel, EnvironmentPanel, MaterialsPanel } from './ui/panels';
 import { h } from './ui/dom';
 import { ToolOptions } from './ui/tooloptions';
+import { PrefabBar } from './ui/prefabbar';
 import { AiLayer } from './ai';
 import { AiPanel } from './ui/aipanel';
 
@@ -30,7 +31,7 @@ async function main() {
   const assets = await AssetRegistry.load();
   const ed = new Editor(rt, assets);
   const vp = new Viewport(ed, slots.view, canvas);
-  slots.view.append(new ToolOptions(ed).el);
+  slots.view.append(new ToolOptions(ed).el, new PrefabBar(ed).el);
   const bridge = new BlenderBridge(ed);
   const tools = new EditorTools(ed, bridge);
   const ai = new AiLayer(ed, tools);

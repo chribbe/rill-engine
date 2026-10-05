@@ -21,6 +21,10 @@ export interface PickHit {
   slot?: string;
   /** Sub-instance (scatter cell key) that was hit. */
   sub?: string;
+  /** Block face that was hit (px nx py ny pz nz side). */
+  face?: string;
+  /** What was actually hit when `id` is a prefab instance: the virtual entity inside it. */
+  inner?: string;
 }
 
 export interface Ray { o: V3; d: V3 }
@@ -61,31 +65,41 @@ export class Picker {
     const ed = this.editor;
     const scene = ed.scene;
     let best: PickHit | null = null;
+    const world = ed.rt.world;
     const ok = (id: string) => !opts.ignore?.has(id) && scene.effectiveVisible(id) && (opts.includeLocked || !scene.effectiveLocked(id));
+    // Prefab contents pick as their instance (the document entity they belong to).
+    const okRt = (id: string, owner: string) => owner === id ? ok(id) : ok(owner) && !opts.ignore?.has(id) && world.isVisible(id);
     // Meshes.
     if (ed.pick.meshes || opts.meshesOnly) {
-      for (const [id, rt] of ed.rt.world.objects) {
+      for (const [id, rt] of world.objects) {
         const e = rt.doc;
-        if ((e.type !== 'mesh' && e.type !== 'instances' && e.type !== 'scatter' && e.type !== 'spline') || !ok(id)) continue;
+        if (e.type !== 'mesh' && e.type !== 'instances' && e.type !== 'scatter' && e.type !== 'spline' && e.type !== 'block') continue;
+        const owner = rt.owner ? world.ownerOf(id) : id;
+        if (!okRt(id, owner)) continue;
         for (const r of rt.renderables) {
           const tb = rayAabb(ray.o, ray.d, r.worldMin, r.worldMax, best ? best.t : 1e9);
           if (tb < 0) continue;
           const model = e.type === 'mesh' ? transformMatrix(e.transform) : ed.rt.renderer.instances.model(r.slot);
           const hit = this.meshHit(ray, model, r.mesh.primitives, best ? best.t : 1e9);
-          if (hit) best = { id, t: hit.t, point: hit.point, normal: hit.normal, slot: r.mesh.primitives[hit.prim].material, sub: r.id.includes('#') ? r.id.slice(r.id.indexOf('#') + 1) : undefined };
+          if (!hit) continue;
+          best = { id: owner, t: hit.t, point: hit.point, normal: hit.normal, slot: r.mesh.primitives[hit.prim].material, sub: r.id.includes('#') ? r.id.slice(r.id.indexOf('#') + 1) : undefined };
+          if (e.type === 'block') best.face = world.blockFace(id, hit.prim, hit.tri) ?? undefined;
+          if (owner !== id) best.inner = id;
         }
       }
     }
     if (opts.meshesOnly) return best;
     // Helpers.
-    for (const e of scene.entities) {
-      if (!isSpatial(e) || !ok(e.id) || !this.helperPickable(e)) continue;
+    const helper = (e: Entity, owner: string) => {
+      if (!isSpatial(e) || !okRt(e.id, owner) || !this.helperPickable(e)) return;
       const t = this.helperHit(ray, e);
       if (t >= 0 && (!best || t < best.t - 0.05)) {
         const p: V3 = [ray.o[0] + ray.d[0] * t, ray.o[1] + ray.d[1] * t, ray.o[2] + ray.d[2] * t];
-        best = { id: e.id, t, point: p, normal: [-ray.d[0], -ray.d[1], -ray.d[2]] };
+        best = { id: owner, t, point: p, normal: [-ray.d[0], -ray.d[1], -ray.d[2]], ...(owner !== e.id ? { inner: e.id } : {}) };
       }
-    }
+    };
+    for (const e of scene.entities) helper(e, e.id);
+    for (const e of world.virtual.values()) helper(e, world.ownerOf(e.id));
     return best;
   }
 
@@ -131,7 +145,7 @@ export class Picker {
     const o = vec3.transformMat4(ray.o, inv);
     // Unnormalised local direction: t stays the world ray parameter.
     const d = vec3.sub(vec3.transformMat4(vec3.add(ray.o, ray.d), inv), o);
-    let bestT = maxT, bestPrim = -1, bn: number[] = [0, 1, 0];
+    let bestT = maxT, bestPrim = -1, bestTri = -1, bn: number[] = [0, 1, 0];
     for (let pi = 0; pi < prims.length; pi++) {
       const P = prims[pi].positions, I = prims[pi].indices;
       for (let i = 0; i < I.length; i += 3) {
@@ -152,6 +166,7 @@ export class Picker {
         if (t > 1e-4 && t < bestT) {
           bestT = t;
           bestPrim = pi;
+          bestTri = i / 3;
           bn = [e1y * e2z - e1z * e2y, e1z * e2x - e1x * e2z, e1x * e2y - e1y * e2x];
         }
       }
@@ -164,6 +179,6 @@ export class Picker {
     let n = vec3.normalize([nx, ny, nz]);
     if (n[0] * ray.d[0] + n[1] * ray.d[1] + n[2] * ray.d[2] > 0) n = vec3.negate(n);
     const point: V3 = [ray.o[0] + ray.d[0] * bestT, ray.o[1] + ray.d[1] * bestT, ray.o[2] + ray.d[2] * bestT];
-    return { t: bestT, prim: bestPrim, point, normal: [n[0], n[1], n[2]] as V3 };
+    return { t: bestT, prim: bestPrim, tri: bestTri, point, normal: [n[0], n[1], n[2]] as V3 };
   }
 }

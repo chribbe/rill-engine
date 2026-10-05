@@ -1,5 +1,6 @@
 import type { Editor } from '../editor';
 import { checkbox, clear, h, numberField, select } from './dom';
+import { OPENINGS, type DrawShape, type OpeningPreset } from '../blocktool';
 
 /**
  * Floating settings for the active world-building tool (top right of the
@@ -63,6 +64,32 @@ export class ToolOptions {
           row('Spacing', num('m', dt.spacing, 0.05, 2, (v) => (dt.spacing = Math.max(0.1, v)))),
           row('', checkbox(dt.randomRoll, (v) => { dt.randomRoll = v; }, 'Random rotation')),
         ];
+        break;
+      }
+      case 'block': {
+        const bt = ed.blockTool;
+        title = bt.mode === 'opening' ? 'Doors & windows' : 'Blockout';
+        const modeBtn = (m: typeof bt.mode, l: string, tip: string) => h('button', { class: `mini${bt.mode === m ? ' on' : ''}`, title: tip, onclick: () => { bt.mode = m; ed.emit('tool'); } }, l);
+        const modes = h('div', { class: 'to-modes' }, modeBtn('draw', 'Draw blocks', 'Drag footprints on surfaces (B)'), modeBtn('opening', 'Openings', 'Cut doors and windows into walls (O)'));
+        if (bt.mode === 'opening') {
+          const presets: [OpeningPreset, string][] = [...Object.entries(OPENINGS).map(([k, v]) => [k as OpeningPreset, v.label] as [OpeningPreset, string]), ['custom', 'Custom (drag)']];
+          body = [
+            modes,
+            h('div', { class: 'to-modes' }, ...presets.map(([k, l]) => h('button', { class: `mini${bt.opening === k ? ' on' : ''}`, title: k === 'custom' ? 'Drag a rectangle on the wall' : `${OPENINGS[k as Exclude<OpeningPreset, 'custom'>].size.join(' × ')} m${OPENINGS[k as Exclude<OpeningPreset, 'custom'>].bottom ? `, ${OPENINGS[k as Exclude<OpeningPreset, 'custom'>].bottom} m above the floor` : ''}`, onclick: () => { bt.opening = k; ed.emit('tool'); } }, l))),
+            h('div', { class: 'to-note' }, 'Hover a wall (box block) and click: the opening snaps along the wall and cuts through back-to-back walls. Undo restores the wall.'),
+          ];
+          break;
+        }
+        const shapes: [DrawShape, string, string][] = [['box', 'Box', '1'], ['wedge', 'Ramp', '2'], ['stairs', 'Stairs', '3'], ['cylinder', 'Pillar', '4'], ['room', 'Room', '5']];
+        const mats = ed.materials.filter((m) => !m.decal).map((m) => m.name).sort((a, b) => (a.startsWith('dev_') === b.startsWith('dev_') ? a.localeCompare(b) : a.startsWith('dev_') ? -1 : 1));
+        body = [
+          modes,
+          h('div', { class: 'to-modes' }, ...shapes.map(([k, l, key]) => h('button', { class: `mini${bt.shape === k ? ' on' : ''}`, title: `${l} (${key})`, onclick: () => { bt.shape = k; ed.emit('tool'); } }, l))),
+          row('Material', select(mats.length ? mats : [bt.material], bt.material, (v) => { bt.material = v; ed.emit('tool'); })),
+          bt.shape === 'room' ? row('Walls', num('m', bt.thickness, 0.01, 2, (v) => (bt.thickness = Math.max(0.05, Math.min(1, v))))) : null,
+          bt.shape === 'room' ? row('', checkbox(bt.ceiling, (v) => { bt.ceiling = v; ed.emit('tool'); }, 'Ceiling')) : null,
+          h('div', { class: 'to-note' }, bt.shape === 'stairs' || bt.shape === 'wedge' ? 'Drag in the direction it should climb (Tab turns while drawing). A click stamps the last size.' : 'Drag a footprint, release, set the height, click. A click stamps the last size. Selected blocks: drag the face handles, Shift extrudes.'),
+        ].filter((x): x is HTMLDivElement => !!x);
         break;
       }
       case 'spline': {

@@ -1,0 +1,2 @@
+{ "baseColor": "dev_wall_albedo.png", "orm": "dev_wall_orm.png", "physicalSize": 4, "porosity": 0.2,
+  "notes": "Dev texture: 25 cm / 1 m / 4 m measured grid; light blockout default (reads against the dev_grey floor)." }

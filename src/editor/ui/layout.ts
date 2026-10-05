@@ -116,11 +116,12 @@ export function buildToolbar(root: HTMLElement, ed: Editor, vp: Viewport, bridge
     select: btn('Select', 'Select (Q)', () => setTool('select')),
     translate: btn('Move', 'Move (W)', () => setTool('translate')),
     rotate: btn('Rotate', 'Rotate (E)', () => setTool('rotate')),
-    scale: btn('Scale', 'Scale (R)', () => setTool('scale')),
+    scale: btn('Scale', 'Scale (R) - selected blocks show face handles instead: drag to push / pull, Shift extrudes', () => setTool('scale')),
+    block: btn('Block', 'Blockout (B): drag a footprint on any surface, then the height; click stamps; 1-5 box / ramp / stairs / pillar / room; O cuts doors and windows; face handles push / pull, Shift+drag extrudes', () => setTool('block')),
     decal: btn('Decal', 'Place decals (T): click a surface, drag to paint a trail; [ ] size. Pick a decal material in Assets > decals', () => { ed.pick.decals = true; setTool('decal'); }),
     spline: btn('Spline', 'Draw paths, roads, kerbs, fences, rail track (N): click points on the ground, Enter / Esc to finish, Backspace removes the last point; drag the points of a selected spline', () => setTool('spline')),
     sculpt: btn('Sculpt', 'Sculpt / paint the terrain (G): raise, lower, smooth, flatten, ground paint; Shift inverts; [ ] brush size', () => setTool('sculpt')),
-    paint: btn('Paint', 'Paint vegetation / rocks (B): drag to paint the selected scatter (or start a new one), Shift erases, [ ] brush size', () => setTool('paint')),
+    paint: btn('Paint', 'Paint vegetation / rocks (P): drag to paint the selected scatter (or start a new one), Shift erases, [ ] brush size', () => setTool('paint')),
   };
   const setTool = (t: Tool) => { ed.tool = t; ed.emit('tool'); };
   const space = btn('World', 'Gizmo axes: world / local (X)', () => { ed.space = ed.space === 'world' ? 'local' : 'world'; ed.emit('tool'); });

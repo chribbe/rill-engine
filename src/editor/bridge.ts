@@ -1,5 +1,10 @@
+import { mat4, vec3 } from 'wgpu-matrix';
 import type { Editor } from './editor';
 import { writeGlb } from '../engine/assets/glbwrite';
+import type { PrimitiveData } from '../engine/render/geometry';
+import { blockExtent } from '../engine/scene/blocks';
+import { transformMatrix } from '../engine/scene/world';
+import type { Entity } from '../engine/scene/mapformat';
 
 /**
  * Client of the Blender bridge (tools/dev/editor_server.ts): starts offline
@@ -102,15 +107,37 @@ export class BlenderBridge {
   }
 
   /**
-   * Generated geometry the bake needs besides map.json: spline meshes (world space, with
-   * their lightmap charts) and the instances of scatters and spline repeats (occluders).
+   * Generated geometry the bake needs besides map.json: spline and block meshes (world
+   * space, with their lightmap charts), the instances of scatters and spline repeats
+   * (occluders) and the entities prefab instances expand into (baked like map entities,
+   * keyed '<instance>/<child>').
    */
   async exportBakeExtras(): Promise<string | null> {
     const w = this.ed.rt.world;
+    await w.settle();
     const meshes: { id: string; glb: string; resolution: [number, number] | null }[] = [];
     const instances: { asset: string; matrix: number[] }[] = [];
+    const entities: Entity[] = [];
     for (const [id, rt] of w.objects) {
-      if (!this.ed.scene.effectiveVisible(id)) continue;
+      if (!w.isVisible(id)) continue;
+      const bl = rt.block?.build;
+      if (bl && rt.doc.type === 'block') {
+        const M = transformMatrix(blockExtent(rt.doc).transform);
+        const N = mat4.transpose(mat4.inverse(M));
+        const prims: PrimitiveData[] = bl.primitives.map((p) => {
+          const pos = new Float32Array(p.positions.length), nrm = new Float32Array(p.normals!.length);
+          for (let i = 0; i < pos.length; i += 3) {
+            const q = vec3.transformMat4([p.positions[i], p.positions[i + 1], p.positions[i + 2]], M);
+            const n = vec3.normalize(vec3.transformMat4Upper3x3([p.normals![i], p.normals![i + 1], p.normals![i + 2]], N));
+            pos.set(q, i);
+            nrm.set(n, i);
+          }
+          return { ...p, positions: pos, normals: nrm };
+        });
+        // Dynamic (non-static) blocks still shadow the bake, without a chart of their own.
+        meshes.push({ id, glb: toBase64(writeGlb({ name: id, primitives: prims })), resolution: (rt.doc.static ?? true) ? bl.lightmapResolution : null });
+      }
+      if (rt.owner && (rt.doc.type === 'mesh' || rt.doc.type === 'instances')) entities.push(rt.doc);
       const b = rt.spline?.build;
       if (b) {
         if (b.primitives.length) meshes.push({ id, glb: toBase64(writeGlb({ name: id, primitives: b.primitives })), resolution: b.lightmapResolution });
@@ -128,11 +155,11 @@ export class BlenderBridge {
       if (!this.ed.scene.effectiveVisible(t.id)) continue;
       meshes.push({ id: t.id, glb: toBase64(writeGlb({ name: t.id, primitives: t.primitives })), resolution: t.resolution });
     }
-    if (!meshes.length && !instances.length) return null;
-    const r = await fetch(`/__editor/bake-extra?map=${encodeURIComponent(this.ed.mapName)}`, { method: 'POST', body: JSON.stringify({ meshes, instances }) });
+    if (!meshes.length && !instances.length && !entities.length) return null;
+    const r = await fetch(`/__editor/bake-extra?map=${encodeURIComponent(this.ed.mapName)}`, { method: 'POST', body: JSON.stringify({ meshes, instances, entities }) });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error ?? r.statusText);
-    this.ed.log('info', `Bake scene: ${j.meshes} generated meshes, ${j.instances} instances exported`);
+    this.ed.log('info', `Bake scene: ${j.meshes} generated meshes, ${j.instances} instances, ${j.entities ?? 0} prefab entities exported`);
     return j.extra as string;
   }
 
