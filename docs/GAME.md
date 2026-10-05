@@ -221,6 +221,25 @@ Game:
 - Tinted per-surface bullet holes: brick, wood, plaster, and a dark one for soil / asphalt.
 - Panel Audio folder; audio readout (state, output latency, voices, room share).
 
+**Step 5 — the enemy (done, 2026-10-05).**
+- `tools/blender/kit.py`: the modelling and bake helpers, now shared by the carbine and the creature.
+- `tools/blender/build_beet.py` (`npm run enemy [-- --preview]`): the beetroot walker *Rödbetan*.
+  - 10 rig parts parented through GLB extras: body bulb, head with slit mouth, sunken eyes and leaf crown, root arms with root fingers, legs with splayed root toes. 3.7k triangles.
+  - 1024² atlas baked from AO, ids and a height pass: waxy skin with pores and bloom, soil low down.
+- `Rig.add` orders parts parents-first. `physics/shapes.ts` adds ray–capsule, ray–sphere and closest-on-segment tests.
+- `enemy/def.ts`, data in `public/game/enemies/beet.json`: capsule hitboxes per part, damage / stagger per region (head ×2.6), movement, gait, attack timing, reactions.
+- `enemy/enemy.ts`:
+  - Ticked on the game clock: the character motor (same as the player's), and a state machine idle → chase (walk / hurry beyond 9 m) → attack (wind-up, strike, recover) / stagger / dead.
+  - It turns before it strides. It pushes the player aside (it is heavier).
+  - Per frame: interpolated root; procedural gait (leg swing, knee bend on the swing leg, opposite arm swing, bob, roll, lean); a head that tracks the player; attack swing with body twist.
+  - Per-part reaction springs (the hit part and its parents get angular kicks along the shot, plus squash), body kick, knockback.
+  - Hit capsules in world space.
+- `enemy/manager.ts`: spawns at `enemy_spawn` markers (farthest from the player). One alive at a time; respawn after 4 s; corpses stay 20 s.
+- Hässelby map: `grp_gameplay` + `enemy_spawn_station` at the station doors, added through the editor's `create_entity` / `save_map`. The diff is only those entries. The creature walks out of the T-bana entrance.
+- Shots on enemies: region damage, the flesh impact profile (magenta juice droplets and mist), a flesh sound, the crosshair hit / kill tick.
+- A connected strike kicks the player's view, shoves the player and plays a thud.
+- Panel Enemy folder (health, movement, reactions, region damage, attack, AI on/off, hitboxes, spawn / remove); readout line.
+
 ## 7. Known limits to carry into G2
 
 Written up as G1 progresses: skinning and clips, navigation, enemy broadphase (spatial hash),

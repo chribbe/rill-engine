@@ -64,6 +64,14 @@ export class Recoil {
     this.punchR.v += p.roll * (this.rand() < 0.5 ? -1 : 1) * (0.6 + 0.4 * Math.abs(side)) * RAD * w * 1.6;
   }
 
+  /** Extra visual view kick (degrees), e.g. taking a hit. */
+  kickView(pitch: number, yaw: number, roll: number) {
+    const p = this.def.punch, w = 2 * Math.PI * p.hz;
+    this.punchP.v += pitch * RAD * w * 1.6;
+    this.punchY.v += yaw * RAD * w * 1.6;
+    this.punchR.v += roll * RAD * w * 1.6;
+  }
+
   /** Fixed tick: applies pending kick, recovery. */
   tick(h: number, camera: Camera) {
     const r = this.def.recoil;

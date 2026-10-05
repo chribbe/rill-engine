@@ -29,6 +29,7 @@ export class DebugHud {
       `ammo ${w.def.fire.infiniteAmmo ? '∞' : `${w.ammo}/${w.def.fire.magazine}`}${w.reloading ? ` reloading ${w.reloading.toFixed(1)}s` : ''}  spread ${w.spread(player).toFixed(2)}°  shots ${w.shots}  trigger→shot ${w.lastLatencyMs >= 0 ? w.lastLatencyMs.toFixed(1) + ' ms' : '-'}`,
       h ? `hit ${h.object || '?'}  ${h.surface}${h.region ? ` (${h.region})` : ''}  ${h.distance.toFixed(1)} m  dmg ${h.damage.toFixed(1)}${h.pierced ? `  through ${h.pierced} pane` : ''}` : 'hit -',
       h ? `    at ${h.point.map((x) => x.toFixed(2)).join(' ')}  n ${h.normal.map((x) => x.toFixed(2)).join(' ')}` : '',
+      g.enemies.list.length ? 'enemy ' + g.enemies.list.map((e) => `${e.state} ${Math.max(0, e.health).toFixed(0)}hp ${Math.hypot(e.feet[0] - player.feet[0], e.feet[2] - player.feet[2]).toFixed(1)}m`).join(' | ') : 'enemy -',
       `audio ${g.audio.engine.ctx.state}  ${(g.audio.engine.latency * 1000).toFixed(0)} ms out  voices ${g.audio.engine.activeVoices}  room ${(g.audio.environment.room * 100).toFixed(0)}%`,
       `frame ${lastFrameMs.toFixed(1)} ms  sim ${g.simMs.toFixed(2)} ms  ticks ${g.clock.ticks}  ×${g.clock.timeScale}`,
     ].join('\n');

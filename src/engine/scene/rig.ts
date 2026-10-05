@@ -44,9 +44,19 @@ export class Rig {
 
   constructor(private renderer: Renderer, readonly id: string, private opts: { viewmodel?: boolean; castShadow?: boolean } = {}) {}
 
-  /** Adds parts (parents first). Returns the rig for chaining. */
+  /** Adds parts (any order: parents are placed before their children). Returns the rig for chaining. */
   add(src: RigPartSource[], renderables: Renderable[]) {
-    for (const s of src) {
+    const names = new Set(src.map((s) => s.name));
+    const ordered: RigPartSource[] = [];
+    const placed = new Set<string>([...this.byName.keys()]);
+    let pending = src.slice();
+    while (pending.length) {
+      const next = pending.filter((s) => !s.parent || placed.has(s.parent) || !names.has(s.parent));
+      if (!next.length) throw new Error(`rig ${this.id}: parent cycle among ${pending.map((s) => s.name).join(', ')}`);
+      for (const s of next) { ordered.push(s); placed.add(s.name); }
+      pending = pending.filter((s) => !next.includes(s));
+    }
+    for (const s of ordered) {
       const parent = s.parent ? this.byName.get(s.parent) ?? -1 : -1;
       let r: Renderable | null = null;
       if (s.mesh) {

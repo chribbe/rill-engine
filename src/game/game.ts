@@ -13,6 +13,9 @@ import { Recoil } from './weapon/recoil';
 import { ImpactFx, type ImpactTable } from './fx/impacts';
 import { Shells } from './fx/shells';
 import { GameAudio } from './audio/gameaudio';
+import { BEET_DEFAULTS, type EnemyDef } from './enemy/def';
+import { Enemies } from './enemy/manager';
+import type { Enemy } from './enemy/enemy';
 import { TuningPanel } from './ui/panel';
 import { DebugHud } from './ui/hud';
 import { Crosshair } from './ui/crosshair';
@@ -38,6 +41,7 @@ export class Game {
   readonly clock = new FixedClock(120);
   readonly playerConfig = new ConfigFile<PlayerTuning>('player', PLAYER_DEFAULTS);
   readonly weaponConfig = new ConfigFile<WeaponDef>('weapons/carbine', CARBINE_DEFAULTS);
+  readonly enemyConfig = new ConfigFile<EnemyDef>('enemies/beet', BEET_DEFAULTS);
   readonly debug: DebugDraw;
   readonly pulses = new LightPulses();
   readonly hitscan: Hitscan;
@@ -46,6 +50,9 @@ export class Game {
   readonly recoil: Recoil;
   readonly shells: Shells;
   readonly audio: GameAudio;
+  readonly enemies: Enemies;
+  /** Draw enemy hit capsules. */
+  showHitboxes = false;
   impacts!: ImpactFx;
   private impactTable: ImpactTable = { fallback: 'concrete', surfaces: {} };
   panel: TuningPanel | null = null;
@@ -70,12 +77,14 @@ export class Game {
     this.recoil = new Recoil(this.weaponConfig.data);
     this.shells = new Shells(rt.renderer, rt.world, () => rt.world.collision);
     this.audio = new GameAudio(() => this.impactTable);
+    this.enemies = new Enemies(rt.renderer, rt.world, this.hitscan, this.enemyConfig.data);
   }
 
   async init(opts: { panel?: HTMLElement } = {}) {
     const { rt } = this;
     const impacts = fetch('/game/impacts.json', { cache: 'no-store' }).then((r) => r.json() as Promise<ImpactTable>);
-    await Promise.all([this.playerConfig.load(), this.weaponConfig.load(), this.viewmodel.load(), this.shells.load(), this.audio.init(rt.gpu.canvas)]);
+    await Promise.all([this.playerConfig.load(), this.weaponConfig.load(), this.enemyConfig.load(), this.viewmodel.load(), this.shells.load(), this.audio.init(rt.gpu.canvas)]);
+    await this.enemies.load();
     this.impactTable = await impacts;
     this.impacts = new ImpactFx(this.impactTable, rt.world, rt.renderer.particles, this.pulses);
     const decalMats = Object.values(this.impactTable.surfaces).map((e) => e.decal).filter((d): d is string => !!d);
@@ -98,6 +107,7 @@ export class Game {
         fwd, [up[0] * 25 + j() * 6, up[1] * 25 + j() * 6, up[2] * 25 + j() * 6]);
     });
     this.shells.onBounce.push((pos, speed, surface, bounce) => this.audio.brass(surface, pos, speed, bounce));
+    this.enemies.onSpawn.push((e) => e.onStrike.push((en) => this.onStrike(en)));
     if (opts.panel) {
       this.panel = new TuningPanel(this, opts.panel);
       this.hud = new DebugHud(this);
@@ -106,6 +116,19 @@ export class Game {
     }
     const sp = rt.world.spawn();
     rt.player.teleport(sp.position, sp.yaw, sp.pitch);
+    this.enemies.spawn(rt.player);
+  }
+
+  /** An enemy's swing connected: the player feels it (view kick, thud). */
+  private onStrike(e: Enemy) {
+    const { camera, player } = this.rt;
+    const dx = player.feet[0] - e.feet[0], dz = player.feet[2] - e.feet[2], l = Math.hypot(dx, dz) || 1;
+    // Knock the view away from the blow and shove the player.
+    const side = (dx / l) * Math.cos(camera.yaw) + (dz / l) * Math.sin(camera.yaw);
+    this.recoil.kickView(-4, side * 6, side * 5);
+    player.velocity[0] += (dx / l) * 3.5;
+    player.velocity[2] += (dz / l) * 3.5;
+    this.audio.play('impact_flesh', { pos: camera.position, gain: 3, pitch: 0.7 });
   }
 
   private onShot(e: ShotEvent) {
@@ -118,6 +141,16 @@ export class Game {
     let end: number[] = [e.origin[0] + e.dir[0] * 300, e.origin[1] + e.dir[1] * 300, e.origin[2] + e.dir[2] * 300];
     for (let i = 0; i < e.hitCount; i++) {
       const h = e.hits[i];
+      if (h.kind === 'target') {
+        const en = h.target as Enemy;
+        const reg = en.def.regions[h.region] ?? { damage: 1, stagger: 1 };
+        const dmg = h.damage * reg.damage;
+        h.damage = dmg;
+        const killed = en.hit(dmg, h.region, h.point, e.dir, this.weapon.def.fire.impactForce, h.part || 'body');
+        this.impacts.playSurface('flesh', h.point, h.normal, e.dir, false);
+        this.audio.play('impact_flesh', { pos: h.point, at: at + h.t / 900, gain: killed ? 3 : 0 });
+        this.crosshair?.confirm(killed);
+      }
       if (h.kind === 'world') {
         this.impacts.play(h, e.dir);
         // Bullet flight (~900 m/s) before the impact is heard.
@@ -159,11 +192,14 @@ export class Game {
       this.weapon.tick(h, t, input, player, camera, armed);
       this.recoil.tick(h, camera);
       player.tick(h);
+      this.enemies.tick(h, player);
       input.endTick();
     });
     const sdt = dt * this.clock.timeScale;
     const now = this.clock.time + alpha * this.clock.step;
     player.frame(sdt, alpha);
+    this.enemies.pose(sdt, alpha, player);
+    if (this.showHitboxes) this.drawHitboxes();
     this.recoil.frame(sdt, alpha, camera);
     world.update(sdt, player.feet);
     sandbox.update(sdt);
@@ -182,6 +218,18 @@ export class Game {
     this.simMs = performance.now() - t0;
     this.hud?.update();
   };
+
+  private drawHitboxes() {
+    for (const en of this.enemies.list) {
+      const C = en.capsules();
+      for (let i = 0; i < C.length; i += 7) {
+        const col: [number, number, number, number] = en.alive ? [1, 0.4, 0.2, 1] : [0.5, 0.5, 0.5, 1];
+        this.debug.line([C[i], C[i + 1], C[i + 2]], [C[i + 3], C[i + 4], C[i + 5]], col, 0);
+        this.debug.cross([C[i], C[i + 1], C[i + 2]], C[i + 6] * 2, col, 0);
+        this.debug.cross([C[i + 3], C[i + 4], C[i + 5]], C[i + 6] * 2, col, 0);
+      }
+    }
+  }
 
   /** Clears runtime effects (decals, traces, lights). */
   resetEffects() {

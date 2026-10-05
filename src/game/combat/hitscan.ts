@@ -16,8 +16,9 @@ export interface ShotHit {
   surface: number;
   /** World: owning map entity id; target: the hittable's id. */
   owner: string;
-  /** Target body region (head, torso, ...). */
+  /** Target body region (head, torso, ...) and rig part. */
   region: string;
+  part: string;
   target: Hittable | null;
   /** The bullet continued through this surface (glass). */
   pierced: boolean;
@@ -25,7 +26,7 @@ export interface ShotHit {
   damage: number;
 }
 
-const newHit = (): ShotHit => ({ kind: 'world', t: 0, point: [0, 0, 0], normal: [0, 0, 0], surface: 0, owner: '', region: '', target: null, pierced: false, damage: 0 });
+const newHit = (): ShotHit => ({ kind: 'world', t: 0, point: [0, 0, 0], normal: [0, 0, 0], surface: 0, owner: '', region: '', part: '', target: null, pierced: false, damage: 0 });
 
 const GLASS = surfaceId('glass');
 const MAX_HITS = 4;
@@ -79,6 +80,7 @@ export class Hitscan {
       h.surface = w.surface;
       h.owner = w.owner;
       h.region = '';
+      h.part = '';
       h.target = null;
       h.pierced = pierceGlass && w.surface === GLASS;
       if (!h.pierced) return n;

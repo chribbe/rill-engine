@@ -75,12 +75,17 @@ export class ImpactFx {
 
   /** Feedback for one world hit of a shot travelling along `dir`. */
   play(h: ShotHit, dir: ArrayLike<number>) {
-    const e = this.entry(surfaceName(h.surface));
-    const n = h.normal;
+    this.playSurface(surfaceName(h.surface), h.point, h.normal, dir, true);
+  }
+
+  /** Feedback for surface `name` at `point` (decal only when `decal`: not on moving targets). */
+  playSurface(name: string, point: ArrayLike<number>, n: ArrayLike<number>, dir: ArrayLike<number>, decal: boolean) {
+    const e = this.entry(name);
+    const h = { point };
     const p: [number, number, number] = [h.point[0] + n[0] * 0.02, h.point[1] + n[1] * 0.02, h.point[2] + n[2] * 0.02];
     const dn = dir[0] * n[0] + dir[1] * n[1] + dir[2] * n[2];
     const ricochet = [0, 1, 2].map((i) => (dir[i] - 2 * dn * n[i]) * 0.5 + n[i] * 0.5);
-    if (this.decals && e.decal) {
+    if (decal && this.decals && e.decal) {
       const [a, b] = e.decalSize ?? [0.15, 0.2];
       this.world.addDecal(e.decal, h.point, n, a + Math.random() * (b - a), true);
     }

@@ -16,6 +16,7 @@ export class TuningPanel {
     this.gui = new GUI({ title: 'Gameplay tuning', width: 300, container });
     this.buildPlayer();
     this.buildWeapon();
+    this.buildEnemy();
     this.buildAudio();
     this.buildDebug();
   }
@@ -192,6 +193,55 @@ export class TuningPanel {
       ['boltTravel', 'Bolt travel (m)', 0, 0.15, 0.001], ['boltBack', 'Bolt back share', 0.05, 0.95, 0.01], ['triggerPull', 'Trigger pull (°)', 0, 30, 0.5],
     ]);
     this.fileButtons(f, cfg);
+  }
+
+  private buildEnemy() {
+    const g = this.game, cfg = g.enemyConfig, d = cfg.data;
+    const f = this.gui.addFolder('Enemy (Rödbeta)');
+    const b = <O extends object>(folder: GUI, obj: O, path: string, key: keyof O & string, label: string, min?: number, max?: number, step?: number) =>
+      this.bind(folder, cfg, obj, key, path ? `${path}.${key}` : key, label, min, max, step);
+    b(f, d, '', 'health', 'Health', 1, 1000, 1);
+    b(f, d, '', 'respawn', 'Respawn (s)', 0, 30, 0.5);
+    const mv = f.addFolder('Movement');
+    b(mv, d.move, 'move', 'walkSpeed', 'Walk (m/s)', 0, 6, 0.05);
+    b(mv, d.move, 'move', 'chaseSpeed', 'Chase (m/s)', 0, 8, 0.05);
+    b(mv, d.move, 'move', 'chaseDistance', 'Chase beyond (m)', 0, 40, 0.5);
+    b(mv, d.move, 'move', 'accel', 'Accel (m/s²)', 0.5, 30, 0.5);
+    b(mv, d.move, 'move', 'turnRate', 'Turn rate (°/s)', 10, 720, 5);
+    mv.close();
+    const re = f.addFolder('Hit reactions');
+    b(re, d.reactions, 'reactions', 'partKick', 'Part kick ×', 0, 10, 0.05);
+    b(re, d.reactions, 'reactions', 'bodyKick', 'Body kick ×', 0, 5, 0.05);
+    b(re, d.reactions, 'reactions', 'knockback', 'Knockback ×', 0, 3, 0.01);
+    b(re, d.reactions, 'reactions', 'squash', 'Squash ×', 0, 1, 0.01);
+    b(re, d.reactions, 'reactions', 'springHz', 'Spring (Hz)', 0.5, 12, 0.1);
+    b(re, d.reactions, 'reactions', 'springDamping', 'Spring damping', 0.05, 1.5, 0.01);
+    b(re, d.reactions, 'reactions', 'staggerThreshold', 'Stagger threshold', 1, 400, 1);
+    b(re, d.reactions, 'reactions', 'staggerDecay', 'Stagger decay (/s)', 0, 200, 1);
+    b(re, d.reactions, 'reactions', 'staggerTime', 'Stagger time (s)', 0, 2, 0.01);
+    b(re, d.reactions, 'reactions', 'flinchSlow', 'Flinch slow', 0, 1, 0.01);
+    const reg = f.addFolder('Damage by region (×)');
+    for (const [k, v] of Object.entries(d.regions)) b(reg, v, `regions.${k}`, 'damage', k, 0, 5, 0.05);
+    reg.close();
+    const at = f.addFolder('Attack');
+    b(at, d.attack, 'attack', 'range', 'Range (m)', 0.5, 4, 0.05);
+    b(at, d.attack, 'attack', 'windup', 'Wind-up (s)', 0.05, 2, 0.01);
+    b(at, d.attack, 'attack', 'cooldown', 'Cooldown (s)', 0, 4, 0.05);
+    at.close();
+    const act = {
+      spawn: () => g.enemies.spawn(g.rt.player),
+      clear: () => g.enemies.clear(),
+      get ai() { return g.enemies.enabled; },
+      set ai(v: boolean) { g.enemies.enabled = v; },
+      get boxes() { return g.showHitboxes; },
+      set boxes(v: boolean) { g.showHitboxes = v; },
+    };
+    f.add(act, 'ai').name('AI running');
+    f.add(act, 'boxes').name('Show hitboxes');
+    f.add(act, 'spawn').name('Spawn one');
+    f.add(act, 'clear').name('Remove all');
+    this.fileButtons(f, cfg);
+    f.close();
   }
 
   private buildAudio() {

@@ -15,9 +15,9 @@ const ROOT = join(import.meta.dirname, '..', '..');
 const candidates = [process.env.BLENDER, '/Applications/Blender.app/Contents/MacOS/Blender', 'blender'].filter(Boolean) as string[];
 const blender = candidates.find((c) => c === 'blender' || existsSync(c))!;
 const [cmd, ...rest] = process.argv.slice(2);
-const script = { build: 'build_testmap.py', hasselby: 'build_hasselby.py', bake: 'bake_lightmaps.py', carbine: 'build_carbine.py' }[cmd as 'build' | 'hasselby' | 'bake' | 'carbine'];
+const script = { build: 'build_testmap.py', hasselby: 'build_hasselby.py', bake: 'bake_lightmaps.py', carbine: 'build_carbine.py', beet: 'build_beet.py' }[cmd as 'build' | 'hasselby' | 'bake' | 'carbine' | 'beet'];
 if (!script) {
-  console.error('usage: run.ts build|hasselby|bake|carbine [-- args]');
+  console.error('usage: run.ts build|hasselby|bake|carbine|beet [-- args]');
   process.exit(1);
 }
 const env = { ...process.env };

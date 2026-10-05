@@ -32294,6 +32294,17 @@
       "parent": "grp_probes",
       "transform": { "position": [-40, 2, -40] },
       "probe": { "boxMin": [-170, -1, -215], "boxMax": [170, 40, 150], "blend": 8, "priority": 0 }
+    },
+    { "id": "grp_gameplay", "name": "Gameplay (G1 combat test)", "type": "group" },
+    {
+      "id": "enemy_spawn_station",
+      "name": "Enemy spawn: station doors",
+      "type": "marker",
+      "semantic": "enemy_spawn",
+      "tags": ["enemy:beet"],
+      "parent": "grp_gameplay",
+      "transform": { "position": [-53.9, 0.03948, 4.9] },
+      "yaw": 250
     }
   ]
 }
