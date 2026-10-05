@@ -139,6 +139,8 @@
     "flashScale": 1.35,
     "flashLight": 900,
     "flashRange": 16,
+    "flashRefEV": 8.5,
+    "flashDark": 0.35,
     "tracerEvery": 1,
     "tracerSpeed": 140,
     "tracerLength": 10,

@@ -169,6 +169,7 @@ export class TuningPanel {
     ]);
     table('Shot effects (visual)', 'fx', [
       ['flashScale', 'Flash size ×', 0, 3, 0.05], ['flashLight', 'Flash light (cd)', 0, 3000, 10], ['flashRange', 'Flash light range (m)', 1, 40, 0.5],
+      ['flashRefEV', 'Flash light tuned at (EV)', 0, 16, 0.1], ['flashDark', 'Flash light in the dark (0 tame, 1 physical)', 0, 1, 0.01],
       ['tracerEvery', 'Tracer every N rounds (0 = off)', 0, 10, 1], ['tracerSpeed', 'Tracer speed (m/s)', 50, 600, 5], ['tracerLength', 'Tracer length (m)', 0.2, 12, 0.1],
       ['tracerWidth', 'Tracer half width (m)', 0.002, 0.05, 0.0005], ['tracerEmissive', 'Tracer brightness (nits)', 0, 100000, 500],
       ['fovPunch', 'FOV punch per shot (°)', 0, 4, 0.05], ['shotSmoke', 'Muzzle smoke per shot', 0, 1, 0.01],

@@ -156,6 +156,14 @@ export interface WeaponDef {
     flashScale: number;
     flashLight: number;
     flashRange: number;
+    /**
+     * Flash and impact lights in the dark: below `flashRefEV` (the exposure they were tuned at) the camera
+     * exposes up, so a physical flash would look up to 100× brighter against the scene and clip the gun to
+     * white sparkle. `flashDark` is the share of that extra relative brightness kept (0 = looks as in the
+     * reference light, 1 = physical).
+     */
+    flashRefEV: number;
+    flashDark: number;
     /** A tracer every N rounds (0 = none): visual speed (m/s), streak length (m), half width (m), colour, brightness (nits). */
     tracerEvery: number;
     tracerSpeed: number;
@@ -301,6 +309,8 @@ export const CARBINE_DEFAULTS: WeaponDef = {
     flashScale: 1.35,
     flashLight: 900,
     flashRange: 16,
+    flashRefEV: 8.5,
+    flashDark: 0.35,
     tracerEvery: 1,
     tracerSpeed: 140,
     tracerLength: 10,

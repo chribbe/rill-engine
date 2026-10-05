@@ -19,6 +19,8 @@ export class LightPulses {
   private pool: Pulse[] = [];
   /** Cap: oldest pulses are dropped first. */
   max = 16;
+  /** Intensity multiplier for every pulse (e.g. a game taming flashes in a dark, highly exposed scene). */
+  gain = 1;
 
   emit(position: ArrayLike<number>, color: [number, number, number], peak: number, range: number, life = 0.05, sourceRadius = 0.05, fogScatter = 0.3) {
     if (this.live.length >= this.max) this.pool.push(this.live.shift()!);
@@ -38,7 +40,7 @@ export class LightPulses {
     let w = 0;
     for (const p of this.live) {
       const x = Math.min(1, p.t / p.life);
-      p.light.intensity = p.peak * (1 - x) * (1 - x);
+      p.light.intensity = p.peak * (1 - x) * (1 - x) * this.gain;
       if (p.t < p.life || !p.shown) {
         out.push(p.light);
         p.shown = true;

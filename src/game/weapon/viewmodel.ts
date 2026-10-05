@@ -371,8 +371,9 @@ export class Viewmodel {
     // Forward plume (atlas row 1): rooted at the muzzle, stretched along the barrel (foreshortened from behind).
     const half = (0.07 + this.rand() * 0.04) * big, w = 0.026 * big;
     P.emit('flash', { pos: at(half * 0.92), dir: fwd, spread: 0, speed: [(half - w) / 0.012, (half - w) / 0.012], life: [0.026, 0.036], size: [w, w], color: [1.0, 0.76, 0.45], emissive: 10000, viewmodel: true, stretch: true, fixed: true, anchor: MUZZLE_ANCHOR });
-    // A brief light ahead of the muzzle (keeps the gun itself from blowing out), flickering per shot.
-    this.pulses.emit(this.worldEquivalent(at(0.3)), [1.0, 0.7, 0.38], fx.flashLight * (0.8 + this.rand() * 0.4), fx.flashRange, 0.05, 0.25);
+    // A brief light well ahead of the muzzle, flickering per shot: it lights the world and the front of
+    // the gun. Closer in, it rakes along the receiver at a grazing angle and blows the normal map out.
+    this.pulses.emit(this.worldEquivalent(at(0.9)), [1.0, 0.7, 0.38], fx.flashLight * (0.8 + this.rand() * 0.4), fx.flashRange, 0.05, 0.35);
     // Shot smoke from the world point that lines up with the muzzle: inherits the shooter's motion, then drifts.
     const sm = this.worldEquivalent(at(0.03));
     if (fx.shotSmoke > 0) P.emit('smoke', { count: 2, pos: sm, dir: fwd, spread: 0.35, speed: [0.5, 1.4], life: [0.7, 1.4], size: [0.03, 0.3], color: [0.62, 0.62, 0.65], alpha: fx.shotSmoke, drag: 3.2, gravity: -0.14, addVel: pv });

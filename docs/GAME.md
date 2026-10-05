@@ -360,6 +360,18 @@ Your notes: much better. Smoke is far too visible after shooting (fine while sho
 - All of it is tunable in the panel ("Brass …" under Shot effects).
 - The frame-rate test quirk above is not only a first-run effect: an occasional test call's reference run lands 2.71e-5 m off (always that value, with or without these features). Back-to-back runs in any rate order are exact. It's a state carried into the test call, still to be found.
 
+**Flash light in the dark (2026-10-05).** You noticed the gun's normal map going very visible when shooting at dusk.
+- Cause: the flash light sat 0.3 m ahead of the muzzle, raking along the gun at a grazing angle.
+  - Dusk exposes about 6 stops higher than the daytime look the flash was tuned in (EV 2.6 vs about 8.8).
+  - So it was about 100× the ambient on the gun and clipped. Every bit of relief (per-texel grain in the normal map, worn chips) became hard white sparkle.
+- Fixes, all outside the renderer:
+  1. The flash light sits 0.9 m ahead of the muzzle (larger source radius), so it lights the world and the front of the gun rather than skimming the receiver.
+  2. Calmer normal map (`npm run weapon`): no per-texel white-noise grain in the height, softer orange peel and stippling, strength 2.2 → 1.6. Scratches and chipped edges keep their relief.
+  3. `LightPulses.gain` (engine, one multiplier) is set by the game each frame from exposure. Below `fx.flashRefEV` (8.5), flash and impact lights keep only `fx.flashDark` (0.35) of the extra relative brightness the higher exposure would give them.
+     - Dusk: gain 0.07. The flash still lights the scene noticeably more than in daylight, without clipping.
+     - Daytime presets: gain 1, unchanged.
+     - The flash sprites themselves are not scaled.
+
 ### How to play / test
 - `npm run dev`, open `http://127.0.0.1:5173/play.html?map=hasselby`, click to capture the mouse.
 - Controls: WASD, Shift sprint, Alt walk, C / Ctrl crouch, Space jump, LMB fire, R reload, L flashlight, F fly, H hides the panels.

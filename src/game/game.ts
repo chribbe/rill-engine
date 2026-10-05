@@ -365,6 +365,9 @@ export class Game {
     const c = this.deterministic ? null : this.audio.scheduleAhead(this.weapon.willContinue(armed && input.buttonDown(0)), this.weapon.nextShot, now);
     if (c !== null) this.weapon.committedUntil = c;
     renderer.particles.update(sdt);
+    // Darker scene, higher exposure: keep only part of the flash lights' extra relative brightness.
+    const fx = this.weapon.def.fx, under = Math.max(0, fx.flashRefEV - renderer.currentEV);
+    this.pulses.gain = Number.isFinite(under) ? Math.pow(2, -under * (1 - fx.flashDark)) : 1;
     this.pulses.update(sdt, renderer.dynamicLights);
     world.flushRuntimeDecals(camera.position);
     this.debug.flush();

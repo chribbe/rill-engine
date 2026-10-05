@@ -326,7 +326,8 @@ def compose(ao, edge, idm):
     sf = np.clip(scuff * 0.6 + sc_light * 0.5, 0, 1) * paint * (1 - pw)
     alb = alb * (1 - sf[..., None] * 0.35) + srgb((78, 82, 66)) * sf[..., None] * 0.35
     rough = rough - sf * 0.12
-    H += paint * (n_fine * 0.05 + grain * 0.03)
+    # Orange peel: soft, low relief (per-texel noise sparkles under a raking light, e.g. the muzzle flash).
+    H += paint * n_mid * 0.035
     H -= pw * 0.35 + sf * 0.06
     bare = pw[..., None]
     alb = alb * (1 - bare) + srgb((86, 86, 84)) * bare
@@ -339,14 +340,14 @@ def compose(ao, edge, idm):
     # Steel (parkerised / blued): matte grain, polished on edges and in scratches.
     put(steel, srgb((36, 37, 39)), 0.56, 0.9)
     sw = np.clip(wear * 0.8 + sc_deep * 0.7 + sc_light * 0.25, 0, 1) * steel
-    H += steel * (grain * 0.12 + n_fine * 0.05)
+    H += steel * n_fine * 0.035
     H -= sw * 0.25
     alb = alb * (1 - sw[..., None] * 0.55) + srgb((118, 118, 116)) * sw[..., None] * 0.55
     rough = rough - sw * 0.2 - steel * n_mid * 0.04
 
     # Handguard polymer: fine mould texture, handling polish, light scratches whitened.
     put(poly, srgb((45, 51, 36)), 0.76, 0.0)
-    H += poly * (n_fine * 0.06)
+    H += poly * n_fine * 0.035
     polish = np.clip(n_low * 0.4 + 0.2, 0, 1) * poly
     rough = rough - polish * 0.14
     pscr = np.clip(sc * 0.45 + wear * 0.4, 0, 1) * poly
@@ -356,14 +357,14 @@ def compose(ao, edge, idm):
     # Grip: stippled polymer.
     put(grip, srgb((40, 44, 32)), 0.84, 0.0)
     st = cells(rng, 9)
-    H += grip * np.clip(0.55 - st, 0, 1) * 0.9
+    H += grip * np.clip(0.55 - st, 0, 1) * 0.6
     gw = np.clip(wear * 0.6, 0, 1) * grip
     rough = rough - gw * 0.2
 
     # Magazine (alloy / steel, dark finish) and bolt face (bright steel).
     put(alu, srgb((58, 59, 61)), 0.42, 0.75)
     aw = np.clip(wear + sc * 0.8, 0, 1) * alu
-    H += alu * grain * 0.06
+    H += alu * n_fine * 0.025
     alb = alb * (1 - aw[..., None] * 0.7) + srgb((165, 165, 160)) * aw[..., None] * 0.7
     rough = rough - aw * 0.2
 
@@ -383,7 +384,7 @@ def compose(ao, edge, idm):
     Hs = blur(H, 0) if False else H
     dx = (np.roll(Hs, -1, 1) - np.roll(Hs, 1, 1)) * 0.5
     dy = (np.roll(Hs, -1, 0) - np.roll(Hs, 1, 0)) * 0.5
-    strength = 2.2
+    strength = 1.6
     nx, ny, nzz = -dx * strength, -dy * strength, np.ones_like(dx)
     l = np.sqrt(nx * nx + ny * ny + nzz * nzz)
     normal = np.stack([nx / l, ny / l, nzz / l], -1) * 0.5 + 0.5
