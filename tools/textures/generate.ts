@@ -1326,6 +1326,73 @@ recipes.splats = () => {
   });
 };
 
+// Effects atlas (additive sprites, sRGB colour = premultiplied intensity), 2048 x 1024, 512 tiles:
+//   row 0: muzzle flash seen from behind the gun (hot core, five birdcage jets, ragged petals), 4 variants
+//   row 1: muzzle flash plume from the side (root at the left edge, flame along +u), 4 variants
+recipes.fx = () => {
+  mkdirSync(join(OUT, 'fx'), { recursive: true });
+  const ramp = (i: number): [number, number, number] => {
+    // Linear flame colour by intensity: saturated red-orange -> orange -> yellow -> white-hot core.
+    const stops: [number, number[]][] = [[0, [0.9, 0.12, 0.01]], [0.3, [1.0, 0.36, 0.04]], [0.6, [1.0, 0.7, 0.22]], [0.85, [1.0, 0.92, 0.66]], [1, [1.0, 1.0, 0.95]]];
+    const t = clamp01(i);
+    for (let k = 1; k < stops.length; k++) {
+      if (t <= stops[k][0]) {
+        const [t0, a] = stops[k - 1], [t1, b] = stops[k], f = (t - t0) / (t1 - t0);
+        return [lerp(a[0], b[0], f), lerp(a[1], b[1], f), lerp(a[2], b[2], f)];
+      }
+    }
+    return [1, 1, 0.95];
+  };
+  const T = 512;
+  writePng('fx/muzzle_flash.png', 4 * T, 2 * T, (x, y, o) => {
+    const tile = Math.floor(x / T), row = Math.floor(y / T);
+    const u = (x % T + 0.5) / T, v = (y % T + 0.5) / T;
+    const seed = 900 + tile * 37 + row * 11;
+    const rr = mulberry32(seed);
+    let I = 0;
+    if (row === 0) {
+      const dx = u - 0.5, dy = v - 0.5;
+      const r = Math.hypot(dx, dy) * 2, th = Math.atan2(dy, dx);
+      // Flame breakup in 2D (no radial banding), domain-warped.
+      const wu = u + (fbm(u, v, 6, 2, seed + 21) - 0.5) * 0.08, wv = v + (fbm(u, v, 6, 2, seed + 22) - 0.5) * 0.08;
+      const turb = 0.4 + 0.9 * fbm(wu, wv, 14, 4, seed + 1);
+      const core = Math.exp(-((r / 0.13) ** 2)) * 1.25;
+      const R = 0.34 + fbm(0.5 + Math.cos(th) * 0.3, 0.5 + Math.sin(th) * 0.3, 4, 3, seed) * 0.3;
+      const body = Math.max(0, 1 - r / R) ** 1.25 * turb;
+      let jets = 0;
+      const off = rr() * Math.PI * 2;
+      for (let k = 0; k < 5; k++) {
+        const a = off + (k / 5) * Math.PI * 2 + (rr() - 0.5) * 0.3;
+        const len = 0.6 + rr() * 0.38, wid = 0.13 + rr() * 0.07;
+        let d = th - a;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        const along = r / len;
+        // Tongue: wide at the root, tapering, flaring slightly near the tip.
+        const across = (Math.abs(d) * Math.max(r, 0.04)) / (wid * (0.55 + along * 0.6) * (1 - along * 0.55));
+        jets += Math.exp(-across * across * 1.8) * Math.max(0, 1 - along) ** 0.9 * turb;
+      }
+      I = clamp01(core + body * 0.8 + jets * 1.05);
+      I *= smoothstep(1.0, 0.8, r);
+    } else {
+      // Side plume: x along the barrel from the muzzle (u = 0), y across.
+      const px = u, py = (v - 0.5) * 2;
+      const wu = px + (fbm(px, v, 5, 2, seed + 31) - 0.5) * 0.06, wv = v + (fbm(px, v, 5, 2, seed + 32) - 0.5) * 0.1;
+      const turb = 0.5 + 0.7 * fbm(wu * 1.6, wv, 9, 4, seed + 5);
+      // Fireball a third of the way out, tapering to a ragged tip.
+      const w = 0.05 + 0.2 * Math.sin(Math.PI * Math.min(1, px * 1.35)) ** 0.8 * (1 - px * 0.5);
+      const yy = py + (fbm(px * 2, tile * 0.2, 4, 2, seed + 9) - 0.5) * 0.3 * px;
+      const plume = Math.exp(-((yy / w) ** 2) * 1.4) * Math.pow(Math.max(0, 1 - px), 0.9) * turb;
+      const root = Math.exp(-((px / 0.09) ** 2) - ((py / 0.13) ** 2)) * 1.3;
+      // Side jets at the birdcage slots, up and down from the root.
+      const side = Math.exp(-(((px - 0.06) / 0.03) ** 2)) * Math.exp(-((Math.max(0, Math.abs(py) - 0.08) / 0.3) ** 2)) * 0.75 * turb;
+      I = clamp01(plume * 1.1 + root + side) * smoothstep(1.0, 0.86, px) * smoothstep(0.0, 0.015, px);
+    }
+    const c = ramp(I), k = Math.pow(I, 0.85);
+    o[0] = linearToSrgb(c[0] * k); o[1] = linearToSrgb(c[1] * k); o[2] = linearToSrgb(c[2] * k); o[3] = I;
+  });
+  console.log('  fx/muzzle_flash');
+};
+
 // ------------------------------------------------------------ run
 // Sets replaced by scans (tools/textures/scanned.json) are skipped unless --procedural is given.
 const argv = process.argv.slice(2);

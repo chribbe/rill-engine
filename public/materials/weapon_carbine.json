@@ -2,6 +2,8 @@
   "surface": "metal",
   "baseColor": "weapons/carbine_albedo.png",
   "orm": "weapons/carbine_orm.png",
+  "normal": "weapons/carbine_normal.png",
+  "normalStrength": 1,
   "physicalSize": 1,
   "roughness": 1,
   "metallic": 1,

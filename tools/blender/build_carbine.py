@@ -37,7 +37,7 @@ OUT_GLB = os.path.join(PUBLIC, 'assets', 'weapons', 'carbine.glb')
 OUT_TEX = os.path.join(PUBLIC, 'textures', 'weapons')
 
 # Bake ids (material slots while building) and their look.
-IDS = ['paint', 'steel', 'polymer', 'alu', 'rubber']
+IDS = ['paint', 'steel', 'polymer', 'alu', 'rubber', 'grip']
 kit.configure(IDS, ATLAS, 96)
 
 
@@ -62,32 +62,17 @@ def build_upper():
     ob = p.to_object()
     boolean(ob, cutter_box((0.022, 0.056, 0.029), (0.014, 0.062, 0.024)))  # ejection port
     boolean(ob, cutter_box((0.021, 0.128, 0.039), (0.01, 0.078, 0.007)))  # charging-handle slot
-    # Panel seam between upper and lower, and a sight-base groove.
+    # Panel seams: upper / lower split, a line along each top edge, the receiver cover joint.
     boolean(ob, cutter_box((0, 0.02, 0.0005), (0.05, 0.3, 0.0012)))
+    for side in (-1, 1):
+        boolean(ob, cutter_box((side * 0.0172, 0.01, 0.0455), (0.0016, 0.26, 0.0012)))
+    boolean(ob, cutter_box((0, 0.002, 0.05), (0.05, 0.0012, 0.004)))
     return ob
 
 
-def build_receiver():
-    p = Piece('receiver')
-    # Top rib carrying the rear sight.
-    p.box((0, -0.03, 0.0515), (0.011, 0.19, 0.004), 'paint')
-    # Lower receiver / magazine well with a flared lip.
-    p.loft([section(y, 0.0172, 0.0168, -0.052, -0.0015, 0.003) for y in (-0.046, 0.104)], 'paint')
-    p.box((0, 0.064, -0.047), (0.039, 0.088, 0.01), 'paint')
-    # Winter trigger guard: a swept band.
-    path = [(0.03, -0.05), (0.028, -0.061), (0.012, -0.071), (-0.012, -0.072), (-0.034, -0.066), (-0.046, -0.052)]
-    p.loft([[(x, y, z + dz) for x, dz in ((0.0055, 0.002), (-0.0055, 0.002), (-0.0055, -0.002), (0.0055, -0.002))] for y, z in path], 'paint')
-    # Pistol grip: tapered oval raked back ~20°, finger swell, capped.
-    rings = []
-    for k in range(8):
-        t = k / 7
-        y = -0.032 - 0.044 * t
-        z = -0.035 - 0.096 * t
-        hx = 0.0145 - 0.0015 * t
-        hy = 0.0205 + 0.0035 * math.sin(t * math.pi * 1.3) - 0.001 * t
-        rings.append([(math.cos(a) * hx, y + math.sin(a) * hy, z) for a in (2 * math.pi * i / 18 for i in range(18))])
-    p.loft(rings, 'polymer')
-    # Handguard: slimmer oval polymer tube with grooves (they catch AO), ends capped.
+def build_handguard():
+    """Ribbed polymer handguard with oval vents (separate manifold for the cuts)."""
+    p = Piece('handguard')
     rings = []
     ys = [0.172, 0.18]
     y = 0.19
@@ -101,21 +86,83 @@ def build_receiver():
             g = 0.92
         rings.append(rounded_rect(0, 0.01, 0.0215 * g, 0.026 * g, 0.015 * g, y, n=5))
     p.loft(rings, 'polymer')
-    # Barrel, gas tube, gas block / front sight with hood, flash hider.
-    p.cyl((0, 0.16, 0.0), (0, 0.47, 0.0), 0.0088, 'steel', 24)
-    p.cyl((0, 0.28, 0.024), (0, 0.345, 0.024), 0.0072, 'steel', 18)
-    p.box((0, 0.343, 0.012), (0.019, 0.026, 0.036), 'steel')
-    p.box((0, 0.352, 0.049), (0.0026, 0.0035, 0.022), 'steel')
+    ob = p.to_object()
+    # Two rows of vents on each upper flank.
     for side in (-1, 1):
-        p.loft([[(side * 0.0095 + dx, y, z) for dx, z in ((-0.0014, 0.028), (0.0014, 0.028), (0.0014, 0.064), (-0.0014, 0.064))] for y in (0.344, 0.36)], 'steel')
-    p.cyl((0, 0.462, 0.0), (0, 0.515, 0.0), 0.0112, 'steel', 24)
-    # Rear diopter: small drum between two swept guards.
-    p.cyl((-0.0085, -0.096, 0.061), (0.0085, -0.096, 0.061), 0.0066, 'steel', 20)
+        for k in range(5):
+            yy = 0.198 + k * 0.016
+            for zz, ang in ((0.024, 40), (0.009, 12)):
+                rot = Matrix.Rotation(math.radians(side * ang), 3, 'Y')
+                boolean(ob, cutter_box((side * 0.021, yy, zz), (0.012, 0.0085, 0.0042), rot=rot))
+    return ob
+
+
+def build_receiver():
+    p = Piece('receiver')
+    # Rear sight: base block on the receiver, swept protective wings, aperture drum on the base.
+    p.loft([section(y, 0.0105, 0.0125, 0.0485, 0.0565, 0.0015) for y in (-0.122, -0.074)], 'paint')
     for side in (-1, 1):
-        x = side * 0.0115
-        p.loft([[(x + dx, y, z) for y, z in ((-0.116, 0.053), (-0.078, 0.053), (-0.084, 0.069), (-0.11, 0.07))] for dx in (-0.0013, 0.0013)], 'paint')
-    # Selector lever (left side).
-    p.box((-0.0225, -0.012, 0.004), (0.004, 0.026, 0.008), 'steel')
+        x = side * 0.0112
+        p.loft([[(x + dx, y, z) for y, z in ((-0.12, 0.054), (-0.077, 0.054), (-0.083, 0.071), (-0.093, 0.075), (-0.108, 0.074))] for dx in (-0.0015, 0.0015)], 'paint')
+    p.cyl((-0.0082, -0.096, 0.0628), (0.0082, -0.096, 0.0628), 0.0064, 'steel', 20)
+    p.cyl((-0.0098, -0.096, 0.0628), (-0.0082, -0.096, 0.0628), 0.0045, 'steel', 14)  # adjuster hub
+    # Receiver cover: a raised pressed spine along the top, rivets along both upper flanks.
+    p.loft([section(y, 0.0058, 0.0072, 0.0485, 0.0526, 0.0012) for y in (-0.07, 0.142)], 'paint')
+    for side in (-1, 1):
+        # (the right flank has the ejection port and charging-handle slot further forward)
+        for yy in ((-0.05, 0.0, 0.11, 0.14) if side < 0 else (-0.05, 0.0)):
+            p.cyl((side * 0.0172, yy, 0.038), (side * 0.0184, yy, 0.038), 0.0017, 'steel', 10)
+    # Brass deflector bump behind the ejection port.
+    p.loft([[(x, y, z) for x, z in ((0.0214, 0.022), (0.0262, 0.026), (0.0262, 0.038), (0.0214, 0.042))] for y in (0.015, 0.024)], 'paint')
+    # Lower receiver / magazine well with a flared lip.
+    p.loft([section(y, 0.0172, 0.0168, -0.052, -0.0015, 0.003) for y in (-0.046, 0.104)], 'paint')
+    p.box((0, 0.064, -0.047), (0.039, 0.088, 0.01), 'paint')
+    # Takedown pins (both sides), magazine release button (right), selector hub + lever (left).
+    for side in (-1, 1):
+        for yy, zz in ((-0.036, -0.012), (0.098, -0.011)):
+            p.cyl((side * 0.0168, yy, zz), (side * 0.0196, yy, zz), 0.0032, 'steel', 14)
+    p.cyl((0.0165, 0.012, -0.022), (0.0205, 0.012, -0.022), 0.0042, 'steel', 14)
+    p.cyl((-0.0165, -0.012, 0.006), (-0.0215, -0.012, 0.006), 0.0055, 'steel', 16)
+    p.loft([[(-0.0228 + dx, y, z) for y, z in ((-0.012, 0.009), (-0.012, 0.003), (-0.034, 0.0), (-0.036, 0.005))] for dx in (-0.0012, 0.0012)], 'steel')
+    # Winter trigger guard: a wider band, rounded.
+    path = [(0.03, -0.05), (0.028, -0.062), (0.014, -0.072), (-0.012, -0.073), (-0.034, -0.067), (-0.046, -0.052)]
+    p.loft([[(x, y, z + dz) for x, dz in ((0.0062, 0.0015), (0.0045, 0.0028), (-0.0045, 0.0028), (-0.0062, 0.0015), (-0.0062, -0.0015), (-0.0045, -0.0028), (0.0045, -0.0028), (0.0062, -0.0015))] for y, z in path], 'paint')
+    # Pistol grip (stippled polymer): tapered oval raked back ~20 degrees, finger swells, capped.
+    rings = []
+    for k in range(12):
+        t = k / 11
+        y = -0.032 - 0.044 * t
+        z = -0.035 - 0.096 * t
+        hx = 0.0148 - 0.0016 * t
+        hy = 0.0205 + 0.0032 * math.sin(t * math.pi * 1.3) - 0.001 * t
+        # Finger grooves on the front strap.
+        fy = -0.0018 * max(0.0, math.sin(t * math.pi * 3.0 + 0.5)) if 0.15 < t < 0.85 else 0.0
+        ring = []
+        for i in range(20):
+            a = 2 * math.pi * i / 20
+            yy = math.sin(a) * hy
+            if yy > 0:
+                yy += fy
+            ring.append((math.cos(a) * hx, y + yy, z))
+        rings.append(ring)
+    p.loft(rings, 'grip')
+    # Barrel, handguard cap ring, gas tube, front sight tower, flash hider.
+    p.cyl((0, 0.16, 0.0), (0, 0.47, 0.0), 0.0088, 'steel', 28)
+    p.cyl((0, 0.3, 0.008), (0, 0.309, 0.008), 0.0215, 'steel', 28)
+    p.cyl((0, 0.28, 0.024), (0, 0.345, 0.024), 0.0072, 'steel', 20)
+    p.loft([section(y, 0.0088, 0.0098, -0.006, 0.031, 0.0025) for y in (0.33, 0.356)], 'steel')  # gas block
+    p.loft([section(y, 0.0054, 0.0068, 0.029, 0.041, 0.0012) for y in (0.341, 0.36)], 'steel')  # sight tower
+    p.loft([section(y, 0.0013, 0.0016, 0.038, 0.0605, 0.0004) for y in (0.3505, 0.3545)], 'steel')  # post
+    for side in (-1, 1):
+        x = side * 0.0092
+        p.loft([[(x + dx, y, z) for y, z in ((0.338, 0.028), (0.36, 0.028), (0.36, 0.06), (0.356, 0.066), (0.342, 0.066), (0.338, 0.062))] for dx in (-0.0016, 0.0016)], 'steel')
+    p.box((0, 0.346, -0.011), (0.008, 0.02, 0.012), 'steel')  # bayonet lug
+    # Sling swivel hanging under the bayonet lug (ring in the barrel's plane, joined by a stud).
+    loop = [(0.0, 0.346 + math.cos(a) * 0.0068, -0.0255 + math.sin(a) * 0.0068) for a in (math.radians(d) for d in range(0, 361, 30))]
+    for a, b in zip(loop, loop[1:]):
+        p.cyl(a, b, 0.0013, 'steel', 8)
+    p.cyl((0, 0.346, -0.0165), (0, 0.346, -0.0195), 0.0019, 'steel', 8)
+    p.cyl((0, 0.462, 0.0), (0, 0.515, 0.0), 0.0112, 'steel', 28)
     # Skeletal folding stock and rubber butt.
     p.cyl((0, -0.122, 0.034), (0, -0.405, 0.016), 0.0072, 'steel', 14)
     p.cyl((0, -0.115, -0.004), (0, -0.405, -0.078), 0.0072, 'steel', 14)
@@ -123,17 +170,18 @@ def build_receiver():
     body = p.to_object()
     # Flash hider slots on a separate cylinder (clean manifold for the boolean).
     fh = Piece('hider')
-    fh.cyl((0, 0.47, 0.0), (0, 0.515, 0.0), 0.0119, 'steel', 24)
+    fh.cyl((0, 0.47, 0.0), (0, 0.515, 0.0), 0.0119, 'steel', 28)
     hider = fh.to_object()
     for k in range(5):
         a = math.radians(90 + 72 * k)
         boolean(hider, cutter_box((math.cos(a) * 0.012, 0.497, math.sin(a) * 0.012), (0.0045, 0.03, 0.0055), rot=Matrix.Rotation(-a + math.pi / 2, 3, 'Y')))
     upper = build_upper()
+    guard = build_handguard()
     for o in [o for o in bpy.data.objects if o.name.startswith('cutter')]:
         bpy.data.objects.remove(o)
     for o in bpy.context.selected_objects:
         o.select_set(False)
-    for o in (body, hider, upper):
+    for o in (body, hider, upper, guard):
         o.select_set(True)
     bpy.context.view_layer.objects.active = body
     bpy.ops.object.join()
@@ -198,56 +246,151 @@ def empty(name, loc):
 
 # ------------------------------------------------------------------ texture composition
 
+def scratches(rng, n, length, width, density_mask=None):
+    """Random thin line scratches in atlas space: height (0..1 depth) field."""
+    H = np.zeros((ATLAS, ATLAS), np.float32)
+    for _ in range(n):
+        x0, y0 = rng.random() * ATLAS, rng.random() * ATLAS
+        a = rng.random() * math.pi
+        L = length * (0.3 + rng.random())
+        steps = int(L)
+        dx, dy = math.cos(a), math.sin(a)
+        w = width * (0.6 + rng.random() * 0.8)
+        depth = 0.4 + rng.random() * 0.6
+        for i in range(steps):
+            t = i / max(1, steps - 1)
+            # Slight curve, tapering ends.
+            x = int(x0 + dx * i + math.sin(t * 3.1) * 2) % ATLAS
+            y = int(y0 + dy * i) % ATLAS
+            k = depth * math.sin(math.pi * t) ** 0.5
+            H[y, x] = max(H[y, x], k)
+            if w > 1.2:
+                H[y, (x + 1) % ATLAS] = max(H[y, (x + 1) % ATLAS], k * 0.6)
+    return H
+
+
+def cells(rng, scale):
+    """Cellular bumps (stippling): distance to jittered grid points, 0 at centres."""
+    g = ATLAS // scale
+    jx = rng.random((g + 2, g + 2)).astype(np.float32)
+    jy = rng.random((g + 2, g + 2)).astype(np.float32)
+    yy, xx = np.mgrid[0:ATLAS, 0:ATLAS].astype(np.float32) / scale
+    ix, iy = np.floor(xx).astype(np.int32), np.floor(yy).astype(np.int32)
+    best = np.full((ATLAS, ATLAS), 9.0, np.float32)
+    for ox in (-1, 0, 1):
+        for oy in (-1, 0, 1):
+            cx = np.clip(ix + ox, 0, g + 1)
+            cy = np.clip(iy + oy, 0, g + 1)
+            px = cx + jx[cy, cx]
+            py = cy + jy[cy, cx]
+            best = np.minimum(best, (xx - px) ** 2 + (yy - py) ** 2)
+    return np.sqrt(best)
+
+
 def compose(ao, edge, idm):
     rng = np.random.default_rng(1986)
     ids = kit.decode_ids(idm)
     ao = np.clip(ao[..., 0], 0, 1)
     edge = np.clip(edge[..., 0], 0, 1)
-    # Wear breakup noise (mid frequency) and handling grime (low frequency).
-    n_mid = blur(rng.random((ATLAS, ATLAS)).astype(np.float32), 3)
-    n_mid = (n_mid - n_mid.mean()) / (n_mid.std() + 1e-6)
-    n_low = blur(rng.random((ATLAS, ATLAS)).astype(np.float32), 24)
-    n_low = (n_low - n_low.mean()) / (n_low.std() + 1e-6)
+    nz = lambda r: (lambda x: (x - x.mean()) / (x.std() + 1e-6))(blur(rng.random((ATLAS, ATLAS)).astype(np.float32), r))
+    n_fine, n_mid, n_low, n_xlow = nz(1), nz(3), nz(16), nz(48)
     grain = rng.random((ATLAS, ATLAS)).astype(np.float32) - 0.5
 
-    srgb = lambda c: (np.array(c) / 255.0) ** 2.2
-    base = {
-        0: (srgb((62, 68, 50)), 0.62, 0.0),    # olive paint
-        1: (srgb((38, 39, 41)), 0.42, 0.85),   # blued / parkerised steel
-        2: (srgb((58, 64, 47)), 0.72, 0.0),    # green polymer
-        3: (srgb((52, 53, 55)), 0.5, 0.6),     # magazine
-        4: (srgb((24, 24, 24)), 0.85, 0.0),    # rubber
-    }
+    srgb = lambda c: (np.array(c, np.float32) / 255.0) ** 2.2
+    paint, steel, poly, alu, rubber, grip = (ids == i for i in range(6))
+    # Convex edges (exposed: they wear) vs concave creases (shaded: grime collects).
+    convex = np.clip(edge * np.clip((ao - 0.55) * 3, 0, 1), 0, 1)
+    crease = np.clip(edge * np.clip((0.8 - ao) * 3, 0, 1) + (1 - ao) * 0.6, 0, 1)
+    # Wear: convex edges, broken up, plus scuffs on broad surfaces where hands rub.
+    wear = np.clip((convex * 1.5 + n_mid * 0.22 + n_fine * 0.08 - 0.45) * 3.0, 0, 1)
+    scuff = np.clip((n_low * 0.6 + n_xlow * 0.5 - 1.25) * 1.6, 0, 1) * 0.6
+    # Scratches: many faint scuffs through the clear / top layer, a few deep ones to the metal.
+    sc_light = np.clip(scratches(rng, 420, 50, 1.0), 0, 1)
+    sc_deep = np.clip(scratches(rng, 60, 120, 1.4), 0, 1)
+    sc = np.clip(sc_light * 0.6 + sc_deep, 0, 1)
+
     alb = np.zeros((ATLAS, ATLAS, 3), np.float32)
     rough = np.zeros((ATLAS, ATLAS), np.float32)
     metal = np.zeros((ATLAS, ATLAS), np.float32)
-    for i, (c, r, m) in base.items():
-        sel = ids == i
-        alb[sel] = c
-        rough[sel] = r
-        metal[sel] = m
-    # Edge wear: paint and polymer rub through to dark metal / lighter polymer; steel edges polish.
-    wear = np.clip((edge * 1.4 + n_mid * 0.18 - 0.55) * 2.6, 0, 1)
-    paint = (ids == 0)
-    w = wear * paint
-    alb = alb * (1 - w[..., None]) + srgb((92, 92, 90)) * w[..., None]
-    rough = rough * (1 - w) + 0.32 * w
-    metal = metal * (1 - w) + 1.0 * w
-    poly = (ids == 2)
-    wp = wear * poly * 0.6
-    alb = alb * (1 - wp[..., None]) + srgb((84, 88, 72)) * wp[..., None]
-    rough = rough - wp * 0.15
-    steel = (ids == 1) | (ids == 3)
-    ws = wear * steel
-    alb = alb * (1 - ws[..., None] * 0.55) + srgb((118, 118, 116)) * ws[..., None] * 0.55
-    rough = rough - ws * 0.14
-    # Grime in cavities, handling variation, fine grain.
-    dirt = np.clip((1 - ao) * 1.4, 0, 1)
-    alb *= (1 - dirt * 0.45)[..., None] * (1 + n_low * 0.06)[..., None] * (1 + grain * 0.05)[..., None]
-    rough = np.clip(rough + dirt * 0.12 + n_low * 0.05 + grain * 0.04, 0.05, 1)
+    H = np.zeros((ATLAS, ATLAS), np.float32)
+    def put(mask, color, r, m):
+        alb[mask] = color
+        rough[mask] = r
+        metal[mask] = m
+
+    # Paint (matte olive drab enamel over phosphated steel): orange peel, chips through to dark
+    # bare steel on exposed edges and deep scratches, light scuffs that only dull / lighten the paint.
+    put(paint, srgb((47, 53, 37)), 0.74, 0.0)
+    rough = rough + paint * n_mid * 0.05
+    pw = np.clip(wear + sc_deep * 0.85, 0, 1) * paint
+    sf = np.clip(scuff * 0.6 + sc_light * 0.5, 0, 1) * paint * (1 - pw)
+    alb = alb * (1 - sf[..., None] * 0.35) + srgb((78, 82, 66)) * sf[..., None] * 0.35
+    rough = rough - sf * 0.12
+    H += paint * (n_fine * 0.05 + grain * 0.03)
+    H -= pw * 0.35 + sf * 0.06
+    bare = pw[..., None]
+    alb = alb * (1 - bare) + srgb((86, 86, 84)) * bare
+    rough = rough * (1 - pw) + 0.42 * pw
+    metal = metal * (1 - pw) + pw
+    # Primer halo around chips (a lighter rim before the metal shows).
+    halo = np.clip(blur(pw, 2) - pw, 0, 1) * paint * 1.5
+    alb = alb * (1 - halo[..., None] * 0.3) + srgb((92, 96, 80)) * halo[..., None] * 0.3
+
+    # Steel (parkerised / blued): matte grain, polished on edges and in scratches.
+    put(steel, srgb((36, 37, 39)), 0.56, 0.9)
+    sw = np.clip(wear * 0.8 + sc_deep * 0.7 + sc_light * 0.25, 0, 1) * steel
+    H += steel * (grain * 0.12 + n_fine * 0.05)
+    H -= sw * 0.25
+    alb = alb * (1 - sw[..., None] * 0.55) + srgb((118, 118, 116)) * sw[..., None] * 0.55
+    rough = rough - sw * 0.2 - steel * n_mid * 0.04
+
+    # Handguard polymer: fine mould texture, handling polish, light scratches whitened.
+    put(poly, srgb((45, 51, 36)), 0.76, 0.0)
+    H += poly * (n_fine * 0.06)
+    polish = np.clip(n_low * 0.4 + 0.2, 0, 1) * poly
+    rough = rough - polish * 0.14
+    pscr = np.clip(sc * 0.45 + wear * 0.4, 0, 1) * poly
+    alb = alb * (1 - pscr[..., None] * 0.3) + srgb((80, 84, 68)) * pscr[..., None] * 0.3
+    H -= pscr * 0.15
+
+    # Grip: stippled polymer.
+    put(grip, srgb((40, 44, 32)), 0.84, 0.0)
+    st = cells(rng, 9)
+    H += grip * np.clip(0.55 - st, 0, 1) * 0.9
+    gw = np.clip(wear * 0.6, 0, 1) * grip
+    rough = rough - gw * 0.2
+
+    # Magazine (alloy / steel, dark finish) and bolt face (bright steel).
+    put(alu, srgb((58, 59, 61)), 0.42, 0.75)
+    aw = np.clip(wear + sc * 0.8, 0, 1) * alu
+    H += alu * grain * 0.06
+    alb = alb * (1 - aw[..., None] * 0.7) + srgb((165, 165, 160)) * aw[..., None] * 0.7
+    rough = rough - aw * 0.2
+
+    put(rubber, srgb((24, 24, 24)), 0.88, 0.0)
+    H += rubber * n_mid * 0.2
+
+    # Grime in creases and cavities, dust on top of it, overall handling variation.
+    alb *= (1 - crease * 0.55)[..., None]
+    dust = np.clip(crease * 0.8 + n_mid * 0.1 - 0.35, 0, 1) * (1 - metal * 0.5)
+    alb = alb * (1 - dust[..., None] * 0.25) + srgb((96, 92, 82)) * dust[..., None] * 0.25
+    rough = rough + crease * 0.18 + dust * 0.1 + n_low * 0.04
+    alb *= (1 + n_xlow * 0.05 + grain * 0.03)[..., None]
+    rough = np.clip(rough + grain * 0.03, 0.08, 1)
+    metal = np.clip(metal, 0, 1)
+
+    # Tangent-space normal map from the height field (OpenGL: +Y = +v = up in Blender's image rows).
+    Hs = blur(H, 0) if False else H
+    dx = (np.roll(Hs, -1, 1) - np.roll(Hs, 1, 1)) * 0.5
+    dy = (np.roll(Hs, -1, 0) - np.roll(Hs, 1, 0)) * 0.5
+    strength = 2.2
+    nx, ny, nzz = -dx * strength, -dy * strength, np.ones_like(dx)
+    l = np.sqrt(nx * nx + ny * ny + nzz * nzz)
+    normal = np.stack([nx / l, ny / l, nzz / l], -1) * 0.5 + 0.5
+
     alb = np.clip(alb, 0, 1) ** (1 / 2.2)
     orm = np.stack([ao, rough, metal], -1)
-    return alb, orm
+    return alb, orm, normal.astype(np.float32)
 
 
 # ------------------------------------------------------------------ main
@@ -265,10 +408,11 @@ def main():
     bake_pass(parts, imgs['ao'], 'AO')
     bake_pass(parts, imgs['edge'], 'EMIT', edge_emission)
     bake_pass(parts, imgs['id'], 'EMIT', id_emission)
-    alb, orm = compose(pixels(imgs['ao']), pixels(imgs['edge']), pixels(imgs['id']))
+    alb, orm, nrm = compose(pixels(imgs['ao']), pixels(imgs['edge']), pixels(imgs['id']))
     os.makedirs(OUT_TEX, exist_ok=True)
     save_png(alb, os.path.join(OUT_TEX, 'carbine_albedo.png'), 'sRGB')
     save_png(orm, os.path.join(OUT_TEX, 'carbine_orm.png'), 'Non-Color')
+    save_png(nrm, os.path.join(OUT_TEX, 'carbine_normal.png'), 'Non-Color')
 
     # One engine material for every part (the atlas carries paint / steel / polymer).
     final = bpy.data.materials.new('weapon_carbine')
@@ -312,6 +456,12 @@ def preview(parts):
     nt.links.new(alb.outputs['Color'], bsdf.inputs['Base Color'])
     nt.links.new(sep.outputs['Green'], bsdf.inputs['Roughness'])
     nt.links.new(sep.outputs['Blue'], bsdf.inputs['Metallic'])
+    nrm = nt.nodes.new('ShaderNodeTexImage')
+    nrm.image = bpy.data.images.load(os.path.join(OUT_TEX, 'carbine_normal.png'))
+    nrm.image.colorspace_settings.name = 'Non-Color'
+    nmap = nt.nodes.new('ShaderNodeNormalMap')
+    nt.links.new(nrm.outputs['Color'], nmap.inputs['Color'])
+    nt.links.new(nmap.outputs['Normal'], bsdf.inputs['Normal'])
     nt.links.new(bsdf.outputs['BSDF'], out.inputs['Surface'])
     scene = bpy.context.scene
     scene.render.resolution_x, scene.render.resolution_y = 1200, 700
@@ -328,12 +478,21 @@ def preview(parts):
     scene.collection.objects.link(cam)
     scene.camera = cam
     cam.data.lens = 50
-    shots = {'side': ((0.9, 0.05, 0.08), (0, 0.05, -0.02)), 'pov': ((0.08, -0.28, 0.11), (0.0, 0.3, -0.0)), 'quarter': ((0.55, -0.45, 0.3), (0, 0.05, -0.03))}
+    shots = {
+        'side': ((0.9, 0.05, 0.08), (0, 0.05, -0.02), 39.6),
+        'quarter': ((0.55, -0.45, 0.3), (0, 0.05, -0.03), 39.6),
+        'detail': ((0.16, 0.25, 0.12), (0, 0.36, 0.03), 39.6),
+        # The player's eye relative to the gun (viewmodel offset), weapon FOV 52 degrees vertical.
+        'eye': ((-0.13, -0.22, 0.125), (-0.13, 2.0, 0.07), 52.0),
+    }
     shots_dir = os.path.join(os.path.dirname(PUBLIC), 'screenshots')
-    for name, (eye, at) in shots.items():
+    for name, (eye, at, fov) in shots.items():
         cam.location = eye
         d = Vector(at) - Vector(eye)
         cam.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler()
+        cam.data.sensor_fit = 'VERTICAL'
+        cam.data.angle_y = math.radians(fov)
+        scene.render.resolution_x, scene.render.resolution_y = (1280, 720) if name == 'eye' else (1200, 700)
         scene.render.filepath = os.path.join(shots_dir, f'carbine_preview_{name}.png')
         bpy.ops.render.render(write_still=True)
 

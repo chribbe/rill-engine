@@ -53,7 +53,9 @@ export class Viewmodel {
   private lagZ = spring();
   private airY = spring();
   private airP = spring();
-  private kick = { z: spring(), y: spring(), p: spring(), yaw: spring(), r: spring() };
+  private kick = { x: spring(), z: spring(), y: spring(), p: spring(), yaw: spring(), r: spring() };
+  /** Recent shots (decaying): the gun rides back and up during a long burst. */
+  private burstHeat = 0;
   private bobAmp = 0;
   private sprint = 0;
   private crouch = 0;
@@ -66,6 +68,8 @@ export class Viewmodel {
   /** Barrel heat (shots, decaying): wisps of smoke after sustained fire. */
   private heat = 0;
   private wispT = 0;
+  /** The shooter's velocity this frame (smoke inherits / bends against it). */
+  private playerVel: [number, number, number] = [0, 0, 0];
   private tmp: [number, number, number] = [0, 0, 0];
   private tmp2: [number, number, number] = [0, 0, 0];
   private seed = 0x1234567;
@@ -168,20 +172,25 @@ export class Viewmodel {
     const k = this.def.kick, K = this.kick;
     const v = (base: number) => base * (1 + (this.rand() * 2 - 1) * k.random);
     const wp = 2 * Math.PI * k.posHz, wr = 2 * Math.PI * k.rotHz;
-    // Velocity kicks sized so each spring peaks near its amplitude.
-    K.z.v += v(k.back) * wp * 1.6;
+    // Velocity kicks sized so each spring peaks near its amplitude. The first round of a pull hits hardest.
+    const first = burst === 0 ? 1.15 : 1;
+    K.z.v += v(k.back) * wp * 1.6 * first;
     K.y.v += v(k.up) * wp * 1.6;
-    K.p.v += v(k.pitch) * RAD * wr * 1.6;
+    K.x.v += k.jitter * (this.rand() * 2 - 1) * wp * 1.6;
+    K.p.v += v(k.pitch) * RAD * wr * 1.6 * first;
     K.yaw.v += k.yaw * (this.rand() * 2 - 1) * RAD * wr * 1.6;
     K.r.v += k.roll * (this.rand() * 2 - 1) * RAD * wr * 1.6;
-    void burst;
+    this.burstHeat += 1;
   }
 
   private stepKick(dt: number) {
     const k = this.def.kick, K = this.kick;
-    stepSpring(K.z, 0, k.posHz, k.posDamping, dt);
+    this.burstHeat *= Math.exp(-k.burstSettle * dt);
+    const b = Math.min(1, this.burstHeat / Math.max(1, k.burstBuild));
+    stepSpring(K.x, 0, k.posHz, k.posDamping, dt);
+    stepSpring(K.z, k.burstBack * b, k.posHz, k.posDamping, dt);
     stepSpring(K.y, 0, k.posHz, k.posDamping, dt);
-    stepSpring(K.p, 0, k.rotHz, k.rotDamping, dt);
+    stepSpring(K.p, k.burstRise * RAD * b, k.rotHz, k.rotDamping, dt);
     stepSpring(K.yaw, 0, k.rotHz, k.rotDamping, dt);
     stepSpring(K.r, 0, k.rotHz, k.rotDamping, dt);
   }
@@ -193,6 +202,8 @@ export class Viewmodel {
   update(dt: number, now: number, look: [number, number], player: FirstPersonController, triggerHeld: boolean, interval: number) {
     const c = this.camera, V = this.def.viewmodel;
     c.viewmodelFovY = V.fov * RAD;
+    const pvv = player.velocity;
+    this.playerVel[0] = pvv[0]; this.playerVel[1] = player.onGround ? 0 : pvv[1] * 0.5; this.playerVel[2] = pvv[2];
     // This frame's view basis (the renderer updates the camera again; posing from last frame's would lag a frame).
     c.update();
     if (!this.loaded) return;
@@ -255,7 +266,7 @@ export class Viewmodel {
     // ---- compose: camera × offset × pivot × rotation × pivot⁻¹
     const K = this.kick, s = this.sprint, cr = this.crouch;
     const RO = V.reloadOffset, RR = V.reloadRot;
-    const ox = V.offset[0] + V.crouchOffset[0] * cr + V.sprintOffset[0] * s + bobX + this.swayX.x + RO[0] * re;
+    const ox = V.offset[0] + V.crouchOffset[0] * cr + V.sprintOffset[0] * s + bobX + this.swayX.x + RO[0] * re + K.x.x;
     const oy = V.offset[1] + V.crouchOffset[1] * cr + V.sprintOffset[1] * s + bobY + breY + this.airY.x + K.y.x + RO[1] * re;
     const oz = V.offset[2] + V.crouchOffset[2] * cr + V.sprintOffset[2] * s + this.lagZ.x + K.z.x + RO[2] * re;
     const pitch = (V.rotation[0] + V.sprintRot[0] * s + breP + RR[0] * re) * RAD + this.swayP.x * RAD + this.airP.x + K.p.x;
@@ -308,13 +319,19 @@ export class Viewmodel {
     // ---- flashes for this frame's shots, on the posed muzzle
     const mz = this.muzzle(this.tmp);
     this.renderer.particles.setAnchor(MUZZLE_ANCHOR, mz);
-    // Barrel heat: wisps rise from the muzzle once a long burst stops.
-    this.heat = Math.max(0, this.heat - dt * 0.9);
+    // Barrel heat: smoke curls up from the muzzle after firing. It is attached to the gun (moves with it,
+    // in the weapon's projection) and bends back against the player's motion; lingers for seconds.
+    this.heat = Math.max(0, this.heat - dt * 0.38);
     this.wispT -= dt;
-    if (this.heat > 4 && now - this.lastShotTime > 0.15 && this.wispT <= 0 && this.visible) {
-      this.wispT = 0.05 + this.rand() * 0.04;
-      const k = Math.min(1, (this.heat - 4) / 10);
-      this.renderer.particles.emit('smoke', { pos: this.worldEquivalent(mz), dir: [0, 1, 0], spread: 0.25, speed: [0.08, 0.25], life: [1.0, 1.8], size: [0.008, 0.09], color: [0.6, 0.6, 0.62], alpha: 0.05 + 0.07 * k, drag: 2, gravity: -0.3 });
+    if (this.heat > 2.5 && now - this.lastShotTime > 0.12 && this.wispT <= 0 && this.visible) {
+      const k = Math.min(1, (this.heat - 2.5) / 12);
+      this.wispT = 0.022 + this.rand() * 0.025 + (1 - k) * 0.04;
+      const pv = this.playerVel;
+      this.renderer.particles.emit('smoke', {
+        pos: [mz[0], mz[1] + 0.004, mz[2]], dir: [-pv[0] * 0.25, 1, -pv[2] * 0.25], spread: 0.22, speed: [0.05, 0.16],
+        life: [2.2, 4.0], size: [0.007, 0.065], color: [0.7, 0.72, 0.77], alpha: 0.3 + 0.35 * k, drag: 1.1, gravity: -0.1,
+        viewmodel: true, anchor: MUZZLE_ANCHOR, addVel: [-pv[0] * 0.18, 0, -pv[2] * 0.18],
+      });
     }
     if (this.flashQueue > 0 && this.visible) {
       this.heat += this.flashQueue;
@@ -334,16 +351,22 @@ export class Viewmodel {
     const l = Math.hypot(fwd[0], fwd[1], fwd[2]) || 1;
     fwd[0] /= l; fwd[1] /= l; fwd[2] /= l;
     const at = (d: number): [number, number, number] => [mz[0] + fwd[0] * d, mz[1] + fwd[1] * d, mz[2] + fwd[2] * d];
-    const big = 0.75 + this.rand() * 0.5;
-    // Core star on the muzzle, a hot inner flash, and a forward plume streak.
-    P.emit('flash', { pos: at(0.025), life: [0.03, 0.045], size: [0.05 * big, 0.075 * big], color: [1.0, 0.62, 0.3], emissive: 9000, viewmodel: true, anchor: MUZZLE_ANCHOR });
-    P.emit('flash', { pos: at(0.012), life: [0.022, 0.03], size: [0.028, 0.04], color: [1.0, 0.85, 0.6], emissive: 16000, viewmodel: true, anchor: MUZZLE_ANCHOR });
-    P.emit('flash', { pos: at(0.09), dir: fwd, spread: 0, speed: [5, 7], life: [0.025, 0.035], size: [0.03, 0.04], color: [1.0, 0.6, 0.28], emissive: 7000, viewmodel: true, stretch: true, drag: 30, anchor: MUZZLE_ANCHOR });
-    // Light ahead of the muzzle (keeps the gun itself from blowing out).
-    this.pulses.emit(this.worldEquivalent(at(0.3)), [1.0, 0.72, 0.4], 420, 12, 0.05, 0.25);
-    // Smoke from the world point that lines up with the muzzle on screen.
-    const sm = this.worldEquivalent(at(0.02));
-    P.emit('smoke', { count: 2, pos: sm, dir: fwd, spread: 0.45, speed: [0.3, 1.0], life: [0.7, 1.4], size: [0.025, 0.2], color: [0.5, 0.5, 0.51], alpha: 0.09, drag: 3.5, gravity: -0.12 });
+    const big = 0.8 + this.rand() * 0.45, pv = this.playerVel;
+    // Flash from behind: the birdcage star (atlas row 0), plus a smaller second star for layering.
+    P.emit('flash', { pos: at(0.012), life: [0.03, 0.042], size: [0.066 * big, 0.08 * big], color: [1.0, 0.72, 0.38], emissive: 11000, viewmodel: true, anchor: MUZZLE_ANCHOR });
+    P.emit('flash', { pos: at(0.006), life: [0.02, 0.03], size: [0.03, 0.04], color: [1.0, 0.93, 0.72], emissive: 34000, viewmodel: true, anchor: MUZZLE_ANCHOR });
+    // Forward plume (atlas row 1): rooted at the muzzle, stretched along the barrel (foreshortened from behind).
+    const half = (0.07 + this.rand() * 0.04) * big, w = 0.026 * big;
+    P.emit('flash', { pos: at(half * 0.92), dir: fwd, spread: 0, speed: [(half - w) / 0.012, (half - w) / 0.012], life: [0.026, 0.036], size: [w, w], color: [1.0, 0.76, 0.45], emissive: 10000, viewmodel: true, stretch: true, fixed: true, anchor: MUZZLE_ANCHOR });
+    // A brief light ahead of the muzzle (keeps the gun itself from blowing out), flickering per shot.
+    this.pulses.emit(this.worldEquivalent(at(0.3)), [1.0, 0.7, 0.38], 380 + this.rand() * 160, 12, 0.045, 0.25);
+    // Shot smoke from the world point that lines up with the muzzle: inherits the shooter's motion, then drifts.
+    const sm = this.worldEquivalent(at(0.03));
+    P.emit('smoke', { count: 2, pos: sm, dir: fwd, spread: 0.35, speed: [0.5, 1.4], life: [1.6, 3.0], size: [0.03, 0.32], color: [0.62, 0.62, 0.65], alpha: 0.2, drag: 3.2, gravity: -0.14, addVel: pv });
+    // Ejection port: a puff of propellant smoke with the brass.
+    const up = this.rig.dir(R, [0, 1, 0], [0, 0, 0]), right = this.rig.dir(R, [1, 0, 0], [0, 0, 0]);
+    const port = this.worldEquivalent(this.eject(this.tmp));
+    P.emit('smoke', { count: 1, pos: port, dir: [right[0] + up[0] * 0.6, right[1] + up[1] * 0.6, right[2] + up[2] * 0.6], spread: 0.3, speed: [0.4, 0.9], life: [0.5, 1.0], size: [0.012, 0.1], color: [0.58, 0.58, 0.58], alpha: 0.1, drag: 4, gravity: -0.1, addVel: pv });
   }
 
   /** World point that projects (world FOV) to the same pixel as `p` does in the weapon's FOV. */

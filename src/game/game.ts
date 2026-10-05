@@ -153,8 +153,10 @@ export class Game {
     this.viewmodel.reset();
     this.viewmodel.visible = true;
     this.clock.reset();
+    // Gun smoke and impact dust drift with only part of the map's wind (restored in end()).
+    rt.renderer.particles.airScale = this.impactTable.wind ?? 1;
     this.enemies.clear();
-    this.enemies.spawn(rt.player);
+    if (this.enemies.enabled) this.enemies.spawn(rt.player);
     if (this.crosshair) this.crosshair.visible = true;
     if (this.hud) this.hud.el.style.visibility = '';
     this.active = true;
@@ -169,6 +171,7 @@ export class Game {
     this.viewmodel.hide();
     this.recoil.reset(rt.camera);
     rt.renderer.dynamicLights = [];
+    rt.renderer.particles.airScale = 1;
     if (this.crosshair) { this.crosshair.visible = false; this.crosshair.el.style.display = 'none'; }
     if (this.hud) this.hud.el.style.visibility = 'hidden';
     if (this.recoilPlot) this.recoilPlot.el.style.display = 'none';
@@ -317,6 +320,7 @@ export class Game {
     this.viewmodel.update(sdt, now, look, player, armed && input.buttonDown(0), this.weapon.interval);
     this.ammo?.update(sdt, W.ammo, W.def.fire.magazine, W.def.fire.infiniteAmmo, W.reloading ? { t: W.reloadT, total: W.reloadEmpty ? W.def.reload.empty : W.def.reload.tactical } : null, this.active);
     this.shells.update(sdt);
+    this.impacts.update(sdt);
     this.audio.frame(dt, camera, world.collision);
     // Exact burst cadence: the next shot's sound is scheduled ~a frame ahead and the shot committed
     // (off in the deterministic frame-rate test, where release timing must not depend on frame length).

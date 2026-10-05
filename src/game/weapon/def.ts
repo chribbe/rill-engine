@@ -82,6 +82,13 @@ export interface WeaponDef {
     posDamping: number;
     rotHz: number;
     rotDamping: number;
+    /** Sideways jitter per shot (metres) and how far the gun rides back / up during a long burst. */
+    jitter: number;
+    burstBack: number;
+    burstRise: number;
+    /** Shots for the burst pose to build up, and its settle rate (1/s). */
+    burstBuild: number;
+    burstSettle: number;
   };
   /** First-person presentation. Offsets in camera space (x right, y up, z back), angles in degrees. */
   viewmodel: {
@@ -193,23 +200,28 @@ export const CARBINE_DEFAULTS: WeaponDef = {
     recoverRate: 7,
   },
   punch: {
-    pitch: 0.55,
-    yaw: 0.18,
-    roll: 0.45,
-    hz: 7.5,
+    pitch: 0.65,
+    yaw: 0.2,
+    roll: 0.6,
+    hz: 8,
     damping: 0.5,
   },
   kick: {
-    back: 0.028,
-    up: 0.004,
-    pitch: 2.4,
-    yaw: 0.5,
-    roll: 1.1,
-    random: 0.25,
-    posHz: 9,
-    posDamping: 0.55,
-    rotHz: 7,
-    rotDamping: 0.45,
+    back: 0.034,
+    up: 0.005,
+    pitch: 3.2,
+    yaw: 0.9,
+    roll: 1.6,
+    random: 0.3,
+    posHz: 11,
+    posDamping: 0.5,
+    rotHz: 8.5,
+    rotDamping: 0.42,
+    jitter: 0.0016,
+    burstBack: 0.016,
+    burstRise: 1.6,
+    burstBuild: 6,
+    burstSettle: 5,
   },
   viewmodel: {
     fov: 52,

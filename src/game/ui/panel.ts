@@ -164,6 +164,8 @@ export class TuningPanel {
       ['yaw', 'Yaw (°)', 0, 5, 0.05], ['roll', 'Roll (°)', 0, 6, 0.05], ['random', 'Variation', 0, 1, 0.01],
       ['posHz', 'Position spring (Hz)', 1, 25, 0.1], ['posDamping', 'Position damping', 0.1, 1.5, 0.01],
       ['rotHz', 'Rotation spring (Hz)', 1, 25, 0.1], ['rotDamping', 'Rotation damping', 0.1, 1.5, 0.01],
+      ['jitter', 'Side jitter (m)', 0, 0.01, 0.0001], ['burstBack', 'Burst ride back (m)', 0, 0.06, 0.0005],
+      ['burstRise', 'Burst ride up (°)', 0, 6, 0.05], ['burstBuild', 'Burst build (shots)', 1, 20, 0.5], ['burstSettle', 'Burst settle (1/s)', 0.5, 20, 0.1],
     ]);
     const vm = table('Viewmodel motion', 'viewmodel', [
       ['fov', 'Weapon FOV (vertical °)', 30, 90, 0.5],
@@ -244,7 +246,7 @@ export class TuningPanel {
       get boxes() { return g.showHitboxes; },
       set boxes(v: boolean) { g.showHitboxes = v; },
     };
-    f.add(act, 'ai').name('AI running');
+    f.add(act, 'ai').name('Enemy on (spawns, AI)');
     f.add(act, 'boxes').name('Show hitboxes');
     f.add(act, 'spawn').name('Spawn one');
     f.add(act, 'clear').name('Remove all');

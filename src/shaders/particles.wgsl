@@ -21,6 +21,9 @@ struct Particle {
 };
 
 @group(1) @binding(0) var<storage, read> particles: array<Particle>;
+// Effects sprite atlas (additive, premultiplied colour): row 0 = muzzle flash seen from behind
+// (4 variants), row 1 = muzzle flash plume from the side, root at the left (4 variants).
+@group(1) @binding(1) var fxAtlas: texture_2d<f32>;
 
 struct VOut {
   @builtin(position) pos: vec4f,
@@ -29,7 +32,7 @@ struct VOut {
   // Lit kinds: pre-exposed, fogged colour. Emissive kinds: pre-exposed emission.
   @location(2) color: vec3f,
   @location(3) inscatter: vec3f,
-  @location(4) @interpolate(flat) params: vec4f,  // x opacity, y kind, z seed
+  @location(4) @interpolate(flat) params: vec4f,  // x opacity, y kind, z seed, w flags
 };
 
 const CORNERS = array<vec2f, 6>(vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, 1.0));
@@ -108,7 +111,11 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
     ax = right * cr + up * sr;
     ay = up * cr - right * sr;
   }
-  let wp = p.posSize.xyz + ax * corner.x * ext.x + ay * corner.y * ext.y;
+  // Soot billboards slide towards the eye by part of their radius so a big puff
+  // next to a wall does not slice through it with a hard edge (no depth read here).
+  let eyeDist = length(cam - p.posSize.xyz);
+  let pull = select(0.0, min(p.posSize.w * 0.6, max(eyeDist - 0.4, 0.0)), k <= 1u && !vm);
+  let wp = p.posSize.xyz + toCam * pull + ax * corner.x * ext.x + ay * corner.y * ext.y;
 
   var o: VOut;
   if (vm) {
@@ -123,7 +130,7 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
   let dist = length(wp - cam);
   // Fade particles that reach the eye instead of clipping them at the near plane.
   let nearFade = select(saturate((dist - 0.15) / 0.6), 1.0, vm);
-  o.params = vec4f(p.misc.y * nearFade, f32(k), p.misc.w, 0.0);
+  o.params = vec4f(p.misc.y * nearFade, f32(k), p.misc.w, f32(flags));
   var T = 1.0;
   o.inscatter = vec3f(0.0);
   if (hasFlag(F_FOG)) {
@@ -174,22 +181,16 @@ fn fsAlpha(in: VOut) -> @location(0) vec4f {
 
 @fragment
 fn fsAdditive(in: VOut) -> @location(0) vec4f {
-  let r2 = dot(in.uv, in.uv);
-  let n = textureSample(cloudNoise, sampAniso, in.nuv * 0.6).r;
-  var m = 0.0;
-  if (in.params.y < 2.5) {
-    // Muzzle flash: hot core + uneven petals.
-    let ang = atan2(in.uv.y, in.uv.x);
-    let petals = 0.55 + 0.45 * cos(ang * 5.0 + in.params.z * 20.0);
-    let r = sqrt(r2);
-    let core = exp(-r2 * 9.0);
-    let body = saturate(1.0 - r / (0.35 + 0.65 * petals * (0.6 + n * 0.8)));
-    m = core + body * body * 0.6;
-  } else {
-    // Spark streak: bright line fading towards the tail.
-    let across = exp(-in.uv.y * in.uv.y * 6.0);
-    let along = saturate(1.0 - abs(in.uv.x));
-    m = across * along;
-  }
+  // Muzzle flash: a sprite from the atlas (sampled in uniform control flow, selected below).
+  let variant = floor(fract(in.params.z * 7.13) * 4.0);
+  let stretched = (u32(in.params.w + 0.5) & 2u) != 0u;
+  let tuv = in.uv * 0.5 + 0.5;
+  let auv = vec2f((variant + clamp(tuv.x, 0.002, 0.998)) * 0.25, (select(0.0, 1.0, stretched) + clamp(1.0 - tuv.y, 0.002, 0.998)) * 0.5);
+  let flash = textureSample(fxAtlas, sampClamp, auv).rgb;
+  // Spark streak: bright line fading towards the tail.
+  let across = exp(-in.uv.y * in.uv.y * 6.0);
+  let along = saturate(1.0 - abs(in.uv.x));
+  let spark = vec3f(across * along);
+  let m = select(spark, flash, in.params.y < 2.5);
   return vec4f(in.color * m * in.params.x, 0.0);
 }

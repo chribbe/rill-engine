@@ -24,6 +24,10 @@ interface Emit {
   emissive?: number;
   drag?: number;
   gravity?: number;
+  /** Debris: land and bounce on the ground below the hit. */
+  floor?: boolean;
+  /** Stretch along the velocity (a fast directional jet of dust). */
+  stretch?: boolean;
 }
 
 export interface SurfaceImpact {
@@ -39,13 +43,44 @@ export interface SurfaceImpact {
 
 export interface ImpactTable {
   fallback: string;
+  /** How much of the map's wind gun smoke and impact dust drift with (1 = all of it). */
+  wind?: number;
   surfaces: Record<string, SurfaceImpact>;
 }
+
+/** Emitters living longer than this count as lingering haze (thinned where hits crowd). */
+const HAZE_LIFE = 1.5;
+const RECENT = 16;
 
 export class ImpactFx {
   /** Resolved entries (inheritance and tints applied), rebuilt when the table changes. */
   private resolved = new Map<string, SurfaceImpact>();
   decals = true;
+  /** Recent hit points and times (ring): a burst into one spot builds haze, not a wall of fog. */
+  private recent = new Float32Array(RECENT * 4).fill(-1e9);
+  private recentAt = 0;
+  private time = 0;
+
+  /** Advances the crowding clock (seconds). */
+  update(dt: number) {
+    this.time += dt;
+  }
+
+  /** Recent hits within ~0.8 m of `p` (weighted by age), and records this one. */
+  private crowding(p: ArrayLike<number>) {
+    let n = 0;
+    const R = this.recent;
+    for (let i = 0; i < RECENT; i++) {
+      const age = this.time - R[i * 4 + 3];
+      if (age > 2) continue;
+      const d2 = (R[i * 4] - p[0]) ** 2 + (R[i * 4 + 1] - p[1]) ** 2 + (R[i * 4 + 2] - p[2]) ** 2;
+      if (d2 < 0.64) n += 1 - age / 2;
+    }
+    const o = this.recentAt * 4;
+    R[o] = p[0]; R[o + 1] = p[1]; R[o + 2] = p[2]; R[o + 3] = this.time;
+    this.recentAt = (this.recentAt + 1) % RECENT;
+    return n;
+  }
 
   constructor(private table: ImpactTable, private world: World, private particles: ParticleSystem, private pulses: LightPulses) {}
 
@@ -89,9 +124,20 @@ export class ImpactFx {
       const [a, b] = e.decalSize ?? [0.15, 0.2];
       this.world.addDecal(e.decal, h.point, n, a + Math.random() * (b - a), true);
     }
+    let floor: number | undefined;
+    const crowd = this.crowding(p);
     for (const m of e.emit ?? []) {
       const d = m.dir === 'normal' ? n : m.dir === 'through' ? dir : ricochet;
-      this.particles.emit(m.kind, { count: m.count, pos: p, dir: d, spread: m.spread, speed: m.speed, life: m.life, size: m.size, color: m.color, alpha: m.alpha, emissive: m.emissive, drag: m.drag, gravity: m.gravity });
+      // Haze already hanging here: add less (fewer, thinner) so sustained fire thickens it gradually.
+      const haze = (m.kind === 'dust' || m.kind === 'smoke') && m.life[1] > HAZE_LIFE;
+      const thin = haze ? 1 / (1 + crowd * 0.7) : 1;
+      const count = haze ? Math.max(crowd > 3 ? 0 : 1, Math.round(m.count * thin)) : m.count;
+      if (count <= 0) continue;
+      if (m.floor && floor === undefined) {
+        const g = this.world.collision.groundHeight(p[0], p[1] + 0.05, p[2], 6);
+        floor = g > -Infinity ? g : p[1] - 6;
+      }
+      this.particles.emit(m.kind, { count, pos: p, dir: d, spread: m.spread, speed: m.speed, life: m.life, size: m.size, color: m.color, alpha: m.alpha === undefined ? undefined : m.alpha * thin, emissive: m.emissive, drag: m.drag, gravity: m.gravity, floor: m.floor ? floor : undefined, stretch: m.stretch });
     }
     if (e.flash) this.pulses.emit(p, e.flash.color, e.flash.peak, e.flash.range, e.flash.life, 0.1);
   }

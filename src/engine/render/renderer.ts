@@ -348,6 +348,7 @@ export class Renderer {
   /** Effects particles (smoke, dust, muzzle flash, sparks), drawn after the sky in the main pass. */
   readonly particles: ParticleSystem;
   private particlePipelineLayout: GPUPipelineLayout;
+  private particleLayout: GPUBindGroupLayout;
   private particleBG: GPUBindGroup;
   private pipelines = new Map<string, GPURenderPipeline>();
 
@@ -564,13 +565,16 @@ export class Renderer {
     this.clutterSlot = this.instances.alloc();
     this.instances.set(this.clutterSlot, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1], null, -1, 2, 0, 0);
     this.shadowPipelineLayout = d.createPipelineLayout({ bindGroupLayouts: [this.shadowLayout, this.materialLayout] });
-    const particleLayout = d.createBindGroupLayout({
+    this.particleLayout = d.createBindGroupLayout({
       label: 'particles',
-      entries: [{ binding: 0, visibility: SS.VERTEX, buffer: { type: 'read-only-storage' } }],
+      entries: [
+        { binding: 0, visibility: SS.VERTEX, buffer: { type: 'read-only-storage' } },
+        { binding: 1, visibility: SS.FRAGMENT, texture: { sampleType: 'float' } },
+      ],
     });
-    this.particlePipelineLayout = d.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, particleLayout] });
+    this.particlePipelineLayout = d.createPipelineLayout({ bindGroupLayouts: [this.frameLayout, this.particleLayout] });
     this.particles = new ParticleSystem(d);
-    this.particleBG = d.createBindGroup({ layout: particleLayout, entries: [{ binding: 0, resource: { buffer: this.particles.buffer } }] });
+    this.particleBG = this.makeParticleBG(this.textures.white.view);
 
     this.materials = new MaterialLibrary(d, this.textures, this.materialLayout);
     this.sky = new SkySystem(d, this.sampClamp, this.sampAniso, this.cloudNoiseView);
@@ -653,6 +657,15 @@ export class Renderer {
     this.snowViews = [albedo, normal, orm];
     this.bindingsDirty = true;
   }
+  private makeParticleBG(atlas: GPUTextureView) {
+    return this.device.createBindGroup({ layout: this.particleLayout, entries: [{ binding: 0, resource: { buffer: this.particles.buffer } }, { binding: 1, resource: atlas }] });
+  }
+
+  /** Sprite atlas for additive effect particles (muzzle flash variants; see particles.wgsl). */
+  setParticleAtlas(view: GPUTextureView) {
+    this.particleBG = this.makeParticleBG(view);
+  }
+
   setCloudNoise(view: GPUTextureView) {
     this.cloudNoiseView = view;
     this.sky.setCloudNoise(view);

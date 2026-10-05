@@ -18,7 +18,8 @@ import { Enemy } from './enemy';
 export class Enemies {
   readonly list: Enemy[] = [];
   maxAlive = 1;
-  enabled = true;
+  /** Off while the gun is being tuned on its own (panel: "Enemy on (spawns, AI)"). */
+  enabled = false;
   private parts: RigPartSource[] | null = null;
   private respawnT = 0;
   private serial = 0;

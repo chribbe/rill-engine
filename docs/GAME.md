@@ -298,6 +298,30 @@ Every config folder has Save (writes `public/game/*.json`), Revert to file and C
   - The frame-rate test is identical at 30–240 fps.
   - The editor's play mode works and leaves the map clean.
 
+**Polish pass 1 — gun and shooting (2026-10-05, after your first playtest).**
+Your notes: the gun feel is not there yet; smoke dies too fast when you wait and looks odd while running; the front sight floats; the gun looks plastic; more and better effects, "AAA but Source". The enemy is parked (off by default: the panel toggle "Enemy on (spawns, AI)") so the pass is only about the gun.
+- Model (`npm run weapon`, 20.6k triangles):
+  - Front sight: gas block → sight tower → post and protective ears are one connected piece (the post no longer floats). The rear sight drum sits on a base block with swept wings.
+  - New parts: a pressed spine on the receiver cover, rivets, takedown pins, magazine release, selector, brass deflector, vented handguard (2 × 5 vents per side), finger-grooved pistol grip, trigger-guard band, barrel cap ring, bayonet lug, sling swivel, seams.
+- Material: a generated normal map (orange peel, parkerised grain, stippling, scratch grooves); matte olive enamel (roughness ≈ 0.74). Chips go through to dark steel only on exposed edges and deep scratches. Light scuffs just dull the paint; grime sits in creases, dust over it.
+- Muzzle flash: a sprite atlas (`npm run textures -- fx`, `public/textures/fx/muzzle_flash.png`): 4 star variants seen from behind, 4 side plumes rooted at the muzzle.
+  - Layered as an orange star, a white-hot inner star and a stretched forward plume.
+  - A flickering light pulse per shot.
+- Smoke:
+  - Per-shot smoke inherits the shooter's velocity, so running doesn't leave a trail behind the gun.
+  - An ejection-port puff with every casing.
+  - After sustained fire, barrel smoke curls up from the muzzle for 2–4 s. It is attached to the gun and leans back against your movement.
+  - Soot now holds its body and thins over the back of its life instead of popping out.
+  - Gun smoke and dust follow only 15% of the map wind (`impacts.json` `wind`). At full strength the forecourt breeze (≈2.4 m/s) blew it away in a second: the "goes out too fast" you saw.
+- Impacts (`public/game/impacts.json`):
+  - Concrete: a fast stretched jet of dust, a billowing puff, a lingering haze (3–4 s), falling fines, chips that land and bounce, a few sparks.
+  - Metal: a flash sprite, a spark shower, smoke and flecks, a brighter light pulse.
+  - Wood splinters, glass shards and glitter, soil clods; brick / stone / plaster / tile / asphalt inherit concrete with a tint.
+  - Repeated hits on one spot add less haze (crowding), so a burst into a wall thickens the air gradually instead of making a fog wall.
+  - Big puffs slide towards the eye by part of their radius, so they no longer cut into the wall with a hard edge. That's a cheap stand-in for soft particles.
+- Recoil: a burst builds a ride-back pose (the gun settles back and up under sustained fire, `kick.burst*`). The first shot is 15% stronger, plus a small sideways jitter per shot.
+- Verification: typecheck clean; the frame-rate test is identical at 30–240 fps. Renderer regression (`?game=0`) against the step-8 shots is unchanged except the hall views' run-to-run exposure noise. The editor's play mode works and restores the wind scale on stop.
+
 ### How to play / test
 - `npm run dev`, open `http://127.0.0.1:5173/play.html?map=hasselby`, click to capture the mouse.
 - Controls: WASD, Shift sprint, Alt walk, C / Ctrl crouch, Space jump, LMB fire, R reload, L flashlight, F fly, H hides the panels.
@@ -317,7 +341,7 @@ Every config folder has Save (writes `public/game/*.json`), Revert to file and C
 | 5 | Immediate trigger | ✅ the press fires at frame start (shot on the first frame after it); readout shows trigger→shot ms |
 | 6 | Recoil physical and controllable | ✅ layered (aim kick pattern + view punch + model kick), compensation-aware recovery, plot for tuning |
 | 7 | Weapon model motion | ✅ ten layers, bolt cycle, trigger, reload; modelled gun with baked wear (no hands yet) |
-| 8 | Flash and effects in sync | ✅ flash in the weapon's projection on the shot frame, light pulse, smoke, sub-frame kicks |
+| 8 | Flash and effects in sync | ✅ atlas flash (star + plume) in the weapon's projection on the shot frame, light pulse, shot / port / barrel smoke, sub-frame kicks |
 | 9 | Audio sells the shot | ⚠️ the layer architecture is complete (exact cadence, reverbs, distance), but the samples are synthesised placeholders: the biggest quality gap |
 | 10 | Surface impacts | ✅ 16 surface classes: decals, particles, sounds, sparks / dust / splinters / glass |
 | 11 | Enemy moves / reacts / is damaged / dies | ✅ |
@@ -341,7 +365,7 @@ performance) will need:
 3. **Broadphase for dynamic actors.** Hitscan tests every enemy (sphere, then capsules) and the player push is pairwise. Fine for one enemy; G2 needs a spatial hash for enemies (hitscan, separation, splash) and the same for ragdoll bodies.
 4. **Physics choice.** The Verlet ragdoll is cheap (≈0.15 ms per active body per frame at 120 Hz, sleeps when settled) and good enough for G1. With many simultaneous corpses, props to knock over and ragdoll-on-ragdoll contact, evaluate Rapier (WASM, character controller, joints) against Jolt. The cost is mirroring the 350k-triangle world, which must stay in sync with editor edits.
 5. **Collision queries.** Triangle tests per cell have no per-triangle bounds or BVH. Raycasts cost ~8–30 µs on Hässelby, and shell-casing / ragdoll sphere pushes loop over whole 4 m cells. A BVH per cell (or a two-level BVH) is needed before many enemies cast rays (sight lines) every tick.
-6. **Particles.** CPU simulation, lit per vertex, pooled. Fine for hundreds; hordes with juice everywhere want GPU simulation. Particles still have no depth-based soft fade (ENGINE.md §11).
+6. **Particles.** CPU simulation, lit per vertex, pooled. Fine for hundreds; hordes with juice everywhere want GPU simulation. Particles still have no depth-based soft fade (ENGINE.md §11): soot billboards are pulled towards the eye instead, which hides most wall intersections. No wind sheltering (gun smoke takes a fixed share of the map wind indoors too).
 7. **Decals.** Runtime decals are bounded (256-entry ring, 16 per 1 m cell, newest win) and cheap to add. Re-centring the runtime grid costs ~1.7 ms every 24 m of travel. The static grid still uses one `maxPer` for every cell (13 MB on Hässelby).
 8. **Audio.** Real recordings (blast close / mid / far, mechanism, tails per environment, impacts, enemy vocals). A distant gun layer for other shooters, occlusion (ray to the listener), a voice budget for crowds, and a mix with ducking. The `tunnel` reverb exists for the subway later.
 9. **Player.** No health, damage or death yet (strikes only shove and kick the view). Air crouch (feet tuck) and ledge handling are basic. ADS is postponed by decision.

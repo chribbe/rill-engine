@@ -58,6 +58,10 @@ export interface EmitOptions {
   anchor?: number;
   /** Bounce on this ground height (debris chunks land instead of falling through). */
   floor?: number;
+  /** Stays where it was emitted: velocity only orients / stretches the sprite (a rooted flash plume). */
+  fixed?: boolean;
+  /** Added to every particle's velocity (inherit the shooter's motion). */
+  addVel?: ArrayLike<number>;
 }
 
 export class ParticleSystem {
@@ -95,7 +99,7 @@ export class ParticleSystem {
       p.kind = kind;
       // Anchored particles store their offset from the anchor; the position follows it.
       p.pos[0] = o.pos[0] - (a ? a[0] : 0); p.pos[1] = o.pos[1] - (a ? a[1] : 0); p.pos[2] = o.pos[2] - (a ? a[2] : 0);
-      p.vel[0] = vx; p.vel[1] = vy; p.vel[2] = vz;
+      p.vel[0] = vx + (o.addVel ? o.addVel[0] : 0); p.vel[1] = vy + (o.addVel ? o.addVel[1] : 0); p.vel[2] = vz + (o.addVel ? o.addVel[2] : 0);
       p.age = 0;
       p.life = o.life ? o.life[0] + r() * (o.life[1] - o.life[0]) : 1;
       p.size0 = o.size?.[0] ?? 0.2;
@@ -109,7 +113,7 @@ export class ParticleSystem {
       p.drag = o.drag ?? 1.5;
       p.gravity = o.gravity ?? 0;
       p.seed = (this.seed++ * 2654435761) >>> 0;
-      p.flags = (o.viewmodel ? 1 : 0) | (o.stretch ? 2 : 0);
+      p.flags = (o.viewmodel ? 1 : 0) | (o.stretch ? 2 : 0) | (o.fixed ? 4 : 0);
       p.anchor = a ? o.anchor! : -1;
       p.floor = o.floor ?? -Infinity;
       this.list.push(p);
@@ -118,6 +122,8 @@ export class ParticleSystem {
 
   /** Air velocity (m/s, world x/z): drag relaxes smoke and dust towards it (set from the wind). */
   air: [number, number] = [0, 0];
+  /** How much of `air` smoke and dust follow (a game can calm it near the ground / in sheltered spots). */
+  airScale = 1;
   /** Moving points particles can follow (muzzle flashes stay on a swinging gun). */
   private anchors = new Map<number, [number, number, number]>();
 
@@ -130,9 +136,12 @@ export class ParticleSystem {
   update(dt: number) {
     for (const p of this.list) {
       p.age += dt;
+      if (p.flags & 4) continue;
       const k = Math.exp(-p.drag * dt);
       const drifts = p.kind === 'smoke' || p.kind === 'dust';
-      const ax = drifts ? this.air[0] : 0, az = drifts ? this.air[1] : 0;
+      // Weapon-space smoke sits ~0.5 m from the eye at a narrower FOV: world wind would whip it away.
+      const wk = drifts ? this.airScale * (p.flags & 1 ? 0.3 : 1) : 0;
+      const ax = this.air[0] * wk, az = this.air[1] * wk;
       p.vel[0] = ax + (p.vel[0] - ax) * k; p.vel[1] = p.vel[1] * k - p.gravity * dt; p.vel[2] = az + (p.vel[2] - az) * k;
       p.pos[0] += p.vel[0] * dt; p.pos[1] += p.vel[1] * dt; p.pos[2] += p.vel[2] * dt;
       p.rot += p.spin * dt;
@@ -159,8 +168,11 @@ export class ParticleSystem {
   private eye: [number, number, number] = [0, 0, 0];
   private byDistance = (a: P, b: P) => this.d2(b) - this.d2(a);
   private d2(p: P) {
-    const e = this.eye;
-    return (p.pos[0] - e[0]) ** 2 + (p.pos[1] - e[1]) ** 2 + (p.pos[2] - e[2]) ** 2;
+    const e = this.eye, a = p.anchor >= 0 ? this.anchors.get(p.anchor) : undefined;
+    // Weapon-space particles sit in front of the world (squeezed depth): sort them last.
+    if (p.flags & 1) return -1 - (a ? (p.pos[0] + a[0] - e[0]) ** 2 + (p.pos[1] + a[1] - e[1]) ** 2 + (p.pos[2] + a[2] - e[2]) ** 2 : 0) * 1e-3;
+    const x = p.pos[0] + (a ? a[0] : 0), y = p.pos[1] + (a ? a[1] : 0), z = p.pos[2] + (a ? a[2] : 0);
+    return (x - e[0]) ** 2 + (y - e[1]) ** 2 + (z - e[2]) ** 2;
   }
 
   upload(eye: ArrayLike<number>) {
@@ -179,10 +191,12 @@ export class ParticleSystem {
     const t = p.age / p.life;
     const o = i * FLOATS;
     const size = p.kind === 'debris' ? p.size0 * Math.min(1, (1 - t) * 6) : p.size0 + (p.size1 - p.size0) * Math.sqrt(t);
-    // Soot fades in over a few frames and out smoothly; flashes and sparks start at full strength.
+    // Soot fades in over a few frames, holds its body and thins out over the back
+    // of its life (a lingering haze, not a pop); flashes and sparks start at full strength.
     const lit = p.kind === 'smoke' || p.kind === 'dust';
+    const s = Math.max(0, (t - 0.08) / 0.92);
     // Debris stays solid and only shrinks away at the end of its life.
-    const fade = p.kind === 'debris' ? 1 : lit ? Math.min(1, 0.2 + p.age / 0.08) * (1 - t) * (1 - t) : 1 - t;
+    const fade = p.kind === 'debris' ? 1 : lit ? Math.min(1, 0.2 + p.age / 0.08) * (1 - s * s * (3 - 2 * s)) * (1 - 0.35 * t) : 1 - t;
     const kind = p.kind === 'smoke' ? 0 : p.kind === 'dust' ? 1 : p.kind === 'flash' ? 2 : p.kind === 'spark' ? 3 : 4;
     const a = p.anchor >= 0 ? this.anchors.get(p.anchor) : undefined;
     const C = this.cpu;
