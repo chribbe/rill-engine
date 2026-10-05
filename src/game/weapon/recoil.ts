@@ -3,6 +3,8 @@ import { spring, stepSpring } from '../../engine/core/spring';
 import type { WeaponDef } from './def';
 
 const RAD = Math.PI / 180;
+/** Field-of-view punch spring (Hz). */
+const FOV_HZ = 10;
 
 /**
  * Recoil as two layers on the camera:
@@ -34,6 +36,8 @@ export class Recoil {
   private punchP = spring();
   private punchY = spring();
   private punchR = spring();
+  /** Field-of-view punch (radians, widening). */
+  private fov = spring();
   private seed = 0x9e3779b9;
 
   constructor(public def: WeaponDef) {}
@@ -62,6 +66,7 @@ export class Recoil {
     this.punchP.v += p.pitch * RAD * w * 1.6;
     this.punchY.v += p.yaw * side * RAD * w * 1.6;
     this.punchR.v += p.roll * (this.rand() < 0.5 ? -1 : 1) * (0.6 + 0.4 * Math.abs(side)) * RAD * w * 1.6;
+    this.fov.v += this.def.fx.fovPunch * RAD * 2 * Math.PI * FOV_HZ * 1.6;
   }
 
   /** Extra visual view kick (degrees), e.g. taking a hit. */
@@ -123,6 +128,9 @@ export class Recoil {
     camera.punch[0] = ap + this.punchP.x;
     camera.punch[1] = ay + this.punchY.x;
     camera.punch[2] = this.punchR.x;
+    // After the player set this frame's FOV: widen it by the shot punch.
+    stepSpring(this.fov, 0, FOV_HZ, 0.55, dt);
+    camera.fovY += this.fov.x;
   }
 
   /** Visual-only part of the view rotation (radians): where the crosshair is off the bullet line. */
@@ -135,6 +143,7 @@ export class Recoil {
     this.aimP = this.aimY = this.prevP = this.prevY = 0;
     this.pendP = this.pendY = this.pendPermP = this.pendPermY = 0;
     this.punchP.x = this.punchP.v = this.punchY.x = this.punchY.v = this.punchR.x = this.punchR.v = 0;
+    this.fov.x = this.fov.v = 0;
     this.sinceShot = Infinity;
     camera.punch[0] = camera.punch[1] = camera.punch[2] = 0;
   }

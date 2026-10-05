@@ -12,7 +12,8 @@ const UP = [0, 1, 0];
 const GREY: [number, number, number] = [0.5, 0.5, 0.5];
 const FLOATS = 16; // per GPU particle: pos.xyz size | rot alpha kind seed | rgb emissive | vel.xyz -
 
-export type ParticleKind = 'smoke' | 'flash' | 'spark' | 'dust' | 'debris';
+/** `tracer`: a bright streak along its velocity like a spark, at constant brightness (a round in flight). */
+export type ParticleKind = 'smoke' | 'flash' | 'spark' | 'dust' | 'debris' | 'tracer';
 
 interface P {
   kind: ParticleKind;
@@ -35,6 +36,8 @@ interface P {
   anchor: number;
   /** Ground height to bounce on (debris), -Infinity = none. */
   floor: number;
+  /** Tracer streak half length (m). */
+  len: number;
 }
 
 export interface EmitOptions {
@@ -62,6 +65,8 @@ export interface EmitOptions {
   fixed?: boolean;
   /** Added to every particle's velocity (inherit the shooter's motion). */
   addVel?: ArrayLike<number>;
+  /** Tracers: streak half length (m), independent of speed. */
+  length?: number;
 }
 
 export class ParticleSystem {
@@ -116,6 +121,7 @@ export class ParticleSystem {
       p.flags = (o.viewmodel ? 1 : 0) | (o.stretch ? 2 : 0) | (o.fixed ? 4 : 0);
       p.anchor = a ? o.anchor! : -1;
       p.floor = o.floor ?? -Infinity;
+      p.len = o.length ?? 1;
       this.list.push(p);
     }
   }
@@ -196,12 +202,12 @@ export class ParticleSystem {
     const lit = p.kind === 'smoke' || p.kind === 'dust';
     const s = Math.max(0, (t - 0.08) / 0.92);
     // Debris stays solid and only shrinks away at the end of its life.
-    const fade = p.kind === 'debris' ? 1 : lit ? Math.min(1, 0.2 + p.age / 0.08) * (1 - s * s * (3 - 2 * s)) * (1 - 0.35 * t) : 1 - t;
-    const kind = p.kind === 'smoke' ? 0 : p.kind === 'dust' ? 1 : p.kind === 'flash' ? 2 : p.kind === 'spark' ? 3 : 4;
+    const fade = p.kind === 'debris' || p.kind === 'tracer' ? 1 : lit ? Math.min(1, 0.2 + p.age / 0.08) * (1 - s * s * (3 - 2 * s)) * (1 - 0.35 * t) : 1 - t;
+    const kind = p.kind === 'smoke' ? 0 : p.kind === 'dust' ? 1 : p.kind === 'flash' ? 2 : p.kind === 'spark' ? 3 : p.kind === 'debris' ? 4 : 5;
     const a = p.anchor >= 0 ? this.anchors.get(p.anchor) : undefined;
     const C = this.cpu;
     C[o] = p.pos[0] + (a ? a[0] : 0); C[o + 1] = p.pos[1] + (a ? a[1] : 0); C[o + 2] = p.pos[2] + (a ? a[2] : 0); C[o + 3] = size;
-    C[o + 4] = p.rot; C[o + 5] = p.alpha * fade; C[o + 6] = kind; C[o + 7] = (p.seed % 1000) / 1000;
+    C[o + 4] = p.kind === 'tracer' ? p.len : p.rot; C[o + 5] = p.alpha * fade; C[o + 6] = kind; C[o + 7] = (p.seed % 1000) / 1000;
     C[o + 8] = p.color[0]; C[o + 9] = p.color[1]; C[o + 10] = p.color[2]; C[o + 11] = p.emissive;
     C[o + 12] = p.vel[0]; C[o + 13] = p.vel[1]; C[o + 14] = p.vel[2]; C[o + 15] = p.flags;
   }

@@ -56,6 +56,8 @@ export class Viewmodel {
   private kick = { x: spring(), z: spring(), y: spring(), p: spring(), yaw: spring(), r: spring() };
   /** Recent shots (decaying): the gun rides back and up during a long burst. */
   private burstHeat = 0;
+  /** Reload pose blend (a spring: whips in, holds, snaps back to ready). */
+  private reloadBlend = spring();
   private bobAmp = 0;
   private sprint = 0;
   private crouch = 0;
@@ -154,12 +156,19 @@ export class Viewmodel {
     this.airP.v -= V.landPitch * RAD * k;
   }
 
-  /** Reload beats: a seated magazine and a released bolt jolt the gun. */
+  /**
+   * Reload beats, played hard: the magazine is ripped out (the gun jumps), the
+   * new one slammed home, the handle yanked and the bolt slammed forward, then
+   * the gun pops back up to ready.
+   */
   reloadEvent(phase: string) {
-    const K = this.kick, w = 2 * Math.PI * this.def.kick.posHz, wr = 2 * Math.PI * this.def.kick.rotHz;
-    if (phase === 'magin') { K.y.v += 0.006 * w * 1.6; K.p.v += 1.4 * RAD * wr * 1.6; }
-    if (phase === 'release') { K.z.v += 0.01 * w * 1.6; K.p.v += 0.8 * RAD * wr * 1.6; }
-    if (phase === 'magout') { K.y.v -= 0.003 * w * 1.6; }
+    const K = this.kick, w = 2 * Math.PI * this.def.kick.posHz * 1.6, wr = 2 * Math.PI * this.def.kick.rotHz * 1.6;
+    if (phase === 'start') { K.y.v -= 0.008 * w; K.r.v -= 3 * RAD * wr; }
+    if (phase === 'magout') { K.y.v += 0.008 * w; K.p.v += 2.5 * RAD * wr; }
+    if (phase === 'magin') { K.y.v += 0.018 * w; K.p.v += 5 * RAD * wr; K.r.v += 4 * RAD * wr; K.z.v += 0.006 * w; }
+    if (phase === 'rack') { K.z.v += 0.014 * w; K.yaw.v -= 2.5 * RAD * wr; }
+    if (phase === 'release') { K.z.v -= 0.016 * w; K.p.v += 4 * RAD * wr; K.r.v -= 3 * RAD * wr; }
+    if (phase === 'end') { K.p.v += 3 * RAD * wr; K.y.v += 0.007 * w; }
   }
 
   /** A shot was fired (from the tick): kick at its exact time, flash on the next pose. */
@@ -254,14 +263,12 @@ export class Viewmodel {
     const br = this.time * 2 * Math.PI * V.breatheRate, still = Math.max(0, 1 - this.bobAmp * 2);
     const breY = Math.sin(br) * V.breathe * still, breP = Math.sin(br - 0.6) * V.breathePitch * still;
 
-    // ---- reload: the gun cants and lowers to bring the magazine well up
+    // ---- reload: the gun whips into a cant (magazine well towards the eye), holds it through
+    // the beats and snaps back to ready just before the end (a spring: a little overshoot both ways).
     const RL = this.def.reload, rl = this.reload;
-    let re = 0;
-    if (rl) {
-      const total = rl.empty ? RL.empty : RL.tactical, t = rl.t;
-      const up = Math.min(1, t / 0.25), down = Math.min(1, Math.max(0, (total - t) / 0.35));
-      re = Math.min(up * up * (3 - 2 * up), down * down * (3 - 2 * down));
-    }
+    const reTarget = rl && rl.t < (rl.empty ? RL.empty : RL.tactical) - 0.2 ? 1 : 0;
+    stepSpring(this.reloadBlend, reTarget, reTarget ? 6.5 : 7.5, 0.5, dt);
+    const re = this.reloadBlend.x;
 
     // ---- compose: camera × offset × pivot × rotation × pivot⁻¹
     const K = this.kick, s = this.sprint, cr = this.crouch;
@@ -299,15 +306,18 @@ export class Viewmodel {
       this.bolt.pos[2] = x * m.boltTravel;
     }
     if (this.magazine) {
-      // Old magazine drops out, a fresh one rises into the well and seats.
-      let y = 0, show = true;
+      // Old magazine is ripped out and tumbles away; a fresh one is driven up into the well,
+      // accelerating, and slams home (the 'magin' beat jolts the gun).
+      let y = 0, z = 0, tilt = 0, show = true;
       if (rl) {
-        const t = rl.t;
-        if (t >= RL.magOut && t < RL.magOut + 0.28) { const q = (t - RL.magOut) / 0.28; y = -0.32 * q * q; }
-        else if (t >= RL.magOut + 0.28 && t < RL.magIn - 0.45) show = false;
-        else if (t >= RL.magIn - 0.45 && t < RL.magIn) { const q = (t - (RL.magIn - 0.45)) / 0.45; y = -0.24 * (1 - q * q * (3 - 2 * q)); }
+        const t = rl.t, OUT = 0.2, IN = Math.min(0.2, Math.max(0.05, RL.magIn - RL.magOut - OUT));
+        if (t >= RL.magOut && t < RL.magOut + OUT) { const u = t - RL.magOut; y = -(1.4 * u + 5 * u * u); z = 0.25 * u; tilt = -7 * u; }
+        else if (t >= RL.magOut + OUT && t < RL.magIn - IN) show = false;
+        else if (t >= RL.magIn - IN && t < RL.magIn) { const q = (t - (RL.magIn - IN)) / IN; y = -0.13 * (1 - q * q); tilt = 0.3 * (1 - q * q); }
       }
       this.magazine.pos[1] = y;
+      this.magazine.pos[2] = z;
+      quat.fromEuler(tilt, 0, 0, 'xyz', this.magazine.rot);
       this.magazine.visible = show;
     }
     this.trig += ((triggerHeld ? 1 : 0) - this.trig) * approach(60, dt);
@@ -321,15 +331,18 @@ export class Viewmodel {
     this.renderer.particles.setAnchor(MUZZLE_ANCHOR, mz);
     // Barrel heat: smoke curls up from the muzzle after firing. It is attached to the gun (moves with it,
     // in the weapon's projection) and bends back against the player's motion; lingers for seconds.
-    this.heat = Math.max(0, this.heat - dt * 0.38);
+    // A faint hint only (fx.barrelSmoke; 0 = none): after a long burst, briefly.
+    // Heat cools faster the hotter it is: a short burst leaves nothing, a full magazine a few seconds.
+    this.heat = Math.max(0, this.heat - dt * (1.5 + this.heat * 0.2));
     this.wispT -= dt;
-    if (this.heat > 2.5 && now - this.lastShotTime > 0.12 && this.wispT <= 0 && this.visible) {
-      const k = Math.min(1, (this.heat - 2.5) / 12);
-      this.wispT = 0.022 + this.rand() * 0.025 + (1 - k) * 0.04;
+    const bs = this.def.fx.barrelSmoke;
+    if (bs > 0 && this.heat > 8 && now - this.lastShotTime > 0.12 && this.wispT <= 0 && this.visible) {
+      const k = Math.min(1, (this.heat - 8) / 14);
+      this.wispT = 0.045 + this.rand() * 0.04 + (1 - k) * 0.06;
       const pv = this.playerVel;
       this.renderer.particles.emit('smoke', {
         pos: [mz[0], mz[1] + 0.004, mz[2]], dir: [-pv[0] * 0.25, 1, -pv[2] * 0.25], spread: 0.22, speed: [0.05, 0.16],
-        life: [2.2, 4.0], size: [0.007, 0.065], color: [0.7, 0.72, 0.77], alpha: 0.3 + 0.35 * k, drag: 1.1, gravity: -0.1,
+        life: [1.0, 2.0], size: [0.006, 0.045], color: [0.6, 0.61, 0.64], alpha: bs * (0.35 + 0.65 * k), drag: 1.1, gravity: -0.1,
         viewmodel: true, anchor: MUZZLE_ANCHOR, addVel: [-pv[0] * 0.18, 0, -pv[2] * 0.18],
       });
     }
@@ -351,22 +364,22 @@ export class Viewmodel {
     const l = Math.hypot(fwd[0], fwd[1], fwd[2]) || 1;
     fwd[0] /= l; fwd[1] /= l; fwd[2] /= l;
     const at = (d: number): [number, number, number] => [mz[0] + fwd[0] * d, mz[1] + fwd[1] * d, mz[2] + fwd[2] * d];
-    const big = 0.8 + this.rand() * 0.45, pv = this.playerVel;
+    const fx = this.def.fx, big = (0.8 + this.rand() * 0.45) * fx.flashScale, pv = this.playerVel;
     // Flash from behind: the birdcage star (atlas row 0), plus a smaller second star for layering.
     P.emit('flash', { pos: at(0.012), life: [0.03, 0.042], size: [0.066 * big, 0.08 * big], color: [1.0, 0.72, 0.38], emissive: 11000, viewmodel: true, anchor: MUZZLE_ANCHOR });
-    P.emit('flash', { pos: at(0.006), life: [0.02, 0.03], size: [0.03, 0.04], color: [1.0, 0.93, 0.72], emissive: 34000, viewmodel: true, anchor: MUZZLE_ANCHOR });
+    P.emit('flash', { pos: at(0.006), life: [0.02, 0.03], size: [0.03 * fx.flashScale, 0.04 * fx.flashScale], color: [1.0, 0.93, 0.72], emissive: 34000, viewmodel: true, anchor: MUZZLE_ANCHOR });
     // Forward plume (atlas row 1): rooted at the muzzle, stretched along the barrel (foreshortened from behind).
     const half = (0.07 + this.rand() * 0.04) * big, w = 0.026 * big;
     P.emit('flash', { pos: at(half * 0.92), dir: fwd, spread: 0, speed: [(half - w) / 0.012, (half - w) / 0.012], life: [0.026, 0.036], size: [w, w], color: [1.0, 0.76, 0.45], emissive: 10000, viewmodel: true, stretch: true, fixed: true, anchor: MUZZLE_ANCHOR });
     // A brief light ahead of the muzzle (keeps the gun itself from blowing out), flickering per shot.
-    this.pulses.emit(this.worldEquivalent(at(0.3)), [1.0, 0.7, 0.38], 380 + this.rand() * 160, 12, 0.045, 0.25);
+    this.pulses.emit(this.worldEquivalent(at(0.3)), [1.0, 0.7, 0.38], fx.flashLight * (0.8 + this.rand() * 0.4), fx.flashRange, 0.05, 0.25);
     // Shot smoke from the world point that lines up with the muzzle: inherits the shooter's motion, then drifts.
     const sm = this.worldEquivalent(at(0.03));
-    P.emit('smoke', { count: 2, pos: sm, dir: fwd, spread: 0.35, speed: [0.5, 1.4], life: [1.6, 3.0], size: [0.03, 0.32], color: [0.62, 0.62, 0.65], alpha: 0.2, drag: 3.2, gravity: -0.14, addVel: pv });
+    if (fx.shotSmoke > 0) P.emit('smoke', { count: 2, pos: sm, dir: fwd, spread: 0.35, speed: [0.5, 1.4], life: [0.7, 1.4], size: [0.03, 0.3], color: [0.62, 0.62, 0.65], alpha: fx.shotSmoke, drag: 3.2, gravity: -0.14, addVel: pv });
     // Ejection port: a puff of propellant smoke with the brass.
     const up = this.rig.dir(R, [0, 1, 0], [0, 0, 0]), right = this.rig.dir(R, [1, 0, 0], [0, 0, 0]);
     const port = this.worldEquivalent(this.eject(this.tmp));
-    P.emit('smoke', { count: 1, pos: port, dir: [right[0] + up[0] * 0.6, right[1] + up[1] * 0.6, right[2] + up[2] * 0.6], spread: 0.3, speed: [0.4, 0.9], life: [0.5, 1.0], size: [0.012, 0.1], color: [0.58, 0.58, 0.58], alpha: 0.1, drag: 4, gravity: -0.1, addVel: pv });
+    if (fx.shotSmoke > 0) P.emit('smoke', { count: 1, pos: port, dir: [right[0] + up[0] * 0.6, right[1] + up[1] * 0.6, right[2] + up[2] * 0.6], spread: 0.3, speed: [0.4, 0.9], life: [0.4, 0.8], size: [0.012, 0.1], color: [0.58, 0.58, 0.58], alpha: fx.shotSmoke * 0.5, drag: 4, gravity: -0.1, addVel: pv });
   }
 
   /** World point that projects (world FOV) to the same pixel as `p` does in the weapon's FOV. */
@@ -403,7 +416,7 @@ export class Viewmodel {
   }
 
   reset() {
-    for (const s of [this.swayY, this.swayP, this.swayR, this.swayX, this.lagZ, this.airY, this.airP, ...Object.values(this.kick)] as Spring1[]) s.x = s.v = 0;
+    for (const s of [this.swayY, this.swayP, this.swayR, this.swayX, this.lagZ, this.airY, this.airP, this.reloadBlend, ...Object.values(this.kick)] as Spring1[]) s.x = s.v = 0;
     this.pending.length = 0;
     this.lastShotTime = -Infinity;
   }

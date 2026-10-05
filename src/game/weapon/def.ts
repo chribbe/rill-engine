@@ -147,6 +147,30 @@ export interface WeaponDef {
     /** Start reloading by itself when the trigger is pulled on an empty gun. */
     auto: boolean;
   };
+  /**
+   * Shot presentation (how loud the shot looks; visual only): flash size and
+   * light, tracers, a field-of-view punch, and how much smoke the gun leaves.
+   */
+  fx: {
+    /** Muzzle flash size ×, its light's peak (cd) and range (m). */
+    flashScale: number;
+    flashLight: number;
+    flashRange: number;
+    /** A tracer every N rounds (0 = none): visual speed (m/s), streak length (m), half width (m), colour, brightness (nits). */
+    tracerEvery: number;
+    tracerSpeed: number;
+    tracerLength: number;
+    tracerWidth: number;
+    tracerColor: [number, number, number];
+    tracerEmissive: number;
+    /** Field of view widened per shot (degrees, springs back). */
+    fovPunch: number;
+    /** Per-shot muzzle smoke opacity, and barrel smoke after sustained fire (0 = none). */
+    shotSmoke: number;
+    barrelSmoke: number;
+    /** Camera punch on the reload beats (degrees): magazine seated, bolt slammed home. */
+    reloadPunch: number;
+  };
   /** Mechanical animation. */
   mechanics: {
     /** Bolt / charging-handle travel (m) and the fraction of the cycle spent moving back. */
@@ -200,26 +224,26 @@ export const CARBINE_DEFAULTS: WeaponDef = {
     recoverRate: 7,
   },
   punch: {
-    pitch: 0.65,
-    yaw: 0.2,
-    roll: 0.6,
-    hz: 8,
-    damping: 0.5,
+    pitch: 1.05,
+    yaw: 0.35,
+    roll: 1.1,
+    hz: 9,
+    damping: 0.48,
   },
   kick: {
-    back: 0.034,
-    up: 0.005,
-    pitch: 3.2,
-    yaw: 0.9,
-    roll: 1.6,
+    back: 0.048,
+    up: 0.007,
+    pitch: 4.6,
+    yaw: 1.2,
+    roll: 2.4,
     random: 0.3,
     posHz: 11,
     posDamping: 0.5,
     rotHz: 8.5,
     rotDamping: 0.42,
     jitter: 0.0016,
-    burstBack: 0.016,
-    burstRise: 1.6,
+    burstBack: 0.022,
+    burstRise: 2.4,
     burstBuild: 6,
     burstSettle: 5,
   },
@@ -246,21 +270,36 @@ export const CARBINE_DEFAULTS: WeaponDef = {
     sprintOffset: [0.03, -0.045, 0.03],
     sprintRot: [-14, 28, -6],
     sprintRate: 9,
-    reloadOffset: [-0.02, -0.01, 0],
-    reloadRot: [30, -6, -40],
+    reloadOffset: [-0.045, 0.04, 0.035],
+    reloadRot: [20, -7, 48],
     breathe: 0.0012,
     breathePitch: 0.12,
     breatheRate: 0.22,
   },
   reload: {
-    tactical: 1.75,
-    empty: 2.3,
-    magOut: 0.3,
-    magIn: 1.08,
-    rackStart: 1.45,
-    rackEnd: 1.72,
+    tactical: 1.15,
+    empty: 1.5,
+    magOut: 0.16,
+    magIn: 0.56,
+    rackStart: 0.84,
+    rackEnd: 0.96,
     chamberPlusOne: true,
     auto: true,
+  },
+  fx: {
+    flashScale: 1.35,
+    flashLight: 900,
+    flashRange: 16,
+    tracerEvery: 1,
+    tracerSpeed: 140,
+    tracerLength: 10,
+    tracerWidth: 0.008,
+    tracerColor: [1.0, 0.48, 0.14],
+    tracerEmissive: 14000,
+    fovPunch: 0.9,
+    shotSmoke: 0.2,
+    barrelSmoke: 0.25,
+    reloadPunch: 1.4,
   },
   mechanics: {
     boltTravel: 0.065,

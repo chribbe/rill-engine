@@ -18,9 +18,9 @@
     "land_soft": {"spatial": true, "ref": 2, "max": 30, "maxVoices": 2, "layers": [{"samples": ["step/soft_land.wav"], "gain": -11, "pitch": [0.95, 1.05]}]},
     "land_gravel": {"spatial": true, "ref": 2, "max": 30, "maxVoices": 2, "layers": [{"samples": ["step/gravel_land.wav"], "gain": -10, "pitch": [0.95, 1.05]}]},
     "land_metal": {"spatial": true, "ref": 2, "max": 35, "maxVoices": 2, "layers": [{"samples": ["step/metal_land.wav"], "gain": -10, "pitch": [0.95, 1.05], "send": 0.2}]},
-    "carbine_magout": {"maxVoices": 2, "layers": [{"samples": ["carbine/magout_1.wav"], "gain": -10, "pitch": [0.96, 1.04], "send": 0.05}]},
-    "carbine_magin": {"maxVoices": 2, "layers": [{"samples": ["carbine/magin_1.wav"], "gain": -8, "pitch": [0.96, 1.04], "send": 0.05}]},
-    "carbine_rack": {"maxVoices": 2, "layers": [{"samples": ["carbine/rack_1.wav"], "gain": -9, "pitch": [0.96, 1.04], "send": 0.05}]},
-    "carbine_release": {"maxVoices": 2, "layers": [{"samples": ["carbine/release_1.wav"], "gain": -7, "pitch": [0.96, 1.04], "send": 0.05}]}
+    "carbine_magout": {"maxVoices": 2, "layers": [{"samples": ["carbine/magout_1.wav"], "gain": -6, "pitch": [1.0, 1.07], "send": 0.05}]},
+    "carbine_magin": {"maxVoices": 2, "layers": [{"samples": ["carbine/magin_1.wav"], "gain": -2, "pitch": [1.0, 1.07], "send": 0.05}]},
+    "carbine_rack": {"maxVoices": 2, "layers": [{"samples": ["carbine/rack_1.wav"], "gain": -4, "pitch": [1.0, 1.07], "send": 0.05}]},
+    "carbine_release": {"maxVoices": 2, "layers": [{"samples": ["carbine/release_1.wav"], "gain": -2, "pitch": [1.0, 1.07], "send": 0.05}]}
   }
 }

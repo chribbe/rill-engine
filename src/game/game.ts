@@ -73,6 +73,8 @@ export class Game {
   /** Frame-independent mode for tests (no frame-length-dependent scheduling). */
   deterministic = false;
   private muzzle: [number, number, number] = [0, 0, 0];
+  private tracerFrom: [number, number, number] = [0, 0, 0];
+  private tracerCount = 0;
 
   constructor(readonly rt: Runtime) {
     this.debug = new DebugDraw(rt.renderer);
@@ -102,6 +104,11 @@ export class Game {
     this.weapon.onReload.push((phase) => {
       this.viewmodel.reloadEvent(phase);
       if (phase !== 'start' && phase !== 'end') this.audio.play(`carbine_${phase}`);
+      // The hard beats knock the view too.
+      const P = this.weapon.def.fx.reloadPunch, j = (Math.random() - 0.5) * P * 0.6;
+      if (phase === 'magout') this.recoil.kickView(-P * 0.3, j * 0.5, 0);
+      if (phase === 'magin') this.recoil.kickView(P * 0.7, j, P * 0.9);
+      if (phase === 'release') this.recoil.kickView(-P * 0.5, j, -P * 0.7);
     });
     rt.player.onLand.push((speed, surface) => {
       this.viewmodel.land(speed);
@@ -272,11 +279,39 @@ export class Game {
       this.debug.line(e.origin, end, e.hitCount ? [0.2, 1, 0.4, 1] : [1, 0.25, 0.2, 1], 4);
       this.debug.line(muzzle, end, [1, 1, 1, 0.35], 4);
     }
+    this.tracer(muzzle, end);
     const h = e.hitCount ? e.hits[e.hitCount - 1] : null;
     this.lastHit = h && {
       object: h.owner, surface: surfaceName(h.surface), region: h.region, point: [...h.point], normal: [...h.normal],
       distance: h.t, damage: h.damage, pierced: e.hitCount - 1,
     };
+  }
+
+  /**
+   * A tracer (WeaponDef.fx) from the muzzle as seen on screen to where the round
+   * ends: the streak's tail starts at the muzzle and it dies as its head reaches the hit.
+   */
+  private tracer(muzzle: [number, number, number], end: ArrayLike<number>) {
+    const fx = this.weapon.def.fx, every = Math.round(fx.tracerEvery);
+    if (every <= 0 || this.tracerCount++ % every !== 0 || !this.viewmodel.visible) return;
+    const s = this.viewmodel.worldEquivalent(muzzle, this.tracerFrom);
+    let dx = end[0] - s[0], dy = end[1] - s[1], dz = end[2] - s[2];
+    const dist = Math.hypot(dx, dy, dz), half = Math.min(fx.tracerLength * 0.5, dist * 0.3), lead = half + 0.08;
+    const travel = dist - lead - half;
+    if (travel <= 0.3) return;
+    dx /= dist; dy /= dist; dz /= dist;
+    const P = this.rt.renderer.particles, dir: [number, number, number] = [dx, dy, dz];
+    P.emit('tracer', {
+      pos: [s[0] + dx * lead, s[1] + dy * lead, s[2] + dz * lead], dir, spread: 0, speed: [fx.tracerSpeed, fx.tracerSpeed],
+      life: [travel / fx.tracerSpeed, travel / fx.tracerSpeed], size: [fx.tracerWidth, fx.tracerWidth], color: fx.tracerColor, emissive: fx.tracerEmissive, drag: 0, gravity: 0, length: half,
+    });
+    // The moving streak is metres out by the time it is first drawn, and from behind the gun the
+    // muzzle end of the path is the part with screen length: one frame of beam leaving the muzzle.
+    const bh = Math.min(half, dist * 0.4), bl = bh + 0.08;
+    P.emit('tracer', {
+      pos: [s[0] + dx * bl, s[1] + dy * bl, s[2] + dz * bl], dir, spread: 0, speed: [1, 1], fixed: true,
+      life: [0.035, 0.035], size: [fx.tracerWidth, fx.tracerWidth], color: fx.tracerColor, emissive: fx.tracerEmissive, drag: 0, gravity: 0, length: bh,
+    });
   }
 
   /** Runtime frame hook: look, fixed ticks for gameplay, then per-frame presentation. */

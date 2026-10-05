@@ -167,6 +167,13 @@ export class TuningPanel {
       ['jitter', 'Side jitter (m)', 0, 0.01, 0.0001], ['burstBack', 'Burst ride back (m)', 0, 0.06, 0.0005],
       ['burstRise', 'Burst ride up (°)', 0, 6, 0.05], ['burstBuild', 'Burst build (shots)', 1, 20, 0.5], ['burstSettle', 'Burst settle (1/s)', 0.5, 20, 0.1],
     ]);
+    table('Shot effects (visual)', 'fx', [
+      ['flashScale', 'Flash size ×', 0, 3, 0.05], ['flashLight', 'Flash light (cd)', 0, 3000, 10], ['flashRange', 'Flash light range (m)', 1, 40, 0.5],
+      ['tracerEvery', 'Tracer every N rounds (0 = off)', 0, 10, 1], ['tracerSpeed', 'Tracer speed (m/s)', 50, 600, 5], ['tracerLength', 'Tracer length (m)', 0.2, 12, 0.1],
+      ['tracerWidth', 'Tracer half width (m)', 0.002, 0.05, 0.0005], ['tracerEmissive', 'Tracer brightness (nits)', 0, 100000, 500],
+      ['fovPunch', 'FOV punch per shot (°)', 0, 4, 0.05], ['shotSmoke', 'Muzzle smoke per shot', 0, 1, 0.01],
+      ['barrelSmoke', 'Barrel smoke after firing', 0, 1, 0.01], ['reloadPunch', 'Reload view jolt (°)', 0, 5, 0.05],
+    ], true);
     const vm = table('Viewmodel motion', 'viewmodel', [
       ['fov', 'Weapon FOV (vertical °)', 30, 90, 0.5],
       ['sway', 'Look lag (° per rad/s)', 0, 4, 0.01], ['swayMax', 'Look lag max (°)', 0, 10, 0.1],

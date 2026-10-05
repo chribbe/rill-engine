@@ -322,6 +322,37 @@ Your notes: the gun feel is not there yet; smoke dies too fast when you wait and
 - Recoil: a burst builds a ride-back pose (the gun settles back and up under sustained fire, `kick.burst*`). The first shot is 15% stronger, plus a small sideways jitter per shot.
 - Verification: typecheck clean; the frame-rate test is identical at 30–240 fps. Renderer regression (`?game=0`) against the step-8 shots is unchanged except the hall views' run-to-run exposure noise. The editor's play mode works and restores the wind scale on stop.
 
+**Polish pass 2 — arcade push (2026-10-05).**
+Your notes: much better. Smoke is far too visible after shooting (fine while shooting). The reload should be snappier, harder, more decisive, cartoon action hero. Exaggerate the shooting: the game is more Helldivers / Starship Troopers than realistic.
+- New `fx` block in the weapon data (panel: "Shot effects (visual)"):
+  - flash size and light;
+  - tracers (every N rounds, speed, length, width, colour, brightness);
+  - a field-of-view punch per shot;
+  - muzzle smoke per shot, barrel smoke after firing;
+  - a view jolt on the reload beats.
+- Smoke after firing:
+  - Barrel smoke is a faint hint: only after long fire (heat > 8 rounds), cooling faster the hotter it is. A short burst leaves nothing; a full magazine leaves a few seconds of faint wisps.
+  - Per-shot muzzle smoke lives 0.7–1.4 s (was 1.6–3 s). The impact haze is a little shorter.
+- Shooting, exaggerated:
+  - Flash ×1.35 with a much brighter light (900 cd, 16 m).
+  - View punch about ×1.6 (pitch 1.05°, roll 1.1°), a 0.9° FOV kick per shot.
+  - Weapon kick about ×1.4 (back 4.8 cm, rise 4.6°), a stronger burst ride.
+  - Concrete hits: a hit-flash sprite and light, 8 sparks, a bigger dust jet, more chips. Metal: a bigger flash and 26 sparks.
+  - Aim recoil (where bullets go) is unchanged, so control stays where it was.
+- Tracers: a new engine particle kind `tracer`, a ribbon along the true 3D velocity at constant brightness, at least about 4 px wide at any distance.
+  - From behind the gun, a round flying where you aim projects to a dot. The visible part is the muzzle end of its path, which the moving streak has already left when first drawn. So each tracer is one frame of beam leaving the muzzle plus a 10 m streak flying on at 140 m/s (visual speed; hits stay hitscan).
+- Reload (tactical 1.15 s, empty 1.5 s; was 1.75 / 2.3):
+  - The pose is a spring: the gun whips into the cant within about 60 ms, holds, and snaps back to ready with a small overshoot 0.2 s before the end.
+  - It now rolls the other way, so the magazine well comes towards the middle of the screen.
+  - The magazine is ripped out and tumbles away; the new one is driven up, accelerating, and slammed home.
+  - Every beat jolts the gun hard: rip out, slam (up-left, 5°), handle yank, bolt slam, ready pop. The slams also knock the view.
+  - Reload foley is louder and a little higher-pitched. The magazine seat and the bolt slam have a low thump.
+- Verification:
+  - Typecheck clean.
+  - Renderer regression (`?game=0`) is pixel-identical to the step-8 shots in all 10 views.
+  - The frame-rate test is identical at 30–240 fps with every new feature on.
+  - Known quirk: the first frame-rate test after a page load can show about 3e-5 m drift in the reference run, with or without these features; repeat runs are exact.
+
 ### How to play / test
 - `npm run dev`, open `http://127.0.0.1:5173/play.html?map=hasselby`, click to capture the mouse.
 - Controls: WASD, Shift sprint, Alt walk, C / Ctrl crouch, Space jump, LMB fire, R reload, L flashlight, F fly, H hides the panels.

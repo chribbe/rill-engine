@@ -326,6 +326,9 @@ function reloadSound(seed: number, kind: 'magout' | 'magin' | 'rack' | 'release'
     click(0.1, 2400, 1);
     mix(x, ring(0.18, [[v(r, 1450), 0.03, 0.5], [v(r, 2650), 0.02, 0.35], [v(r, 4100), 0.012, 0.2]], r), 0.8, 0.1);
     mix(x, env(biquad(noise(x.length, r), 'lp', 380), 0.001, 0.02), 0.6, 0.1);
+    // Slammed home: a heavy low thump through the whole gun.
+    mix(x, ring(0.16, [[v(r, 150), 0.045, 1], [v(r, 290), 0.03, 0.5]], r), 1.1, 0.1);
+    mix(x, env(biquad(noise(x.length, r), 'lp', 220), 0.0005, 0.03), 0.9, 0.1);
   } else if (kind === 'rack') {
     scrape(0, 0.11, 1100, 2600, 0.6);
     click(0.11, 3200, 0.7);
@@ -334,6 +337,7 @@ function reloadSound(seed: number, kind: 'magout' | 'magin' | 'rack' | 'release'
     click(0, 3600, 1);
     mix(x, ring(0.15, [[v(r, 1700), 0.028, 0.5], [v(r, 2950), 0.02, 0.4], [v(r, 4500), 0.012, 0.25]], r), 0.9, 0.001);
     mix(x, env(biquad(noise(x.length, r), 'bp', 900, 1.2), 0, 0.008), 0.6);
+    mix(x, ring(0.14, [[v(r, 170), 0.04, 1], [v(r, 330), 0.025, 0.45]], r), 1.0, 0.001);
   }
   return finish(x, -3);
 }

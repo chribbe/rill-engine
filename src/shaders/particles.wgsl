@@ -15,7 +15,7 @@
 
 struct Particle {
   posSize: vec4f,   // xyz centre, w half size (m)
-  misc: vec4f,      // x rotation, y opacity, z kind (0 smoke, 1 dust, 2 flash, 3 spark, 4 debris), w seed
+  misc: vec4f,      // x rotation (tracer: streak half length), y opacity, z kind (0 smoke, 1 dust, 2 flash, 3 spark, 4 debris, 5 tracer), w seed
   color: vec4f,     // rgb albedo (lit kinds) or emission colour, w emissive (nits)
   vel: vec4f,       // xyz velocity (sparks stretch along it), w flags (1 viewmodel space, 2 stretch along velocity)
 };
@@ -96,7 +96,17 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
   var ext = vec2f(p.posSize.w);
   let flags = u32(p.vel.w + 0.5);
   let vm = (flags & 1u) != 0u;
-  if (k == 3u || (flags & 2u) != 0u) {
+  if (k == 5u) {
+    // Tracer: a ribbon along the true 3D velocity (perspective foreshortens it like a real
+    // segment, so a round flying away from the eye still reads as a line); width below.
+    let speed = length(p.vel.xyz);
+    if (speed > 1e-3) {
+      ax = p.vel.xyz / speed;
+      let side = cross(ax, toCam);
+      if (length(side) > 1e-4) { ay = normalize(side); }
+    }
+    ext = vec2f(p.misc.x, p.posSize.w);
+  } else if (k == 3u || (flags & 2u) != 0u) {
     // Sparks (and stretched flashes): a streak along the screen-plane velocity.
     let v = p.vel.xyz - toCam * dot(p.vel.xyz, toCam);
     let speed = length(v);
@@ -115,7 +125,10 @@ fn vsMain(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> V
   // next to a wall does not slice through it with a hard edge (no depth read here).
   let eyeDist = length(cam - p.posSize.xyz);
   let pull = select(0.0, min(p.posSize.w * 0.6, max(eyeDist - 0.4, 0.0)), k <= 1u && !vm);
-  let wp = p.posSize.xyz + toCam * pull + ax * corner.x * ext.x + ay * corner.y * ext.y;
+  let along = p.posSize.xyz + toCam * pull + ax * corner.x * ext.x;
+  // Tracers keep at least ~4 px of width at each end, however far away.
+  let minHalf = select(0.0, length(along - cam) * 2.0 / (frame.proj[1][1] * frame.viewport.y), k == 5u);
+  let wp = along + ay * corner.y * max(ext.y, minHalf);
 
   var o: VOut;
   if (vm) {
@@ -187,10 +200,12 @@ fn fsAdditive(in: VOut) -> @location(0) vec4f {
   let tuv = in.uv * 0.5 + 0.5;
   let auv = vec2f((variant + clamp(tuv.x, 0.002, 0.998)) * 0.25, (select(0.0, 1.0, stretched) + clamp(1.0 - tuv.y, 0.002, 0.998)) * 0.5);
   let flash = textureSample(fxAtlas, sampClamp, auv).rgb;
-  // Spark streak: bright line fading towards the tail.
+  // Spark streak: bright line fading towards both ends. Tracer: hot head (+x, the direction
+  // of travel) with a rounded tip, fading along the tail.
   let across = exp(-in.uv.y * in.uv.y * 6.0);
   let along = saturate(1.0 - abs(in.uv.x));
-  let spark = vec3f(across * along);
+  let head = smoothstep(-1.0, 0.7, in.uv.x) * (1.0 - smoothstep(0.82, 1.0, in.uv.x));
+  let spark = vec3f(across * select(along, head * sqrt(head), in.params.y > 4.5));
   let m = select(spark, flash, in.params.y < 2.5);
   return vec4f(in.color * m * in.params.x, 0.0);
 }
